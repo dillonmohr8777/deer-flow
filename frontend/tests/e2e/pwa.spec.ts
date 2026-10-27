@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { mockLangGraphAPI } from "./utils/mock-api";
+
 // Dedicated worker tests opt in; API fixture suites keep workers blocked.
 test.use({ serviceWorkers: "allow" });
 
@@ -67,7 +69,9 @@ for (const width of [390, 768, 1440]) {
       Object.defineProperty(navigator, "userAgent", { get: () => userAgent });
       Object.defineProperty(navigator, "standalone", { get: () => false });
     }, IPHONE_USER_AGENT);
-    await page.goto("/");
+    mockLangGraphAPI(page);
+    // Phone install help belongs above the workspace composer, away from public sign-in controls.
+    await page.goto("/workspace/chats");
     const trigger = page.getByRole("button", {
       name: "Install MomoBot",
       exact: true,
@@ -169,7 +173,7 @@ test("offline workspace navigation is generic and private API reads fail without
       }
     }),
   ).toBe(true);
-  await page.goto("/workspace/chats/pwa-private-check", {
+  await page.goto("/workspace/chats/pwa-private-check?project=alpha", {
     waitUntil: "domcontentloaded",
   });
   await expect(
@@ -177,7 +181,8 @@ test("offline workspace navigation is generic and private API reads fail without
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Try again" })).toHaveAttribute(
     "href",
-    "/workspace",
+    new URL("/workspace/chats/pwa-private-check?project=alpha", page.url())
+      .href,
   );
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),

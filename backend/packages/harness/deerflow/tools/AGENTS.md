@@ -1,5 +1,15 @@
 ### Tool System (`packages/harness/deerflow/tools/`)
 
+`client_work_plan_access.py` holds the immutable host capability for the two
+record-only `builtins/client_work_plan.py` tools. Only a matching authenticated
+staff Max lead receives them; Gateway owns live authorization, validation, CAS
+and actual-actor audit. Never derive this grant from messages or checkpoints,
+fetch evidence references, or turn recorded completion into verified execution.
+The read returns the host-stamped actor ID and a bounded page of current
+same-client participants; an optional cursor carries no identity or scope
+authority. Revoked saved people do not block authorized reads or repair, and
+Gateway rechecks every submitted non-null participant before saving.
+
 Hiring managers' tool ceilings come from stored agent configuration, using the
 ratified seat's persisted identity rather than a caller's case/underscore alias,
 never from the hire's requested tool groups. An explicit `tool_groups: null` (or

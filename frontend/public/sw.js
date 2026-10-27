@@ -109,7 +109,27 @@ self.addEventListener("fetch", (event) => {
       const cache = await caches.open(CACHE_NAME);
       const fallback = await cache.match(publicPath || OFFLINE_URL);
       if (!fallback) throw error;
-      return fallback;
+      if (publicPath) return fallback;
+      const destination = url.href.replace(
+        /[&<>"']/g,
+        (character) =>
+          ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          })[character],
+      );
+      const html = await fallback.text();
+      return new Response(
+        html.replace('href="/workspace"', () => `href="${destination}"`),
+        {
+          status: fallback.status,
+          statusText: fallback.statusText,
+          headers: fallback.headers,
+        },
+      );
     }),
   );
 });

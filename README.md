@@ -2458,6 +2458,19 @@ CAN-SPAM exemption from a professional relationship or no offer, and leaves
 unresolved classifications or requirements for qualified human review. It does
 not verify output or grant sender authority.
 
+Assigned staff can record an internal work plan on an existing client request:
+outcome, eligible owner/admin or exact-client account manager, due date,
+same-client dependencies, status, next action and evidence references. The plan
+has its own revision and appears in authorized staff context. Contacts and
+ordinary Board messages never receive it. These records do not dispatch work,
+verify a reported completion or publish a response. Authorized staff can load
+the bounded teammate choices using existing account email; saves recheck each
+assignment. Bound staff MomoBot Max work chats can read and update that same
+internal plan through two authenticated tools, with or without a selected
+project. Updates require the current plan revision; conflicts preserve concurrent
+edits. References remain untrusted and completion remains staff recorded and
+unverified. See [the client portal contract](backend/docs/CLIENT_PORTAL.md).
+
 Agent-seat weekly scorecard checks require a confirmed `#exec` post before
 resetting an employee's missed-week streak. A completed blank scorecard counts
 as a missed week only after its miss notice is delivered; two evaluated misses

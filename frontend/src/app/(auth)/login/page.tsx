@@ -319,10 +319,15 @@ export default function LoginPage() {
           <p className={cn("text-sm", mutedClass)} style={mutedStyle}>
             {t.login.mfaDescription}
           </p>
+          <label htmlFor="mfa-code" className="text-sm font-medium">
+            {t.login.mfaTitle}
+          </label>
           <Input
+            id="mfa-code"
             type="text"
             className="min-h-11"
             inputMode={mfaUseRecoveryCode ? "text" : "numeric"}
+            autoComplete="one-time-code"
             placeholder={
               mfaUseRecoveryCode
                 ? t.login.mfaRecoveryCodePlaceholder
@@ -334,7 +339,7 @@ export default function LoginPage() {
             autoFocus
           />
           {error && (
-            <p className={errorClass} style={errorStyle}>
+            <p role="alert" className={errorClass} style={errorStyle}>
               {error}
             </p>
           )}
@@ -441,6 +446,7 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
+                autoComplete="email"
                 className="min-h-11"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -455,6 +461,7 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
+                autoComplete={isLogin ? "current-password" : "new-password"}
                 className="min-h-11"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

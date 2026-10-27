@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -76,11 +76,38 @@ export function Board() {
   );
 }
 
+function isCompactLayout() {
+  return window.matchMedia?.("(max-width: 63.999rem)").matches ?? false;
+}
+
+function captureListScroll(list: HTMLElement | null) {
+  let element = list;
+  while (element) {
+    const overflowY = window.getComputedStyle(element).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll") {
+      return { element, top: element.scrollTop };
+    }
+    element = element.parentElement;
+  }
+  return {
+    element: document.scrollingElement,
+    top: document.scrollingElement?.scrollTop ?? 0,
+  };
+}
+
 export function BoardBody() {
   const [statusFilter, setStatusFilter] = useState<BoardThreadStatus | "all">(
     "all",
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+  const listRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+  const listScrollRef = useRef<ReturnType<typeof captureListScroll>>({
+    element: null,
+    top: 0,
+  });
+  const restoreListFocusRef = useRef(false);
   const threads = useBoardThreads(
     statusFilter === "all" ? undefined : { status: statusFilter },
   );
@@ -97,12 +124,43 @@ export function BoardBody() {
     () => (threads.data ? sortThreadsByUpdated(threads.data) : []),
     [threads.data],
   );
+  const selected = sorted.some((thread) => thread.id === selectedId);
+  const visibleMobileView = selected ? mobileView : "list";
 
   useEffect(() => {
-    if (selectedId && !sorted.some((t) => t.id === selectedId)) {
+    if (selectedId && !selected) {
       setSelectedId(null);
     }
-  }, [selectedId, sorted]);
+  }, [selectedId, selected]);
+
+  useEffect(() => {
+    if (mobileView !== "detail" || !selected || !isCompactLayout()) return;
+    detailRef.current?.focus();
+  }, [mobileView, selected]);
+
+  useEffect(() => {
+    if (mobileView !== "list" || !restoreListFocusRef.current) return;
+    restoreListFocusRef.current = false;
+    listRef.current
+      ?.querySelector<HTMLButtonElement>('[aria-current="true"]')
+      ?.focus({ preventScroll: true });
+    if (listScrollRef.current.element) {
+      listScrollRef.current.element.scrollTop = listScrollRef.current.top;
+    }
+  }, [mobileView]);
+
+  const selectThread = (id: string) => {
+    if (isCompactLayout()) {
+      listScrollRef.current = captureListScroll(listRef.current);
+      setMobileView("detail");
+    }
+    setSelectedId(id);
+  };
+
+  const backToList = () => {
+    restoreListFocusRef.current = true;
+    setMobileView("list");
+  };
 
   return (
     <div className={styles.frame} data-testid="board">
@@ -121,8 +179,8 @@ export function BoardBody() {
         onChange={setStatusFilter}
         options={STATUS_FILTERS}
       />
-      <div className={styles.layout}>
-        <div className={styles.list} aria-label="Threads">
+      <div className={styles.layout} data-mobile-view={visibleMobileView}>
+        <div ref={listRef} className={styles.list} aria-label="Threads">
           {threads.isError ? (
             <ErrorState
               message="Couldn't load board threads."
@@ -153,7 +211,7 @@ export function BoardBody() {
                     type="button"
                     className={styles.threadRow}
                     aria-current={thread.id === selectedId}
-                    onClick={() => setSelectedId(thread.id)}
+                    onClick={() => selectThread(thread.id)}
                   >
                     <span className={styles.threadSubject}>
                       {thread.subject || KIND_LABEL[thread.kind]}
@@ -171,13 +229,29 @@ export function BoardBody() {
             </ul>
           )}
         </div>
-        <div className={styles.detail}>
-          {selectedId ? (
-            <ThreadDetail
-              key={selectedId}
-              threadId={selectedId}
-              clientName={clientName}
-            />
+        <div
+          ref={detailRef}
+          className={styles.detail}
+          role="region"
+          aria-label="Board thread detail"
+          tabIndex={-1}
+        >
+          {selected ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={styles.mobileBack}
+                onClick={backToList}
+              >
+                Back to threads
+              </Button>
+              <ThreadDetail
+                key={selectedId}
+                threadId={selectedId!}
+                clientName={clientName}
+              />
+            </>
           ) : (
             <EmptyState momo="qa" title="Pick a thread">
               Select a thread from the list to read it and, if Momo has a draft

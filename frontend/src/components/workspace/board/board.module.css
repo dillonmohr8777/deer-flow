@@ -30,9 +30,28 @@
   gap: 1.25rem;
 }
 
+@media (max-width: 63.999rem) {
+  .layout[data-mobile-view="list"] .detail,
+  .layout[data-mobile-view="detail"] .list {
+    display: none;
+  }
+}
+
 @media (min-width: 64rem) {
   .layout {
     flex-direction: row;
+  }
+}
+
+/* Back from detail to list exists only in the stacked phone layout. */
+.mobileBack {
+  align-self: flex-start;
+  min-height: 2.75rem;
+}
+
+@media (min-width: 64rem) {
+  .mobileBack {
+    display: none;
   }
 }
 

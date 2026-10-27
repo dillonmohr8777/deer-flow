@@ -22,6 +22,18 @@ async function portal(
       "/api/client-portal",
       "",
     );
+    if (path.endsWith("/work-plan"))
+      return route.fulfill({
+        json: {
+          schema: "internal_work_plan.v1",
+          revision: 0,
+          plan: null,
+          recorded_by_user_id: null,
+          recorded_at: null,
+          verification: "staff_recorded_unverified",
+          source: { table: "board_portal", id: path.split("/")[2] },
+        },
+      });
     const input = route.request().postDataJSON() as Record<
       string,
       unknown

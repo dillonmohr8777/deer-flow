@@ -217,6 +217,15 @@ def _append_project_document_tools_if_pinned(tools: list, cfg: dict) -> None:
     _append_named_tools_without_conflicts(tools, get_project_document_tools(), kind="Project document")
 
 
+def _append_client_work_plan_tools_if_bound(tools: list, cfg: dict) -> None:
+    from deerflow.tools.client_work_plan_access import matching_client_work_plan_access
+
+    if matching_client_work_plan_access(cfg) is not None:
+        from deerflow.tools.builtins.client_work_plan import read_client_work_plan, update_client_work_plan
+
+        _append_named_tools_without_conflicts(tools, [read_client_work_plan, update_client_work_plan], kind="Client work plan")
+
+
 def _get_runtime_config(config: RunnableConfig) -> dict:
     """Merge legacy configurable options with LangGraph runtime context."""
     cfg = dict(config.get("configurable", {}) or {})
@@ -1019,6 +1028,10 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         tool_names = [*tool_names, "propose_action"]
         if matching_client_project_access(cfg) is not None:
             tool_names = [*tool_names, "list_project_documents", "read_project_document", "verify_quote"]
+    from deerflow.tools.client_work_plan_access import CLIENT_WORK_PLAN_TOOL_NAMES, matching_client_work_plan_access
+
+    if tool_names is not None and matching_client_work_plan_access(cfg) is not None:
+        tool_names = [*tool_names, *CLIENT_WORK_PLAN_TOOL_NAMES]
     public_news_channel = cfg.get("public_news_channel") is True
     if public_news_channel:
         if is_bootstrap or agent_name != "ai-tech-news" or agent_config is None:
@@ -1333,6 +1346,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     if memory_enabled and should_use_memory_tools(resolved_app_config.memory):
         _append_memory_tools_without_name_conflicts(authorization_candidates)
     _append_project_document_tools_if_pinned(authorization_candidates, cfg)
+    _append_client_work_plan_tools_if_bound(authorization_candidates, cfg)
     append_task_continuity_tools(authorization_candidates, resolved_app_config)
     if tool_names is not None:
         authorization_candidates = [tool for tool in authorization_candidates if tool.name in tool_names]
