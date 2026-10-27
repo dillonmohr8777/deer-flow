@@ -134,6 +134,51 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 - Approvals in the team sidebar, Oct 24 (#296)
 - Add actor-bound Composio sessions behind disabled configuration (#295)
 
+## [momobot-prod-20261023-6425b821] - 2026-10-23
+
+### Fixed
+
+- fix: enforce owner-scoped Composio approval handoffs (#293)
+
+## [momobot-prod-20261023-7714a8f7] - 2026-10-23
+
+### Changed
+
+- Add owner/admin oversight for organization Composio approvals (#291)
+
+## [momobot-prod-20261023-fb58a660] - 2026-10-23
+
+### Changed
+
+- Gate all Composio writes through scoped durable approvals (#286)
+
+## [momobot-prod-20261023-bbee559d] - 2026-10-23
+
+### Fixed
+
+- Fix client agent visibility for UUID actors (#288)
+
+## [momobot-prod-20261023-67b28bc8] - 2026-10-23
+
+### Fixed
+
+- Fix client agent registry tag visibility (#285)
+
+## [momobot-prod-20261023-a111cc9b] - 2026-10-23
+
+### Changed
+
+- Clarify client portal internal draft guidance (#283)
+- Momo PC diagnostics in chat, Oct 23 (#277)
+
+## [momobot-prod-20261023-db2a5e1a] - 2026-10-23
+
+### Changed
+
+- Allow assigned AM members to read, work and draft in client portals (#281)
+- Default client runs to admitted workspace agents when unspecified (#280)
+- MomoBot changelog momobot-prod-20261023-ff8263f9, Oct 23 (#279)
+
 ## [momobot-prod-20261023-ff8263f9] - 2026-10-23
 
 ### Changed
