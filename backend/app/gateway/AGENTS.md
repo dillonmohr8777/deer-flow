@@ -246,7 +246,12 @@ replay. Three requests at $0.03 each. Details/tests: [WORKFLOWS.md](../../docs/W
 
 ### Desktop lane and Slack roster
 
-`fleet_work` lane `desktop` is roster-gated at submit (`roster` config, `app.state.roster_config`), single-attempt, and unclaimable until `approval_state` is `approved` (`POST /api/fleet/work/batches/{id}/approve`, org owner/admin). See [FLEET_PROJECT_JOBS.md](../../docs/FLEET_PROJECT_JOBS.md). Tests: `tests/test_fleet_desktop_lane.py`, `tests/test_roster_scope.py`, `tests/test_momobot_desktop_runner.py`.
+`fleet_work` persists validated workspaces in `execution_spec` and projects them
+in claims. Retain canonical mount admission, argv/path/timeout bounds,
+three-worker cap (including defaults) and private-host allowlisting. Desktop
+rejects workspaces, stays roster-gated (`roster`, `app.state.roster_config`),
+single-attempt and unclaimable until org owner/admin approval (`approval_state`).
+See [contract](../../docs/FLEET_PROJECT_JOBS.md) for routes and tests.
 
 `app/momobot_brand.py` and `routers/momobot_brand.py` serve the private About copy and Agents lineup from `momobot_brand.content_dir` (never committed; `scripts/stage_momobot_brand.sh` fills it). Prices leave only when agents.json has `show_pricing: true`; assets come from an allowlisted subfolder set with a resolve-inside-root check. Slack `/momobot about` and "@bot what is MomoBot" read the same folder.
 

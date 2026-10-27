@@ -2209,6 +2209,12 @@ Current MVP capabilities:
 
 ### Fleet template acceptance prompts
 
+The [fleet work API](backend/docs/FLEET_PROJECT_JOBS.md#linux-workspace-jobs)
+also carries bounded Linux workspace commands through its existing durable
+queue and delegated claims. Client mounts require canonical client admission
+and independent host allowlisting; desktop jobs keep their separate approval
+path. This contract does not install or enable a host executor.
+
 Fleet templates can declare `acceptance_criteria`. When a template is stamped,
 those criteria are appended to the agent's rendered `SOUL.md` after the
 `{client_name}` placeholder is filled. The appended instructions ask the agent

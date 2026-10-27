@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.gateway.app import create_app
 from app.gateway.authz import Permissions
@@ -45,6 +46,81 @@ def test_gateway_mounts_fleet_work_routes_and_permission() -> None:
     paths = {route.path for route in create_app().routes}
     assert {"/api/fleet/work/batches", "/api/fleet/work/claim", "/api/fleet/work/{item_id}/renew", "/api/fleet/work/{item_id}/finalize", "/api/fleet/work/{item_id}/release"} <= paths
     assert Permissions.FLEET_WORK == "fleet:work"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"environment_id": "../other"},
+        {"command": []},
+        {"command": [""]},
+        {"command": [1]},
+        {"command": ["echo", "bad\0argument"]},
+        {"command": ["x" * 8193]},
+        {"command": ["echo"] * 33},
+        {"timeout_seconds": 0},
+        {"timeout_seconds": 3601},
+        {"timeout_seconds": True},
+        {"client_path": "relative/client"},
+        {"client_path": "/clients/../other"},
+        {"client_path": "/clients/bad\0path"},
+        {"mounts": ["/"]},
+    ],
+)
+def test_workspace_rejects_invalid_command_timeout_and_mount_shape(change) -> None:
+    with pytest.raises(ValidationError):
+        fleet_work.WorkspaceSpec(**{"environment_id": "synthetic-linux", "command": ["printf", "synthetic"], **change})
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"workspace": {"environment_id": "synthetic-linux", "command": ["true"], "client_path": "/clients/synthetic"}},
+        {"max_running_items": 4},
+        {"max_running_items": 0},
+        {"lane": "desktop", "client_id": "synthetic-client", "requester": "USYNTHETIC"},
+    ],
+)
+def test_workspace_batch_rejects_unadmitted_mount_desktop_and_concurrency(change) -> None:
+    with pytest.raises(ValidationError):
+        fleet_work.FleetBatchSubmit(
+            **{
+                "thread_id": "synthetic-thread",
+                "title": "Synthetic workspace",
+                "lane": "haiku",
+                "data_class": "synthetic",
+                "items": [{"key": "one", "prompt": "Synthetic prompt"}],
+                "submission_key": "synthetic-workspace",
+                "workspace": {"environment_id": "synthetic-linux", "command": ["true"]},
+                **change,
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_workspace_checks_configured_concurrency_before_enqueue(monkeypatch) -> None:
+    repo = SimpleNamespace(create_batch=AsyncMock(return_value={"id": "synthetic-batch"}))
+    monkeypatch.setattr(fleet_work, "get_current_user", AsyncMock(return_value="owner-1"))
+    request = _request(repo, SubagentBatchesConfig(default_max_running_items=4))
+    body = {
+        "thread_id": "synthetic-thread",
+        "title": "Synthetic workspace",
+        "lane": "haiku",
+        "data_class": "synthetic",
+        "items": [{"key": "one", "prompt": "Synthetic prompt"}],
+        "submission_key": "synthetic-workspace",
+        "workspace": {"environment_id": "synthetic-linux", "command": ["true"]},
+    }
+    with pytest.raises(HTTPException) as denied:
+        await fleet_work.submit_fleet_batch.__wrapped__(request=request, body=fleet_work.FleetBatchSubmit(**body))
+    assert denied.value.status_code == 422
+    repo.create_batch.assert_not_awaited()
+
+    await fleet_work.submit_fleet_batch.__wrapped__(request=request, body=fleet_work.FleetBatchSubmit(**body, max_running_items=3))
+    assert repo.create_batch.await_args.kwargs["max_running_items"] == 3
+    repo.create_batch.reset_mock()
+    await fleet_work.submit_fleet_batch.__wrapped__(request=request, body=fleet_work.FleetBatchSubmit(**{**body, "workspace": None}))
+    assert repo.create_batch.await_args.kwargs["max_running_items"] == 4
 
 
 @pytest.mark.asyncio

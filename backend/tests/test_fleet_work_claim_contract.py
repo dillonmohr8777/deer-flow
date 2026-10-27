@@ -12,15 +12,76 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from org_isolation_fixtures import ORG_A, USER_A, acting_as, auth_headers, org_world  # noqa: F401
 
 from app.gateway.app import create_app
+from app.gateway.auth_middleware import AuthMiddleware
+from app.gateway.internal_auth import create_internal_auth_headers
 from app.gateway.routers import fleet_work
 from deerflow.config.subagent_batches_config import SubagentBatchesConfig
+from deerflow.persistence.clients import ClientRepository
+from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
+from deerflow.persistence.subagent_batches import SubagentBatchRepository, SubagentBatchRow
+from deerflow.persistence.thread_meta.model import ThreadMetaRow
 
 RUNNER_BODY = {"lease_owner": "mac-mini:w-haiku-01", "lanes": ["haiku"], "limit": 1}
+
+
+@pytest.mark.asyncio
+async def test_workspace_survives_http_submission_storage_and_selected_claim(org_world):  # noqa: F811
+    app = FastAPI()
+    app.add_middleware(AuthMiddleware)
+    app.include_router(fleet_work.router)
+    app.state.subagent_batch_repo = SubagentBatchRepository(org_world)
+    app.state.client_repo = ClientRepository(org_world)
+    with acting_as(USER_A, ORG_A):
+        await app.state.client_repo.upsert_by_registry_id(registry_id="synthetic-client", display_name="Synthetic Client", status="active")
+    async with org_world() as session, session.begin():
+        session.add(ThreadMetaRow(thread_id="synthetic-workspace-thread", user_id=USER_A, organization_id=ORG_A))
+    delegation = await OrganizationDelegationRepository(org_world).grant(organization_id=ORG_A, subject_type="test_fleet_host", subject_id="synthetic-linux", owner_user_id=USER_A, scopes=["fleet:work"])
+    workspace = {"environment_id": "synthetic-linux", "command": ["printf", "synthetic"], "client_path": "/clients/synthetic-client"}
+    body = {
+        "thread_id": "synthetic-workspace-thread",
+        "title": "Synthetic workspace draft",
+        "project": "backend",
+        "source_ref": "client-operations-canonical:client/synthetic-client",
+        "client_id": "synthetic-client",
+        "lane": "haiku",
+        "data_class": "private",
+        "max_running_items": 3,
+        "workspace": workspace,
+        "items": [{"key": "one", "prompt": "Return a synthetic draft"}],
+    }
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        older = await client.post("/api/fleet/work/batches", headers=auth_headers(USER_A), json={**body, "submission_key": "older"})
+        selected = await client.post("/api/fleet/work/batches", headers=auth_headers(USER_A), json={**body, "submission_key": "selected"})
+        assert older.status_code == selected.status_code == 201, (older.text, selected.text)
+        selected_id = selected.json()["id"]
+        expected_workspace = {**workspace, "timeout_seconds": 300}
+        async with org_world() as session:
+            stored = await session.get(SubagentBatchRow, selected_id)
+            assert stored.execution_spec["workspace"] == expected_workspace
+            assert stored.max_running_items == 3
+        # A reconstructed repository must claim the persisted payload, not a cached submit body.
+        app.state.subagent_batch_repo = SubagentBatchRepository(org_world)
+        claimed = await client.post(
+            "/api/fleet/work/claim",
+            headers=create_internal_auth_headers(owner_user_id=USER_A, delegation_id=delegation),
+            json={**RUNNER_BODY, "batch_id": selected_id},
+        )
+        assert claimed.status_code == 200, claimed.text
+        item = claimed.json()["items"][0]
+        assert item["batch_id"] == selected_id
+        assert item["workspace"] == expected_workspace
+        assert (item["client_id"], item["source_ref"], item["output_policy"]) == ("synthetic-client", body["source_ref"], "draft-only")
+        assert item["lease_expires_at"]
+        older_items = await app.state.subagent_batch_repo.list_items(older.json()["id"], user_id=USER_A)
+        assert len(older_items) == 1
+        assert older_items[0]["status"] in {"pending", "queued"}
 
 
 def _request(repo, *, internal: bool = True, organization_id: str | None = "synthetic-org"):
