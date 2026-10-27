@@ -21,14 +21,14 @@ from uuid import UUID, uuid4
 
 import httpx
 from langchain_core.tools import StructuredTool, ToolException
-from sqlalchemy import exists, or_, select
+from sqlalchemy import exists, or_, select, update
 
 from deerflow.config.extensions_config import ExtensionsConfig, McpServerConfig
 from deerflow.mcp.headers import apply_header_overrides, illegal_header_value_reason
 from deerflow.persistence.clients.model import ClientAssignmentRow
 from deerflow.persistence.organizations.model import OrganizationRow
 from deerflow.persistence.organizations.resolution import active_organization_for_user, storage_user_id_for_organization
-from deerflow.persistence.user.model import UserRow
+from deerflow.persistence.user.model import UserPreferenceRow, UserRow
 from deerflow.persistence.user.preferences import UserPreferencesRepository
 from deerflow.runtime.user_context import (
     AUTHENTICATED_CONTEXT_MARKER,
@@ -431,7 +431,7 @@ class ConnectManager:
         async with _api_client() as client:
             return await _json_request(client, method, path, key, self.authorize, **kwargs)
 
-    def account_valid(self, account, scope, toolkit, account_id=None):
+    def account_valid(self, account, scope, toolkit, account_id=None, *, status="ACTIVE"):
         if not isinstance(account, dict) or any(not isinstance(account.get(key), dict) for key in ("toolkit", "auth_config", "experimental")):
             return False
         return (
@@ -441,7 +441,7 @@ class ConnectManager:
             and (account_id is None or account["id"] == account_id)
             and account.get("user_id") == f"momobot-{scope.actor_user_id}"
             and account.get("toolkit", {}).get("slug") == toolkit
-            and account.get("status") == "ACTIVE"
+            and account.get("status") == status
             and account.get("is_disabled") is False
             and account.get("auth_config", {}).get("is_disabled") is False
             and account.get("auth_config", {}).get("id") == self.config.composio_me.connect.auth_configs.get(toolkit)
@@ -462,6 +462,69 @@ class ConnectManager:
             raise ComposioSessionError("connection_selection_required")
         return items
 
+    async def _initiation_timed_out(self, scope, toolkit, slot, attempt):
+        """Allow a fresh browser request only for a provider-confirmed initiation timeout."""
+        if self.runtime is not None or not isinstance(slot, dict) or not isinstance(attempt, dict) or slot.get("state") != "ready" or attempt.get("state") != "opened":
+            return False
+        expected = {
+            "actor_user_id": scope.actor_user_id,
+            "organization_id": scope.organization_id,
+            "storage_user_id": scope.storage_user_id,
+            "toolkit": toolkit,
+            "auth_config_id": self.config.composio_me.connect.auth_configs[toolkit],
+        }
+        for value in (slot, attempt):
+            deadline = value.get("expires_at")
+            if any(value.get(key) != item for key, item in expected.items()) or value.get("intent") is not None or type(deadline) not in (int, float) or not deadline <= time.time():
+                return False
+        if any(slot.get(key) != attempt.get(key) for key in ("handle", "nonce", "connected_account_id", "expires_at")):
+            return False
+        account_id, nonce = attempt.get("connected_account_id"), attempt.get("nonce")
+        if not isinstance(account_id, str) or not _SESSION_ID.fullmatch(account_id) or not isinstance(nonce, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", nonce):
+            return False
+        data = await self.request("GET", "/api/v3.1/connected_accounts/" + account_id)
+        if not self.account_valid(data, scope, toolkit, account_id, status="EXPIRED") or data.get("status_reason") != "Connection initiation did not complete within 10 minutes":
+            return False
+        # Verification may have started during the provider read. Preserve that hold.
+        return await self.repo.get_key(scope.actor_user_id, self.attempt_key(attempt["handle"])) == attempt
+
+    async def _claim_expired_replacement(self, scope, slot, previous, attempt, value):
+        # Fence Open/verification and retire the old attempt in the same
+        # transaction as the slot swap, with no intermediate crash window.
+        if attempt.get("state") not in {"ready", "opened"} or type(attempt.get("expires_at")) not in (int, float) or not attempt["expires_at"] <= time.time():
+            return False
+        async with self.repo.sessions() as session, session.begin():
+            current = await session.scalar(
+                update(UserPreferenceRow)
+                .where(
+                    UserPreferenceRow.user_id == scope.actor_user_id,
+                    UserPreferenceRow.key == self.attempt_key(attempt["handle"]),
+                    UserPreferenceRow.value["nonce"].as_string() == attempt["nonce"],
+                    UserPreferenceRow.value["state"].as_string() == attempt["state"],
+                )
+                .values(value=UserPreferenceRow.value)
+                .returning(UserPreferenceRow.value)
+            )
+            if current != attempt:
+                return False
+            statement = (
+                update(UserPreferenceRow)
+                .where(
+                    UserPreferenceRow.user_id == scope.actor_user_id,
+                    UserPreferenceRow.key == slot,
+                    UserPreferenceRow.value["nonce"].as_string() == previous["nonce"],
+                    UserPreferenceRow.value["state"].as_string() == "ready",
+                )
+                .values(value=value)
+                .returning(UserPreferenceRow.user_id)
+            )
+            if await session.scalar(statement) is None:
+                return False
+            await session.execute(
+                update(UserPreferenceRow).where(UserPreferenceRow.user_id == scope.actor_user_id, UserPreferenceRow.key == self.attempt_key(attempt["handle"])).values(value={**attempt, "state": "expired", "redirect_url": None})
+            )
+            return True
+
     async def status(self):
         scope = await self.authorize()
         rows = []
@@ -475,7 +538,8 @@ class ConnectManager:
                     if not connected and slot is not None:
                         attempt = await self.repo.get_key(scope.actor_user_id, self.attempt_key(slot["handle"]))
                         if slot.get("state") != "ready" or not isinstance(attempt, dict) or attempt.get("state") != "ready" or attempt.get("nonce") != slot.get("nonce"):
-                            reason = "connect_attempt_held"
+                            if not await self._initiation_timed_out(scope, toolkit, slot, attempt):
+                                reason = "connect_attempt_held"
                 except ComposioSessionError:
                     reason = "connection_verification_unavailable"
             rows.append({"toolkit": toolkit, "connected": connected, "connectable": reason is None and not connected, "reason": reason})
@@ -498,6 +562,9 @@ class ConnectManager:
             raise ComposioSessionError("connect_attempt_not_found")
         if self.unavailable(value.get("toolkit")) or value.get("auth_config_id") != self.config.composio_me.connect.auth_configs.get(value["toolkit"]):
             raise ComposioSessionError("connect_policy_changed")
+        slot = await self.repo.get_key(scope.actor_user_id, self.slot_key(scope, value["toolkit"]))
+        if not isinstance(slot, dict) or slot.get("handle") != handle or slot.get("nonce") != value.get("nonce"):
+            raise ComposioSessionError("connect_attempt_not_found")
         if nonce is not None and (not isinstance(nonce, str) or not hmac.compare_digest(nonce, value["nonce"])):
             raise ComposioSessionError("connect_nonce_denied")
         if account_id is not None and account_id != value.get("connected_account_id"):
@@ -539,7 +606,10 @@ class ConnectManager:
         if isinstance(existing, dict):
             current_attempt = await self.repo.get_key(scope.actor_user_id, self.attempt_key(existing["handle"]))
             if not isinstance(current_attempt, dict) or current_attempt.get("state") != "ready" or current_attempt.get("nonce") != existing.get("nonce"):
-                raise ComposioSessionError("connect_attempt_held")
+                if intent is not None or not await self._initiation_timed_out(scope, toolkit, existing, current_attempt):
+                    raise ComposioSessionError("connect_attempt_held")
+                if await self.accounts(toolkit):
+                    raise ComposioSessionError("already_connected")
             if existing.get("state") == "ready" and existing.get("expires_at", 0) > time.time():
                 if intent is not None and existing.get("intent") != intent:
                     raise ComposioSessionError("connect_attempt_in_progress")
@@ -559,7 +629,10 @@ class ConnectManager:
             "expires_at": time.time() + self.config.composio_me.connect.ttl_seconds,
             "intent": intent,
         }
-        won = await self.repo.transition_key(scope.actor_user_id, slot, existing["nonce"], "ready", value) if existing else await self.repo.reserve_key(scope.actor_user_id, slot, value)
+        if existing:
+            won = await self._claim_expired_replacement(scope, slot, existing, current_attempt, value)
+        else:
+            won = await self.repo.reserve_key(scope.actor_user_id, slot, value)
         if not won:
             raise ComposioSessionError("connect_attempt_held")
         if not await self.repo.reserve_key(scope.actor_user_id, self.attempt_key(handle), value):

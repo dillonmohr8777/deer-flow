@@ -6,6 +6,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.gateway.people_profiles import load_own_profile, parse_profile
@@ -146,6 +148,34 @@ async def test_completion_sets_easy_mode_server_side(api, repo):
     assert stored["experience_mode"] == "easy" and stored["mode"] == "flash"
     assert stored["onboarding_profile"] == {"role": "AM", "team": "Paid"}
     assert await repo.get("bob") == {}
+
+
+@pytest.mark.anyio
+async def test_completion_rolls_back_marker_and_preferences_on_write_failure(api, repo):
+    client, _, facts = api
+    await client.put(f"{PATH}/profile", json={"role": "AM", "team": "Paid"})
+    await client.put(f"{PATH}/tools", json={"tools": ["hubspot"]})
+    await repo.patch("alice", {"experience_mode": "hard", "mode": "pro"})
+    before = await repo.get("alice")
+    async with repo.sessions() as session, session.begin():
+        await session.execute(text("CREATE TRIGGER fail_onboarding_mode BEFORE INSERT ON user_preferences WHEN NEW.key = 'mode' BEGIN SELECT RAISE(ABORT, 'onboarding mode write failed'); END"))
+
+    with pytest.raises(IntegrityError, match="onboarding mode write failed"):
+        await client.post(f"{PATH}/complete")
+
+    assert await repo.get("alice") == before
+    assert (await client.get(PATH)).json()["required"] is True
+    assert facts == []
+    async with repo.sessions() as session, session.begin():
+        await session.execute(text("DROP TRIGGER fail_onboarding_mode"))
+
+    done = (await client.post(f"{PATH}/complete")).json()
+    assert done["required"] is False and done["completed_at"]
+    stored = await repo.get("alice")
+    assert (stored["experience_mode"], stored["mode"]) == ("easy", "flash")
+    assert stored["onboarding_connections"] == {"hubspot": "requested"}
+    assert (await client.post(f"{PATH}/complete")).status_code == 200
+    assert len(facts) == 4
 
 
 @pytest.mark.anyio
