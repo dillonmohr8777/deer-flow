@@ -465,6 +465,7 @@ class SubagentBatchRepository:
         owner_id: str | None = None,
         organization_id: str | None = None,
         batch_id: str | None = None,
+        workspace_only: bool | None = None,
     ) -> list[dict[str, Any]]:
         """Promote pending work and atomically claim runnable items.
 
@@ -473,6 +474,8 @@ class SubagentBatchRepository:
         is a remote host claiming over ``/api/fleet/work``. Each claimer only
         sees its own executor's batches, so one item is never run by both.
         ``lanes`` further restricts fleet claims to ``execution_spec["lane"]``.
+        ``workspace_only`` partitions workspace and ordinary hosts before any
+        item is promoted or leased; None retains the internal caller contract.
         """
         if limit <= 0:
             return []
@@ -485,6 +488,9 @@ class SubagentBatchRepository:
                 stmt = stmt.where(SubagentBatchRow.user_id == owner_id, SubagentBatchRow.organization_id == organization_id)
             if batch_id is not None:
                 stmt = stmt.where(SubagentBatchRow.id == batch_id)
+            if workspace_only is not None:
+                workspace = SubagentBatchRow.execution_spec["workspace"].as_string()
+                stmt = stmt.where(workspace.is_not(None) if workspace_only else workspace.is_(None))
             batches = list((await session.execute(stmt.order_by(SubagentBatchRow.created_at, SubagentBatchRow.id).with_for_update(skip_locked=True))).scalars())
             for batch in batches:
                 if len(claimed) >= limit:

@@ -5,10 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from deerflow.config.database_config import DatabaseConfig
 from deerflow.persistence.engine import get_session_factory, init_engine_from_config
-from deerflow.persistence.subagent_batches import SubagentBatchRepository
+from deerflow.persistence.subagent_batches import SubagentBatchRepository, SubagentBatchRow
 
 
 async def _repo(tmp_path) -> SubagentBatchRepository:
@@ -119,3 +121,37 @@ async def test_claim_batch_selector_leaves_other_same_lane_batches_queued(tmp_pa
 
     assert {item["batch_id"] for item in got} == {"selected"}
     assert (await repo.list_items("older", user_id="user-1"))[0]["status"] in {"pending", "queued"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("workspace_only", [False, True, None])
+async def test_workspace_partition_filters_locked_batches_before_item_limit(tmp_path, monkeypatch, workspace_only) -> None:
+    repo = await _repo(tmp_path)
+    spec = {"executor": "fleet", "lane": "haiku", "data_class": "synthetic"}
+    await _create(repo, "workspace", {**spec, "workspace": {"environment_id": "synthetic-linux", "command": ["true"]}}, count=1)
+    await _create(repo, "ordinary", spec, count=1)
+    await _create(repo, "null-workspace", {**spec, "workspace": None}, count=1)
+    queries = []
+    execute = AsyncSession.execute
+
+    async def record_query(session, statement, *args, **kwargs):
+        if getattr(statement, "is_select", False) and statement.column_descriptions[0].get("entity") is SubagentBatchRow:
+            queries.append(statement)
+        return await execute(session, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", record_query)
+    # Omission retains the internal repository contract used by native callers.
+    partition = {} if workspace_only is None else {"workspace_only": workspace_only}
+    claims = await repo.claim_items(now=datetime.now(UTC), lease_owner="synthetic-host", lease_seconds=60, limit=1, executor="fleet", lanes={"haiku"}, **partition)
+    assert [item["batch_id"] for item in claims] == ["ordinary" if workspace_only is False else "workspace"]
+    for dialect, extraction in ((sqlite.dialect(), "JSON_EXTRACT"), (postgresql.dialect(), "->>")):
+        sql = str(queries[0].compile(dialect=dialect, compile_kwargs={"literal_binds": True}))
+        if workspace_only is None:
+            assert extraction not in sql
+        else:
+            assert extraction in sql
+            assert "'workspace'" in sql or '$."workspace"' in sql
+            assert ("IS NOT NULL" if workspace_only else "IS NULL") in sql
+    remainder = await repo.claim_items(now=datetime.now(UTC), lease_owner="synthetic-host-2", lease_seconds=60, limit=10, executor="fleet", lanes={"haiku"}, **partition)
+    expected_remainder = {False: {"null-workspace"}, True: set(), None: {"ordinary", "null-workspace"}}
+    assert {item["batch_id"] for item in remainder} == expected_remainder[workspace_only]

@@ -12,15 +12,89 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from org_isolation_fixtures import ORG_A, USER_A, acting_as, auth_headers, org_world  # noqa: F401
 
 from app.gateway.app import create_app
+from app.gateway.auth_middleware import AuthMiddleware
+from app.gateway.internal_auth import create_internal_auth_headers
 from app.gateway.routers import fleet_work
 from deerflow.config.subagent_batches_config import SubagentBatchesConfig
+from deerflow.persistence.clients import ClientRepository
+from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
+from deerflow.persistence.subagent_batches import SubagentBatchRepository, SubagentBatchRow
+from deerflow.persistence.thread_meta.model import ThreadMetaRow
 
 RUNNER_BODY = {"lease_owner": "mac-mini:w-haiku-01", "lanes": ["haiku"], "limit": 1}
+
+
+@pytest.mark.asyncio
+async def test_workspace_survives_http_submission_storage_and_selected_claim(org_world):  # noqa: F811
+    app = FastAPI()
+    app.add_middleware(AuthMiddleware)
+    app.include_router(fleet_work.router)
+    app.state.subagent_batch_repo = SubagentBatchRepository(org_world)
+    app.state.client_repo = ClientRepository(org_world)
+    with acting_as(USER_A, ORG_A):
+        await app.state.client_repo.upsert_by_registry_id(registry_id="synthetic-client", display_name="Synthetic Client", status="active")
+    async with org_world() as session, session.begin():
+        session.add(ThreadMetaRow(thread_id="synthetic-workspace-thread", user_id=USER_A, organization_id=ORG_A))
+    delegation = await OrganizationDelegationRepository(org_world).grant(organization_id=ORG_A, subject_type="test_fleet_host", subject_id="synthetic-linux", owner_user_id=USER_A, scopes=["fleet:work"])
+    workspace = {"environment_id": "synthetic-linux", "command": ["printf", "synthetic"], "client_path": "/clients/synthetic-client"}
+    body = {
+        "thread_id": "synthetic-workspace-thread",
+        "title": "Synthetic workspace draft",
+        "project": "backend",
+        "source_ref": "client-operations-canonical:client/synthetic-client",
+        "client_id": "synthetic-client",
+        "lane": "haiku",
+        "data_class": "private",
+        "max_running_items": 3,
+        "workspace": workspace,
+        "items": [{"key": "one", "prompt": "Return a synthetic draft"}],
+    }
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        older = await client.post("/api/fleet/work/batches", headers=auth_headers(USER_A), json={**body, "submission_key": "older"})
+        selected = await client.post("/api/fleet/work/batches", headers=auth_headers(USER_A), json={**body, "submission_key": "selected"})
+        ordinary = await client.post("/api/fleet/work/batches", headers=auth_headers(USER_A), json={**body, "submission_key": "ordinary", "workspace": None})
+        assert older.status_code == selected.status_code == ordinary.status_code == 201, (older.text, selected.text, ordinary.text)
+        selected_id = selected.json()["id"]
+        expected_workspace = {**workspace, "timeout_seconds": 300}
+        async with org_world() as session:
+            stored = await session.get(SubagentBatchRow, selected_id)
+            assert stored.execution_spec["workspace"] == expected_workspace
+            assert stored.max_running_items == 3
+        # A reconstructed repository must claim the persisted payload, not a cached submit body.
+        app.state.subagent_batch_repo = SubagentBatchRepository(org_world)
+        host_headers = create_internal_auth_headers(owner_user_id=USER_A, delegation_id=delegation)
+        for wrong_partition in (
+            {**RUNNER_BODY, "batch_id": selected_id},
+            {**RUNNER_BODY, "batch_id": ordinary.json()["id"], "workspace_only": True},
+        ):
+            refused = await client.post("/api/fleet/work/claim", headers=host_headers, json=wrong_partition)
+            assert refused.status_code == 200, refused.text
+            assert refused.json()["items"] == []
+        normal = await client.post("/api/fleet/work/claim", headers=host_headers, json=RUNNER_BODY)
+        assert normal.status_code == 200, normal.text
+        assert [item["batch_id"] for item in normal.json()["items"]] == [ordinary.json()["id"]]
+        assert normal.json()["items"][0]["workspace"] is None
+        claimed = await client.post(
+            "/api/fleet/work/claim",
+            headers=host_headers,
+            json={**RUNNER_BODY, "batch_id": selected_id, "workspace_only": True},
+        )
+        assert claimed.status_code == 200, claimed.text
+        item = claimed.json()["items"][0]
+        assert item["batch_id"] == selected_id
+        assert item["workspace"] == expected_workspace
+        assert (item["client_id"], item["source_ref"], item["output_policy"]) == ("synthetic-client", body["source_ref"], "draft-only")
+        assert item["lease_expires_at"]
+        older_items = await app.state.subagent_batch_repo.list_items(older.json()["id"], user_id=USER_A)
+        assert len(older_items) == 1
+        assert older_items[0]["status"] in {"pending", "queued"}
 
 
 def _request(repo, *, internal: bool = True, organization_id: str | None = "synthetic-org"):
@@ -71,6 +145,7 @@ async def test_claim_returns_leased_item_for_runner_body() -> None:
     assert kwargs["lanes"] == {"haiku"}
     assert kwargs["owner_id"] == "owner-1"
     assert kwargs["organization_id"] == "synthetic-org"
+    assert kwargs["workspace_only"] is False
     assert response["lease_seconds"] == 120
     assert [item["id"] for item in response["items"]] == ["item-synthetic-1"]
     assert response["items"][0]["lease_expires_at"]
@@ -80,10 +155,11 @@ async def test_claim_returns_leased_item_for_runner_body() -> None:
 async def test_claim_passes_runner_batch_selector_to_repo() -> None:
     repo = SimpleNamespace(claim_items=AsyncMock(return_value=[]))
 
-    await fleet_work.claim_work.__wrapped__(request=_request(repo), body=fleet_work.ClaimRequest(**RUNNER_BODY, batch_id="batch-synthetic-1"))
+    await fleet_work.claim_work.__wrapped__(request=_request(repo), body=fleet_work.ClaimRequest(**RUNNER_BODY, batch_id="batch-synthetic-1", workspace_only=True))
     await fleet_work.claim_work.__wrapped__(request=_request(repo), body=fleet_work.ClaimRequest(**RUNNER_BODY))
 
     assert [c.kwargs["batch_id"] for c in repo.claim_items.await_args_list] == ["batch-synthetic-1", None]
+    assert [c.kwargs["workspace_only"] for c in repo.claim_items.await_args_list] == [True, False]
 
 
 @pytest.mark.asyncio
@@ -114,6 +190,8 @@ async def test_claim_without_internal_delegation_is_forbidden_and_claims_nothing
         {"lease_owner": "w", "lanes": []},
         {"lease_owner": "w", "lanes": ["not-a-lane"]},
         {"lease_owner": "w", "lanes": ["haiku"], "limit": 0},
+        {"lease_owner": "w", "lanes": ["haiku"], "workspace_only": None},
+        {"lease_owner": "w", "lanes": ["haiku"], "workspace_only": "true"},
     ],
 )
 def test_claim_body_validation_rejects_malformed_runner_requests(body) -> None:

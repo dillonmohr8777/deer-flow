@@ -244,6 +244,11 @@ replay. Three requests at $0.03 each. Details/tests: [WORKFLOWS.md](../../docs/W
 
 ### Desktop lane and Slack roster
 
-`fleet_work` lane `desktop` is roster-gated at submit (`roster` config, `app.state.roster_config`), single-attempt, and unclaimable until `approval_state` is `approved` (`POST /api/fleet/work/batches/{id}/approve`, org owner/admin). See [FLEET_PROJECT_JOBS.md](../../docs/FLEET_PROJECT_JOBS.md). Tests: `tests/test_fleet_desktop_lane.py`, `tests/test_roster_scope.py`, `tests/test_momobot_desktop_runner.py`.
+`fleet_work` persists validated workspaces in `execution_spec` and projects them
+only in `workspace_only=true` claims. Retain canonical mount admission, argv/path/timeout bounds,
+three-worker cap (including defaults) and private-host allowlisting. Desktop
+rejects workspaces, stays roster-gated (`roster`, `app.state.roster_config`),
+single-attempt and unclaimable until org owner/admin approval (`approval_state`).
+See [contract](../../docs/FLEET_PROJECT_JOBS.md) for routes and tests.
 
 Private brand projection and staff work-plan rules: [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md).

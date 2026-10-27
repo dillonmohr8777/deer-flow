@@ -1,5 +1,11 @@
 # Persistence lifecycle
 
+`SubagentBatchRepository.claim_items(workspace_only=...)` filters the locked batch
+query before item promotion/limits/leases: true selects non-null workspaces,
+false excludes them, and omitted/None preserves internal callers. Gateway always
+passes a boolean. Keep this SQL partition portable across SQLite/PostgreSQL and
+retain the existing executor, owner/organization, approval and lease fences.
+
 Composio approvals use dedicated proposer-or-current-owner scopes and CAS methods;
 never widen generic action reads. Claims recheck current staff membership and
 persist unknown outcome before transport. Keep deciding and proposing actors

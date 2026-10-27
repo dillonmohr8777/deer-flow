@@ -81,6 +81,35 @@ surface. Quiet hours and protected launchers remain enforced by the host runner.
 No recurrence is activated by this change: the existing owner must submit a
 bounded occurrence after checking its current source bookmark and preferences.
 
+## Linux workspace jobs
+
+Non-desktop batches may include `workspace` with an `environment_id` (2–63
+lowercase letters, digits or hyphens, starting with a letter), `command`
+(1–32 nonempty argv strings, each at most 8192 characters and without NUL),
+`timeout_seconds` (integer 1–3600, default 300), and optional `client_path`.
+Unknown workspace fields are rejected. The client path must be absolute,
+traversal-free and NUL-free, and requires the exact admitted canonical
+`client_id` binding described above. The host must independently resolve the
+path against its configured client-root allowlist before mounting it; Gateway
+path validation grants no host filesystem access.
+
+Workspace batches allow at most three running items, including when the value
+comes from the configured default. The validated workspace is stored unchanged
+(with its timeout default) in the batch's existing `execution_spec` JSON and
+projected by `/claim`; no schema migration or workspace manager is added here.
+The optional claim `batch_id` limits a host to that selected batch. Desktop
+batches reject `workspace` and retain their roster and approval path.
+Gateway claims default `workspace_only` to `false`, excluding workspace jobs
+from ordinary hosts even when a batch ID is supplied. Workspace hosts must send
+`workspace_only: true`; those claims exclude ordinary jobs. The repository applies
+this partition to the locked batch query before item promotion, limits and leases,
+using JSON extraction compatible with SQLite and PostgreSQL. Missing or JSON-null
+workspace fields are ordinary jobs. Internal repository callers that omit the
+optional filter retain their existing behavior; the executor remains `fleet`.
+`tests/test_fleet_work_claim_contract.py` proves HTTP submit, durable SQLite
+readback and delegated selected-batch claim with synthetic data. Host execution,
+mount isolation and production deployment require separate acceptance.
+
 ## Verification and deployment gates
 
 `tests/test_fleet_project_jobs.py` exercises the four durable bindings,
