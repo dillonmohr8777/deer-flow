@@ -80,9 +80,7 @@ read-only into the run context. The server-reserved `deerflow_project_id`
 metadata key is a read-only exposure of the `threads_meta.project_id` column and
 is stripped from client writes.
 
-Clients read/run MomoBot Max or, in Max-tier dedicated workspaces, own-bucket agents (`client_workspace_agents`, `include_legacy=False`). Keep the agent's model and config-owned Max settings; otherwise pin MomoBot Max. No shared/foreign/legacy bucket, SOUL, `check` or CRUD access.
-
-The client roster (`routers/clients.py`, `/api/clients`, migration `0034_clients`) is organization-owned: `clients` and `client_assignments` carry no `user_id`, so every route scopes on `resolve_organization_id()` alone, like `organizations`/`organization_members`. Assignments are keyed `(client_id, user_id)` and `POST .../assignments` upserts the role. Project create/patch exposes the existing nullable `projects.client_id` metadata link: a non-null link requires a current workspace owner/admin and exact authorized canonical-client scope. Explicit null clears a link on patch only for a current workspace owner/admin; omission preserves it. The link grants no project, shelf, tool or private Brain access. `POST /api/clients/import` is admin-only (`require_admin_user`, like `capabilities.py::install`) and upserts the `client-operations/registry/clients.json` roster by `registry_id` in the caller's active organization; it never deletes and never infers owners.
+Client runtime, roster and project-link policy: [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md).
 
 Localhost persistence deliberately reads the direct request `Host` and ignores `Forwarded` / `X-Forwarded-Host`. Scheme and auth-origin reconstruction still consume forwarding headers. The bundled nginx sets `X-Forwarded-Proto`, but preserves an upstream HTTPS value and does not overwrite every forwarded header, so the outer trusted proxy must replace or strip client-supplied forwarding headers before traffic reaches DeerFlow.
 
@@ -248,6 +246,4 @@ replay. Three requests at $0.03 each. Details/tests: [WORKFLOWS.md](../../docs/W
 
 `fleet_work` lane `desktop` is roster-gated at submit (`roster` config, `app.state.roster_config`), single-attempt, and unclaimable until `approval_state` is `approved` (`POST /api/fleet/work/batches/{id}/approve`, org owner/admin). See [FLEET_PROJECT_JOBS.md](../../docs/FLEET_PROJECT_JOBS.md). Tests: `tests/test_fleet_desktop_lane.py`, `tests/test_roster_scope.py`, `tests/test_momobot_desktop_runner.py`.
 
-`app/momobot_brand.py` and `routers/momobot_brand.py` serve the private About copy and Agents lineup from `momobot_brand.content_dir` (never committed; `scripts/stage_momobot_brand.sh` fills it). Prices leave only when agents.json has `show_pricing: true`; assets come from an allowlisted subfolder set with a resolve-inside-root check. Slack `/momobot about` and "@bot what is MomoBot" read the same folder.
-
-Customer workspace migration, private legacy thread visibility, staff client context (`client_context.py`) and portal `/work` admission: see [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md).
+Private brand projection and staff work-plan rules: [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md).

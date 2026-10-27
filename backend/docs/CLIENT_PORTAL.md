@@ -12,6 +12,9 @@ All routes require a real authenticated active workspace membership. Mutations u
 | `GET /threads?q=&state=&limit=&offset=` | Literal subject search; all/pending/needs_approval/published; bounded pagination |
 | `POST /threads` | `{client_id,submission_key,subject,body}`. Unique workspace/actor/key; identical retry returns same conversation, changed payload 409 |
 | `GET /threads/{id}` | Published messages only for clients; staff also see immutable drafts, approval and work refs |
+| `GET /threads/{id}/work-plan` | Exact authorized staff only; current recorded internal plan and independent revision; no-store |
+| `GET /threads/{id}/work-plan/participants?limit=50&cursor=` | Exact authorized staff only; bounded current owner/admin and exact-client account-manager choices, plus currently eligible saved selections; no-store |
+| `PUT /threads/{id}/work-plan` | Exact authorized staff `{expected_revision,plan}`; records internal planning with CAS and actual-actor audit; no execution |
 | `POST /threads/{id}/draft` | Staff `{expected_revision,body,attachments:[{name,content}]}`. CAS revision; creates immutable draft and real pending approval. Existing pending approval superseded |
 | `POST /threads/{id}/publish` | Owner/admin `{approval_id,expected_revision}`. Existing approval executor publishes exact original snapshot once, returns durable receipt |
 | `GET /threads/{id}/messages/{message}/attachments/{name}` | Authorized immutable md/txt/csv file; no-store; `X-Content-SHA256` readback |
@@ -102,6 +105,107 @@ not automatically refresh portal messages added after that snapshot. Staff can
 read the context endpoint again, but this slice adds no live-context middleware
 or per-turn retrieval tool.
 
+### Recorded internal work planning
+
+`client_work_plan.py` stores one typed current plan on the existing
+`board_portal` row. No new client registry, task queue, scheduler, message or
+approval is created. Planning has an independent `work_plan_revision`; draft
+revision, run identity, publication state and existing `/work` retry behavior
+are unchanged. Stale writes return 409. Missing or foreign requests remain 404.
+
+The full-replacement PUT body has `expected_revision` and `plan`. A plan records
+`outcome`, nullable `assignee_user_id`, nullable timezone-aware `due_at`, up to
+10 unique `dependency_thread_ids`, nullable `verifier_user_id`, `status`,
+`next_action` and up to 10 `evidence_refs`. Each evidence reference has `kind`
+(`source` or `delivery`) and a bounded `reference` string. Outcome and next
+action are nonblank and at most 2,000 characters each; reference strings are at
+most 512 characters; the complete UTF-8 plan JSON is at most 8,000 bytes. Due
+dates normalize to UTC. Null owner, verifier and date remain unknown, never
+inferred. Dependencies must name other opt-in requests for the same exact
+client and workspace; they are references, not an executable dependency graph.
+
+Read/write authorization reuses the active canonical-client staff gate:
+active workspace owner/admin, or active staff member with the exact canonical
+agency AM assignment. Every non-null assignee and verifier must independently
+pass that same current gate in the selected workspace. Contacts, arbitrary
+user IDs, disabled accounts, inactive memberships/clients and foreign scope
+are denied. Writes first check scope, then take the existing portal row's write
+lock and recheck scope before validating participants and saving by revision.
+The no-op lock preserves draft revision and serializes SQLite/Postgres writers.
+Audit action `client_portal.work_plan.saved` records the actual requesting
+actor separately from workspace storage, source client and saved revision;
+request data cannot supply an audit actor. Plan text is not copied into audit
+details.
+
+Statuses are `planned`, `in_progress`, `blocked`, and `reported_complete`.
+Reported completion requires a recorded evidence reference. Every response is
+explicitly `staff_recorded_unverified`: an evidence string does not prove its
+destination, grant file/account access, verify work or record verifier approval.
+The assigned verifier is a recorded participant, not evidence they reviewed it.
+The API does not dispatch a worker/model, schedule, send, publish, approve or
+update the canonical client queue. Existing approval rules still apply.
+
+The sibling participants route resolves the requested portal thread and its
+client from the authenticated workspace. It returns only existing account
+email, record ID and eligible role; it reads no profile or contact fields.
+Results are ordered by user ID and use a validated request-bound keyset cursor,
+with a default page of 50 and a hard maximum of 100. Saved owner/verifier IDs
+appear in `selected_items` only while currently eligible, including when they
+are outside the current page. Directory results suggest assignment; the locked
+save path still rechecks every submitted non-null participant. The response's
+`plan_revision` comes from the same portal row as `selected_items`, so clients
+can tell whether that selection snapshot describes their current plan revision.
+
+The dedicated staff GET returns source row, revision, actual recording actor
+and timestamp. Authorized `/context` includes compact per-request plan status
+and the full selected-request plan; initial `/work` therefore receives the
+recorded current plan as untrusted evidence. The separate missing delivery/CRM
+integration markers remain missing. Later ordinary chat turns still do not
+refresh that initial snapshot automatically. Contact list/detail/messages and
+ordinary Board list/detail/messages omit all plan fields and references.
+The API does not itself add a work-plan editor UI.
+
+### Bound internal work-plan tools
+
+Authenticated staff MomoBot Max runs on an existing server-bound portal work
+chat receive `read_client_work_plan` and `update_client_work_plan`, including
+when no project is selected. The Gateway carries an immutable capability only
+through `RunContext`; caller context/config, run kwargs and checkpoints cannot
+grant it. The worker checks it before assembly and removes it at termination.
+Ordinary/private chats, contacts, other agents, channels, bootstrap and subagents
+receive no capability. Existing role authorization still narrows the tool list.
+
+Tools take no actor, organization, client, request, chat or run identity. The
+read returns the server-stamped current actor ID and the first bounded
+participants page, including its matching `plan_revision`; `participants_cursor`
+can continue that page sequence without adding identity or scope inputs. Every
+call checks the authenticated actor/storage identity and current staff access,
+exact request/chat/client/workspace binding and selected project, if any. A
+revoked saved participant does not block authorized reads or repair. Saves
+repeat scope checks under the existing plan write lock and independently
+recheck each submitted non-null participant.
+
+Updates require an explicit `expected_revision`, reuse HTTP validation and CAS,
+and return a 409 conflict without automatic overwrite. HTTP and tool saves share
+the existing save-then-best-effort audit contract, attributed to the actual
+authenticated human with storage identity recorded separately and plan text
+omitted. Plan revisions remain independent of human reply drafts. Tool writes
+only record internal plans: they cannot start work, save a draft, approve, send,
+publish, schedule or write a queue. Source/delivery strings are untrusted and
+are never fetched by these tools. A recorded `reported_complete` state remains
+`staff_recorded_unverified`, with no execution, approval or revenue proof.
+
+Offline acceptance: `tests/test_client_work_plan_tools.py` exercises actual
+authenticated Gateway admission, worker hydration and framework tool invocation
+against disposable SQL, including live revocation and concurrent UI/tool edits.
+
+Migration `0053_board_work_plan` follows `0052_board_portal` and adds nullable
+plan/recording metadata plus an independent revision defaulting to zero.
+Existing portal rows, drafts and messages are preserved. Upgrade and downgrade
+are idempotent; downgrade removes new plan data. Native must use the normal
+quiet-writer backup, staging migration and matching-source rollout/rollback
+process. Offline migration checks are not production recovery proof.
+
 ### Selected client project evidence
 
 The staff inbox asks for an explicit work project or **No project** before the
@@ -163,3 +267,42 @@ prove connected CRM/reporting sources, or establish full AM acceptance.
 - Test company memory isolation, model/tool policy and artifacts in staging against two actual customer workspaces before onboarding real clients. No production deployment or paid model invocation is part of the offline test suite.
 
 Price/usage entitlements remain the existing run-admission policy. This slice adds no $500 billing plan, payment collection, usage increase, scheduler, external email, or Slack delivery. Those are separate product wiring, not claimed as working here.
+
+### Gateway client and roster policy
+
+Clients read/run MomoBot Max or, in Max-tier dedicated workspaces, own-bucket agents (`client_workspace_agents`, `include_legacy=False`). Keep the agent's model and config-owned Max settings; otherwise pin MomoBot Max. No shared/foreign/legacy bucket, SOUL, `check` or CRUD access.
+
+The client roster (`routers/clients.py`, `/api/clients`, migration `0034_clients`) is organization-owned: `clients` and `client_assignments` carry no `user_id`, so every route scopes on `resolve_organization_id()` alone, like `organizations`/`organization_members`. Assignments are keyed `(client_id, user_id)` and `POST .../assignments` upserts the role. Project create/patch exposes the existing nullable `projects.client_id` metadata link: a non-null link requires a current workspace owner/admin and exact authorized canonical-client scope. Explicit null clears a link on patch only for a current workspace owner/admin; omission preserves it. The link grants no project, shelf, tool or private Brain access. `POST /api/clients/import` is admin-only (`require_admin_user`, like `capabilities.py::install`) and upserts the `client-operations/registry/clients.json` roster by `registry_id` in the caller's active organization; it never deletes and never infers owners.
+
+### Private brand projection
+
+`app/momobot_brand.py` and `routers/momobot_brand.py` serve the private About copy and Agents lineup from `momobot_brand.content_dir` (never committed; `scripts/stage_momobot_brand.sh` fills it). Prices leave only when agents.json has `show_pricing: true`; assets come from an allowlisted subfolder set with a resolve-inside-root check. Slack `/momobot about` and "@bot what is MomoBot" read the same folder.
+
+### Bound plan integration rules
+
+Portal plan tools bind only the authenticated staff Max run's existing request,
+independently of project selection. Carry `client_work_plan_access` through
+`RunContext`, never serialized config; retain live and locked scope rechecks and
+the shared HTTP actual-actor audit. The sibling participant route lists only
+currently eligible same-client owner/admin and account-manager identities; its
+bounded request-bound cursor grants no access. Bound tool reads can continue
+the same page without accepting identity or scope inputs. Revoked saved
+participants do not block reads or repair, while saves recheck each submitted
+participant under the write lock. Plans record work only; they do not dispatch.
+
+### Frontend participant directory
+
+The work-plan participant directory is a separate, strict sibling GET under the
+request's `/work-plan/participants`, with `X-Portal-Workspace`, limit 50/max 100 and
+opaque cursor paging. Never merge it into `WorkPlanRecord` or the PUT payload.
+Query keys and the existing editor remount fence include actor, workspace,
+client and request; consumed AbortSignals and query cancellation discard late
+scope/page responses. Paging/retry must keep the local plan mounted and dirty.
+Render only supplied account email/role; selected_items confirms saved people
+outside the page. Missing saved IDs remain visibly unavailable and repairable;
+only interpret that absence when required directory `plan_revision` matches the
+local record revision and the query is neither pending nor failed. Different
+snapshot revisions offer retry and preserve fields as unconfirmed. Keep the
+existing record-revision query key for save/reload refresh. No profile reads,
+invented names, automatic link fetches or access grants. Synthetic browser QA in
+`client-inbox-work-plan.spec.ts` covers paging/retry, CAS and 390/768/1440 geometry.

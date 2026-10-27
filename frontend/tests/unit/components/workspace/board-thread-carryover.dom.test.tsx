@@ -85,9 +85,26 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   rs.clearAllMocks();
+  rs.restoreAllMocks();
 });
 
 describe("Board thread detail, switching threads (f5)", () => {
+  it("opens mobile detail and restores the selected row on Back", () => {
+    const media = window.matchMedia("(max-width: 63.999rem)");
+    rs.spyOn(window, "matchMedia").mockReturnValue({ ...media, matches: true });
+    render(<BoardBody />);
+    const row = screen.getByRole("button", { name: /Thread A/ });
+    fireEvent.click(row);
+    expect(document.activeElement).toBe(
+      screen.getByRole("region", { name: "Board thread detail" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Back to threads" }));
+    expect(document.activeElement).toBe(row);
+    expect(
+      row.closest("[data-mobile-view]")?.getAttribute("data-mobile-view"),
+    ).toBe("list");
+  });
+
   it("does not carry a typed draft on thread A over to thread B", () => {
     render(<BoardBody />);
     const board = screen.getByTestId("board");
