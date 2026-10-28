@@ -10,6 +10,13 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261028-bea42e07] - 2026-10-28
+
+### Changed
+
+- WebMCP tools first docs for MomoBot browser, Oct 28 (#349)
+- MomoBot changelog momobot-prod-20261027-ce874541, Oct 27 (#348)
+
 ## [momobot-prod-20261027-ce874541] - 2026-10-27
 
 ### Changed
