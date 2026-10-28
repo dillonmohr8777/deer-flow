@@ -138,6 +138,28 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/momentum/ec2/te
 bash -n deploy/momentum/ec2/secrets.sh
 ```
 
+## WebMCP tools first in the isolated Browserbase MCP (Oct 28, 2026)
+
+Pages can register their own agent tools (WebMCP). The isolated `browserbase` MCP (source: `browser-agents/mcp`)
+serves `webmcp_list` and `webmcp_call` next to the page tools, and every `browser_navigate` /
+`browser_navigate_back` reply now names the tools the new page registers (up to 20, sanitized, labelled
+UNTRUSTED PAGE DATA, 3 s cap), so the model calls a site's tool instead of clicking. No tools, several tabs or a
+WebMCP error leave the reply unchanged. `webmcp_call` runs read-only tools only unless the server env opts in
+(`WEBMCP_ALLOW_CONSEQUENTIAL`, `WEBMCP_ALLOW_FORMS`, `WEBMCP_WRITE_HOSTS`); tool output reaches the model labelled as
+untrusted data with tool-call orders cut, and each call logs host, tool and status (never arguments) to stderr.
+
+Role allowlists: `user` and `exec` list browser tools by name under
+`authorization.provider.config.roles.<role>.tools.allow` in `/opt/momobot/config.yaml`. Both need
+`browserbase_webmcp_list` and `browserbase_webmcp_call`, or those roles never see the WebMCP tools (`admin` and
+`service` use deny lists and already do). Edit under `/run/momobot-release.lock` with a dated backup beside the file.
+
+Update the MCP folder the same way as the first install: stage a new directory from the merged `browser-agents`
+commit, `npm ci --ignore-scripts`, `npm test`, `npm run check`, run the acceptance through the real wrapper
+(`server.mjs` over stdio with the gateway's Browserbase env: navigate a page that registers tools, check the
+navigate hint, `webmcp_list`, one read-only `webmcp_call`, and that consequential, form and write tools are
+refused), then swap by rename and re-run the acceptance on the final path. New MCP processes pick it up; no
+gateway restart.
+
 ## 1Password logins for the isolated Browserbase MCP (Oct 21, 2026)
 
 MomoBot's `browserbase` MCP (`operator-tools/browserbase-mcp` in the gateway data volume; source:
