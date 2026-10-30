@@ -19,7 +19,7 @@ mkdir -p "$DEPLOY/deer-flow-home"
 ln -sfn "$ENV_FILE" "$REPO/.env"
 ln -sfn "$DEPLOY/frontend.env" "$REPO/frontend/.env"
 get() { "$REPO/deploy/momentum/vps/dotenv-get.sh" "$ENV_FILE" "$@"; }
-export COMPOSE_PROJECT_NAME=$PROJECT PORT=2026 BIND_HOST=127.0.0.1
+export COMPOSE_PROJECT_NAME=$PROJECT PORT=2026 BIND_HOST=${BIND_HOST:-127.0.0.1}  # only a standby sets BIND_HOST (its VPC address)
 export DEER_FLOW_CONFIG_PATH=$DEPLOY/config.yaml
 export DEER_FLOW_EXTENSIONS_CONFIG_PATH=$DEPLOY/extensions_config.json
 export DEER_FLOW_HOME=$DEPLOY/deer-flow-home
