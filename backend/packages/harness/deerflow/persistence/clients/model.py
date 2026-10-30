@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, DateTime, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, String, Text, UniqueConstraint, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from deerflow.persistence.base import Base
@@ -38,6 +38,10 @@ class ClientRow(Base):
     slack_channel_ids: Mapped[list] = mapped_column(JSON, default=list)
     registry_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     notes: Mapped[str] = mapped_column(Text, default="")
+    # Health-sector client: every workspace bound to it is treated as no-PHI. Admin-set only.
+    # server_default only (no Python-side default): an INSERT then omits the column, so seeds written against
+    # a schema older than 0054 still work. Readers use bool(), which treats an unloaded value as unflagged.
+    no_phi: Mapped[bool] = mapped_column(Boolean, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
 

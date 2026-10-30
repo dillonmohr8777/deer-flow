@@ -927,6 +927,30 @@ class TestAgentConstruction:
         assert system_content.index(base_config.system_prompt) < system_content.index("<report_contract>")
 
     @pytest.mark.anyio
+    @pytest.mark.parametrize(("no_phi", "present"), [(True, True), (False, False), ("true", False)])
+    async def test_build_initial_state_carries_the_no_phi_guard_only_for_a_flagged_workspace(
+        self,
+        classes,
+        base_config,
+        monkeypatch: pytest.MonkeyPatch,
+        no_phi,
+        present,
+    ):
+        SubagentExecutor = classes["SubagentExecutor"]
+
+        monkeypatch.setattr(
+            sys.modules["deerflow.skills.storage"],
+            "get_or_new_user_skill_storage",
+            lambda user_id, *, app_config=None: SimpleNamespace(load_skills=lambda *, enabled_only: []),
+        )
+
+        executor = SubagentExecutor(config=base_config, tools=[], thread_id="test-thread", no_phi=no_phi)
+
+        state, _final_tools, _deferred_setup = await executor._build_initial_state("Do the task")
+
+        assert ("<no_phi_guard>" in state["messages"][0].content) is present
+
+    @pytest.mark.anyio
     async def test_build_initial_state_injects_report_contract_without_system_prompt(
         self,
         classes,

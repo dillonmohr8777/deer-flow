@@ -141,7 +141,7 @@ async def test_cancelled_run_limit_ddl_keeps_bootstrap_lock_until_commit(tmp_pat
         await asyncio.wait_for(second, 5)
         assert calls == 2
         async with engine.connect() as connection:
-            assert (await connection.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == "0053_board_work_plan"
+            assert (await connection.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == "0054_no_phi_flag"
             await connection.execute(text("SELECT run_limits_json FROM runs"))
     finally:
         release.set()

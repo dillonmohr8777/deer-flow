@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_config, get_project_document_repo, get_project_repo, get_thread_store
+from app.gateway.no_phi import uploads_allowed
 from app.gateway.routers.uploads import DEFAULT_MAX_FILE_SIZE, UPLOAD_CHUNK_SIZE, _get_upload_limit, reserve_upload_write
 from app.gateway.upload_ingestion import ThreadUploadIngestionService, UnsafeFilenameError, UnsafeUploadDestinationError
 from deerflow.config.app_config import AppConfig
@@ -162,7 +163,7 @@ async def list_project_documents(
     )
 
 
-@router.post("", response_model=ProjectDocumentUploadResponse, status_code=201)
+@router.post("", response_model=ProjectDocumentUploadResponse, status_code=201, dependencies=[Depends(uploads_allowed)])
 @require_permission("projects", "write")
 async def upload_project_document(
     project_id: str,
@@ -265,7 +266,7 @@ def _resolve_thread_source(paths: Paths, *, user_id: str, thread_id: str, kind: 
     return candidate if candidate.is_file() else None
 
 
-@router.post("/from-thread", response_model=ProjectDocumentUploadResponse, status_code=201)
+@router.post("/from-thread", response_model=ProjectDocumentUploadResponse, status_code=201, dependencies=[Depends(uploads_allowed)])
 @require_permission("projects", "write")
 @require_permission("threads", "read")
 async def promote_thread_file_to_shelf(
@@ -333,7 +334,7 @@ async def promote_thread_file_to_shelf(
     return ProjectDocumentUploadResponse(document=_to_response(row), deduplicated=not created)
 
 
-@router.post("/{document_id}/attach-to-thread/{thread_id}", response_model=AttachDocumentResponse)
+@router.post("/{document_id}/attach-to-thread/{thread_id}", response_model=AttachDocumentResponse, dependencies=[Depends(uploads_allowed)])
 @require_permission("projects", "write")
 @require_permission("threads", "write", owner_check=True, require_existing=True)
 async def attach_project_document_to_thread(

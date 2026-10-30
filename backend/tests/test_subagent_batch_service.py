@@ -227,6 +227,7 @@ async def test_execute_item_strips_agent_room_tools_and_forwards_channel_name_on
         async def claim_items(self, **_kwargs):
             spec = dict(_request().execution_spec)
             spec["channel_name"] = "telegram"
+            spec["no_phi"] = True
             return [
                 {
                     "id": "item-1",
@@ -291,6 +292,7 @@ async def test_execute_item_strips_agent_room_tools_and_forwards_channel_name_on
     assert "agent_room_post" not in tool_names
     assert "bash" in tool_names
     assert executor_kwargs["channel_name"] == "telegram"
+    assert executor_kwargs["no_phi"] is True  # health-client guard survives a durable batch
 
 
 @pytest.mark.asyncio
