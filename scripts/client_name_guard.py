@@ -33,6 +33,7 @@ import secrets
 import subprocess
 import sys
 from collections.abc import Iterable, Iterator, Sequence
+from functools import lru_cache
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -83,6 +84,7 @@ def tokens(text: str) -> list[str]:
     return _TOKEN.findall(text.lower())
 
 
+@lru_cache(maxsize=1_000_000)
 def phrase_hash(salt: str, phrase: str) -> str:
     return hashlib.sha256(f"{salt}:{phrase}".encode()).hexdigest()
 
