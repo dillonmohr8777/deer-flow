@@ -1,0 +1,7 @@
+[Unit]
+Description=MomoBot backup freshness check, hourly
+[Timer]
+OnCalendar=*:20
+Persistent=true
+[Install]
+WantedBy=timers.target
