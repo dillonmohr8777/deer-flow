@@ -2,26 +2,60 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
+import { env } from "@/env";
+
 import styles from "./daily.module.css";
 
 /*
  * The portraits are private and never committed: public/momentum/daily/people/
  * is gitignored. A deploy without them, or any single missing file, shows the
  * engraved Momo instead of a broken image.
+ *
+ * The roster is private too. This repository is public, so the code carries
+ * role placeholders only; the real people come from NEXT_PUBLIC_MOMENTUM_STAFF
+ * at build time, a JSON array of { slug, name, title } where `slug` is the
+ * portrait file name (public/momentum/daily/people/<slug>.webp).
  */
-export const STAFF = [
-  { slug: "sean-boyle", name: "Sean Boyle", title: "Managing Partner" },
-  { slug: "dillon-mohr", name: "Dillon Mohr", title: "AI Marketing Director" },
-  { slug: "jason-fallon", name: "Jason Fallon", title: "VP of Sales" },
-  {
-    slug: "jenny-mcclain-miller",
-    name: "Jenny McClain Miller",
-    title: "Director of Content",
-  },
-  { slug: "mac-frederick", name: "Mac Frederick", title: "Google Guru" },
-  { slug: "melissa-silber", name: "Melissa Silber", title: "" },
-  { slug: "beth-kann", name: "Beth Kann", title: "" },
-] as const;
+export type StaffMember = { slug: string; name: string; title: string };
+
+export const PLACEHOLDER_STAFF: readonly StaffMember[] = [
+  { slug: "managing-partner", name: "Managing Partner", title: "" },
+  { slug: "ai-marketing-director", name: "AI Marketing Director", title: "" },
+  { slug: "sales-lead", name: "Sales Lead", title: "" },
+  { slug: "content-director", name: "Content Director", title: "" },
+  { slug: "agency-principal", name: "Agency Principal", title: "" },
+  { slug: "operations-lead", name: "Operations Lead", title: "" },
+  { slug: "account-manager", name: "Account Manager", title: "" },
+];
+
+const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/** The configured roster, or the placeholders when it is unset or malformed. */
+export function parseStaff(raw: string | undefined): readonly StaffMember[] {
+  if (!raw) return PLACEHOLDER_STAFF;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return PLACEHOLDER_STAFF;
+    const staff: StaffMember[] = [];
+    for (const entry of parsed as Array<Record<string, unknown>>) {
+      const { slug, name, title } = entry ?? {};
+      if (
+        typeof slug !== "string" ||
+        !SLUG.test(slug) ||
+        typeof name !== "string" ||
+        !name.trim() ||
+        (title !== undefined && typeof title !== "string")
+      )
+        return PLACEHOLDER_STAFF;
+      staff.push({ slug, name: name.trim(), title: title?.trim() ?? "" });
+    }
+    return staff;
+  } catch {
+    return PLACEHOLDER_STAFF;
+  }
+}
+
+export const STAFF = parseStaff(env.NEXT_PUBLIC_MOMENTUM_STAFF);
 
 export function portraitSrc(slug: string) {
   return `/momentum/daily/people/${slug}.webp`;

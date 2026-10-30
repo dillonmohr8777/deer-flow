@@ -14,7 +14,7 @@ EXPECTED_GUIDANCE_PATHS = {
     "desktop/AGENTS.md",
     "deploy/momentum/ec2/AGENTS.md",
     "frontend/AGENTS.md",
-    "examples/vhin-placement/AGENTS.md",
+    "examples/northwind-placement/AGENTS.md",
     "backend/app/gateway/AGENTS.md",
     "backend/app/gateway/auth/AGENTS.md",
     "backend/app/channels/AGENTS.md",

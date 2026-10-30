@@ -1,9 +1,9 @@
-# VHIN placement operations
+# Northwind placement operations
 
 This is an installable MomoBot extension with a working HTTP API, an authenticated
-dashboard, and durable SQLite records. Grace and Justin can work on the same
+dashboard, and durable SQLite records. Avery and Jordan can work on the same
 placement cases within one explicitly configured MomoBot organization. Only the
-configured Justin user ID can confirm a move-in. Installing source does not
+configured Jordan user ID can confirm a move-in. Installing source does not
 create accounts, memberships, calendar connections, message senders, or charges.
 
 The implementation is deliberately manual and draft-only. Intake can be recorded
@@ -18,24 +18,24 @@ Use the existing extension manager from the DeerFlow checkout, after reviewing
 this package and verifying the intended organization/user IDs:
 
 ```sh
-make extension-install SOURCE="$PWD/examples/vhin-placement"
+make extension-install SOURCE="$PWD/examples/northwind-placement"
 ```
 
 Configure the installed plugin in the operator-controlled `config.yaml`:
 
 ```yaml
 plugins:
-  - name: vhin
-    package: deerflow-vhin-placement
-    use: vhin_placement:install
+  - name: northwind
+    package: deerflow-northwind-placement
+    use: northwind_placement:install
     enabled: true
     required: false
     config:
-      data_dir: /persistent/private-data/vhin
-      organization_id: VERIFIED_VHIN_ORGANIZATION_ID
-      workspace_id: vhin-placement
+      data_dir: /persistent/private-data/northwind
+      organization_id: VERIFIED_Northwind_ORGANIZATION_ID
+      workspace_id: northwind-placement
       allowed_user_ids:
-        - VERIFIED_GRACE_USER_ID
+        - VERIFIED_AVERY_USER_ID
         - VERIFIED_JUSTIN_USER_ID
       placement_confirmer_user_ids:
         - VERIFIED_JUSTIN_USER_ID
@@ -44,12 +44,12 @@ plugins:
 These are placeholders, not provisioned accounts. `data_dir` must be an absolute,
 persistent, private path mounted into the Gateway. Required IDs are explicit;
 there is no allow-everyone default. The configured organization must match the
-active, authenticated host workspace exactly. Grace and Justin need actual
+active, authenticated host workspace exactly. Avery and Jordan need actual
 active memberships in that same organization. Restart the Gateway through its
 normal deployment flow after installing/configuring an extension. This checkout
 does not modify production configuration or restart a service.
 
-Open `/api/vhin/dashboard/` while signed in to MomoBot. Every dashboard asset and
+Open `/api/northwind/dashboard/` while signed in to MomoBot. Every dashboard asset and
 API route uses the same host identity gate. The package uses the public
 `deerflow_extension_api.resolve_principal()` contract and host-stamped session
 source/organization ID. Anonymous, auth-disabled, PAT, internal-service, wrong
@@ -95,7 +95,7 @@ cookie for writes.
   attestation of an actual external artifact, not a provider verification.
 
 SQLite filenames are hashes of organization/workspace IDs. User IDs are retained
-as audit actors, not used to split Grace and Justin into separate silos. Mutations,
+as audit actors, not used to split Avery and Jordan into separate silos. Mutations,
 retry receipts, and audit entries commit in one SQLite transaction. Data files are
 mode `0600`; newly created parent directories are `0700`. The configured volume
 and its backups must have the deployment's required access/encryption controls.
@@ -110,7 +110,7 @@ actor, path, and payload returns the original response; changing a key's input
 returns 409. Keys are actor-scoped within the workspace. Reload `/state` after a
 retry to see later edits, pauses, suppression, or expiry. Responses are `no-store`.
 
-| Method and path under `/api/vhin` | Payload or result |
+| Method and path under `/api/northwind` | Payload or result |
 | --- | --- |
 | `GET /state` | `referrals`, `communities`, `tours`, `placements`, `ledger`, `drafts`, `audit`, `connections`, `briefing`, `can_confirm_placement` |
 | `POST /referrals` | `name`, `source_ref`; optional `phone`, `email`, `responsible_contact`, `location`, `budget_cents`, `care_needs`, `timing`, `contact_preference`, `attention` |
@@ -138,14 +138,14 @@ dependencies and the Gateway's dependencies. No dependency installation or Docke
 build is necessary when using the existing backend environment:
 
 ```sh
-PYTHONPATH=examples/vhin-placement:backend/packages/extension-api:backend:backend/packages/harness \
-  python -m pytest examples/vhin-placement/tests -q
-ruff check examples/vhin-placement/vhin_placement examples/vhin-placement/tests
-ruff format --check examples/vhin-placement/vhin_placement examples/vhin-placement/tests
+PYTHONPATH=examples/northwind-placement:backend/packages/extension-api:backend:backend/packages/harness \
+  python -m pytest examples/northwind-placement/tests -q
+ruff check examples/northwind-placement/northwind_placement examples/northwind-placement/tests
+ruff format --check examples/northwind-placement/northwind_placement examples/northwind-placement/tests
 ```
 
 Tests are synthetic and offline. They exercise HTTP identity/organization gates,
-shared Grace/Justin records, persistence/retry across fresh app instances, source
+shared Avery/Jordan records, persistence/retry across fresh app instances, source
 replay, conflicting contacts, incomplete intake, stop and pause behavior,
 availability expiry, tour conflicts, configured confirmation authority, signed
 terms, exact money, local midnight, and the **actual host `CSRFMiddleware`**.
@@ -157,7 +157,7 @@ the identity itself remains a test stub.
 
 Production admission remains separate: verify the intended host organization and
 accounts, private persistent volume and backups, allowed-data arrangements,
-Grace's existing form source, Justin's confirmation role, and destination
+Avery's existing form source, Jordan's confirmation role, and destination
 readbacks. External calendars, family/community confirmations, messaging,
 phone/handoff, provider invoice/payment reconciliation, shared review of community
 fit, refunds, and alternative fee terms are not connected by this package.

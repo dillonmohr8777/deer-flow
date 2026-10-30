@@ -10,17 +10,17 @@ from deerflow_extension_api import EXTENSION_PRINCIPAL_RESOLVER_KEY, ExtensionPr
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from vhin_placement import install
-from vhin_placement.api import Service, build_router
-from vhin_placement.store import Store, put
+from northwind_placement import install
+from northwind_placement.api import Service, build_router
+from northwind_placement.store import Store, put
 
 BASE = datetime(2026, 10, 20, 20, tzinfo=UTC)
 
 
-def build_test_app(data_dir, user_id="justin", organization_id="vhin", auth_source="session", principal=True, csrf=False):
+def build_test_app(data_dir, user_id="jordan", organization_id="northwind", auth_source="session", principal=True, csrf=False):
     """Test-only host adapter; never install this identity stub in a real Gateway."""
     service = Service(
-        {"data_dir": str(data_dir), "organization_id": "vhin", "allowed_user_ids": ["justin", "grace"], "placement_confirmer_user_ids": ["justin"]}
+        {"data_dir": str(data_dir), "organization_id": "northwind", "allowed_user_ids": ["jordan", "avery"], "placement_confirmer_user_ids": ["jordan"]}
     )
     asyncio.run(service.start(None))
     app = FastAPI()
@@ -42,15 +42,15 @@ def build_test_app(data_dir, user_id="justin", organization_id="vhin", auth_sour
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.setattr("vhin_placement.api.now", lambda: BASE)
-    monkeypatch.setattr("vhin_placement.store.now", lambda: BASE)
+    monkeypatch.setattr("northwind_placement.api.now", lambda: BASE)
+    monkeypatch.setattr("northwind_placement.store.now", lambda: BASE)
     app, _ = build_test_app(tmp_path)
     with TestClient(app) as result:
         yield result
 
 
 def post(client, path, data, key=None):
-    return client.post("/api/vhin" + path, json=data, headers={"Idempotency-Key": key or str(uuid4())})
+    return client.post("/api/northwind" + path, json=data, headers={"Idempotency-Key": key or str(uuid4())})
 
 
 def referral_data(**changes):
@@ -127,8 +127,8 @@ def placement(client, referral_id, community_id):
 def test_auth_fails_closed(tmp_path, identity):
     app, _ = build_test_app(tmp_path, **identity)
     with TestClient(app) as client:
-        assert client.get("/api/vhin/state").status_code in (401, 403)
-        assert client.get("/api/vhin/dashboard/").status_code in (401, 403)
+        assert client.get("/api/northwind/state").status_code in (401, 403)
+        assert client.get("/api/northwind/dashboard/").status_code in (401, 403)
         assert post(client, "/referrals", referral_data()).status_code in (401, 403)
     assert not list(tmp_path.iterdir())
 
@@ -138,29 +138,29 @@ def test_identity_isolation_and_restart(client, tmp_path):
     for identity in [{"user_id": "outsider"}, {"organization_id": "other-workspace"}]:
         app, _ = build_test_app(tmp_path, **identity)
         with TestClient(app) as isolated:
-            assert isolated.get("/api/vhin/state").status_code == 403
-            assert isolated.get(f"/api/vhin/referrals/{referral['id']}").status_code == 403
+            assert isolated.get("/api/northwind/state").status_code == 403
+            assert isolated.get(f"/api/northwind/referrals/{referral['id']}").status_code == 403
             assert post(isolated, "/referrals", referral_data(), "import-001").status_code == 403
-    app, _ = build_test_app(tmp_path, user_id="grace")
-    with TestClient(app) as grace:
-        assert grace.get(f"/api/vhin/referrals/{referral['id']}").json()["name"] == "Synthetic Family"
+    app, _ = build_test_app(tmp_path, user_id="avery")
+    with TestClient(app) as avery:
+        assert avery.get(f"/api/northwind/referrals/{referral['id']}").json()["name"] == "Synthetic Family"
         grace_referral = post(
-            grace,
+            avery,
             "/referrals",
-            referral_data(source_ref="synthetic-form:grace", email="grace@example.test", phone="813-555-0199"),
+            referral_data(source_ref="synthetic-form:avery", email="avery@example.test", phone="813-555-0199"),
             "import-001",
         )
         assert grace_referral.status_code == 201
         assert grace_referral.json()["id"] != referral["id"]
-        response = grace.patch(
-            f"/api/vhin/referrals/{referral['id']}", json={"expected_version": 1, "name": "Synthetic Grace update"}, headers={"Idempotency-Key": "update"}
+        response = avery.patch(
+            f"/api/northwind/referrals/{referral['id']}", json={"expected_version": 1, "name": "Synthetic Avery update"}, headers={"Idempotency-Key": "update"}
         )
         assert response.status_code == 200
     app, _ = build_test_app(tmp_path)
     with TestClient(app) as restarted:
-        assert restarted.get(f"/api/vhin/referrals/{referral['id']}").json()["name"] == "Synthetic Grace update"
+        assert restarted.get(f"/api/northwind/referrals/{referral['id']}").json()["name"] == "Synthetic Avery update"
         assert post(restarted, "/referrals", referral_data(), "import-001").json()["id"] == referral["id"]
-        assert restarted.get("/api/vhin/state").json()["audit"][0]["actor"] == "grace"
+        assert restarted.get("/api/northwind/state").json()["audit"][0]["actor"] == "avery"
 
 
 def test_source_replay_duplicate_contacts_and_conflicts(client):
@@ -177,7 +177,7 @@ def test_source_replay_duplicate_contacts_and_conflicts(client):
     no_contact = {"name": "Synthetic Incomplete", "source_ref": "blank-contact-source"}
     first = post(client, "/referrals", no_contact).json()
     assert post(client, "/referrals", no_contact).json()["id"] == first["id"]
-    assert len(client.get("/api/vhin/state").json()["referrals"]) == 2
+    assert len(client.get("/api/northwind/state").json()["referrals"]) == 2
 
 
 def test_intake_missing_info_attention_and_version(client):
@@ -186,15 +186,15 @@ def test_intake_missing_info_attention_and_version(client):
     assert referral["handoff_status"] == "unconnected"
     assert post(client, f"/referrals/{referral['id']}/transition", {"status": "Qualified", "human_confirmed": True}).status_code == 409
     patch = {"expected_version": 1, **referral_data(source_ref="manual:001")}
-    response = client.patch(f"/api/vhin/referrals/{referral['id']}", json=patch, headers={"Idempotency-Key": "patch"})
+    response = client.patch(f"/api/northwind/referrals/{referral['id']}", json=patch, headers={"Idempotency-Key": "patch"})
     assert response.status_code == 200, response.text
     assert response.json()["missing_info"] == []
-    assert client.patch(f"/api/vhin/referrals/{referral['id']}", json=patch, headers={"Idempotency-Key": "stale"}).status_code == 409
+    assert client.patch(f"/api/northwind/referrals/{referral['id']}", json=patch, headers={"Idempotency-Key": "stale"}).status_code == 409
     invalid = {"expected_version": 2, "name": None}
-    assert client.patch(f"/api/vhin/referrals/{referral['id']}", json=invalid, headers={"Idempotency-Key": "invalid"}).status_code == 422
+    assert client.patch(f"/api/northwind/referrals/{referral['id']}", json=invalid, headers={"Idempotency-Key": "invalid"}).status_code == 422
     immutable = {"expected_version": 2, "source_ref": "manual:changed"}
-    assert client.patch(f"/api/vhin/referrals/{referral['id']}", json=immutable, headers={"Idempotency-Key": "immutable"}).status_code == 409
-    assert client.get("/api/vhin/state").json()["briefing"]["human_callback_needed"] == 1
+    assert client.patch(f"/api/northwind/referrals/{referral['id']}", json=immutable, headers={"Idempotency-Key": "immutable"}).status_code == 409
+    assert client.get("/api/northwind/state").json()["briefing"]["human_callback_needed"] == 1
 
 
 def test_stop_suppression_survives_restart_and_contact_change(client, tmp_path):
@@ -203,10 +203,10 @@ def test_stop_suppression_survives_restart_and_contact_change(client, tmp_path):
     assert post(client, path + "/drafts", {"reason": "no_booking", "body": "Synthetic unsent follow-up"}).status_code == 201
     assert post(client, path + "/contact-events", {"event": "stop"}).json()["contact_status"] == "stopped"
     assert post(client, path + "/contact-events", {"event": "reply"}).json()["contact_status"] == "stopped"
-    version = client.get("/api/vhin" + path).json()["version"]
+    version = client.get("/api/northwind" + path).json()["version"]
     assert (
         client.patch(
-            "/api/vhin" + path,
+            "/api/northwind" + path,
             json={"expected_version": version, "email": "new@example.test", "phone": "8135550101"},
             headers={"Idempotency-Key": "change-contact"},
         ).status_code
@@ -215,12 +215,12 @@ def test_stop_suppression_survives_restart_and_contact_change(client, tmp_path):
     app, _ = build_test_app(tmp_path)
     with TestClient(app) as restarted:
         assert post(restarted, path + "/drafts", {"reason": "no_booking", "body": "Never send"}).status_code == 409
-        assert restarted.get("/api/vhin/state").json()["drafts"][0]["status"] == "suppressed"
+        assert restarted.get("/api/northwind/state").json()["drafts"][0]["status"] == "suppressed"
         returning = post(restarted, "/referrals", referral_data(source_ref="old-contact-return")).json()
         assert returning["contact_status"] == "stopped"
         assert (
             restarted.patch(
-                f"/api/vhin/referrals/{returning['id']}",
+                f"/api/northwind/referrals/{returning['id']}",
                 json={"expected_version": 1, "email": "archived@example.test", "phone": "8135550188"},
                 headers={"Idempotency-Key": "archive-returning-contact"},
             ).status_code
@@ -234,13 +234,13 @@ def test_stop_suppression_survives_restart_and_contact_change(client, tmp_path):
         ).json()
         assert post(restarted, f"/referrals/{active['id']}/drafts", {"reason": "planning", "body": "Do not send"}).status_code == 201
         response = restarted.patch(
-            f"/api/vhin/referrals/{active['id']}",
+            f"/api/northwind/referrals/{active['id']}",
             json={"expected_version": 1, "email": "family@example.test"},
             headers={"Idempotency-Key": "suppressed-contact-edit"},
         )
         assert response.status_code == 200
         assert response.json()["contact_status"] == "stopped"
-        draft = next(d for d in restarted.get("/api/vhin/state").json()["drafts"] if d["referral_id"] == active["id"])
+        draft = next(d for d in restarted.get("/api/northwind/state").json()["drafts"] if d["referral_id"] == active["id"])
         assert draft["status"] == "suppressed"
 
 
@@ -250,7 +250,7 @@ def test_response_events_pause_drafts(client, event):
     path = f"/referrals/{referral['id']}"
     assert post(client, path + "/drafts", {"reason": "planning", "body": "Synthetic planning follow-up"}).status_code == 201
     post(client, path + "/contact-events", {"event": event})
-    assert client.get("/api/vhin/state").json()["drafts"][0]["status"] == "paused"
+    assert client.get("/api/northwind/state").json()["drafts"][0]["status"] == "paused"
     assert post(client, path + "/drafts", {"reason": "planning", "body": "Paused"}).status_code == 409
 
 
@@ -268,15 +268,15 @@ def test_capacity_never_becomes_availability_and_expiry(client, monkeypatch):
     response = post(client, f"/communities/{record['id']}/availability", payload)
     assert response.status_code == 200, response.text
     assert response.json()["availability"]["vacancies"] == 2
-    monkeypatch.setattr("vhin_placement.api.now", lambda: BASE + timedelta(days=2))
-    expired = client.get("/api/vhin/state").json()["communities"][0]["availability"]
+    monkeypatch.setattr("northwind_placement.api.now", lambda: BASE + timedelta(days=2))
+    expired = client.get("/api/northwind/state").json()["communities"][0]["availability"]
     assert expired["status"] == "expired" and expired["vacancies"] is None
     assert post(client, f"/communities/{record['id']}/availability", {**payload, "expires_at": (BASE + timedelta(days=9)).isoformat()}).status_code == 422
     newer = {**payload, "verified_at": (BASE + timedelta(days=1)).isoformat(), "expires_at": (BASE + timedelta(days=3)).isoformat()}
     assert post(client, f"/communities/{record['id']}/availability", newer).status_code == 200
     stale = {**payload, "verified_at": (BASE + timedelta(hours=12)).isoformat(), "expires_at": (BASE + timedelta(days=3)).isoformat()}
     assert post(client, f"/communities/{record['id']}/availability", stale).status_code == 409
-    stored = client.get("/api/vhin/state").json()["communities"][0]["availability"]["verified_at"]
+    stored = client.get("/api/northwind/state").json()["communities"][0]["availability"]["verified_at"]
     assert datetime.fromisoformat(stored) == datetime.fromisoformat(newer["verified_at"])
 
 
@@ -329,13 +329,13 @@ def test_fees_exact_cents_receipts_and_separate_totals(client):
     assert post(client, endpoint, receipt, "payment-001").json() == first
     assert post(client, endpoint, receipt).status_code == 409
     assert post(client, endpoint, {**receipt, "amount_cents": 1, "receipt_ref": "too-much"}).status_code == 409
-    brief = client.get("/api/vhin/state").json()["briefing"]
+    brief = client.get("/api/northwind/state").json()["briefing"]
     assert (brief["contracted_cents"], brief["invoiced_cents"], brief["collected_cents"], brief["due_cents"]) == (600001, 300000, 300000, 300001)
     assert brief["costs_cents"] is None
 
 
 def test_store_serializes_retries_and_separates_workspaces(tmp_path):
-    store = Store(tmp_path, "vhin", "workspace-a", "justin")
+    store = Store(tmp_path, "northwind", "workspace-a", "jordan")
 
     def write_once():
         return store.mutate("same-key", "test.write", {"value": 1}, lambda connection: put(connection, "test", {"id": "record-1", "value": 1}))
@@ -344,13 +344,13 @@ def test_store_serializes_retries_and_separates_workspaces(tmp_path):
         assert list(pool.map(lambda _: write_once(), range(2))) == [{"id": "record-1", "value": 1}] * 2
     with store.transaction() as connection:
         assert connection.execute("SELECT COUNT(*) FROM audit").fetchone()[0] == 1
-    assert store.path != Store(tmp_path, "other", "workspace-a", "justin").path
-    assert store.path != Store(tmp_path, "vhin", "workspace-b", "justin").path
+    assert store.path != Store(tmp_path, "other", "workspace-a", "jordan").path
+    assert store.path != Store(tmp_path, "northwind", "workspace-b", "jordan").path
 
 
 def test_placement_requires_configured_confirmer_and_signed_terms(tmp_path, monkeypatch):
-    monkeypatch.setattr("vhin_placement.api.now", lambda: BASE)
-    app, _ = build_test_app(tmp_path, user_id="grace")
+    monkeypatch.setattr("northwind_placement.api.now", lambda: BASE)
+    app, _ = build_test_app(tmp_path, user_id="avery")
     with TestClient(app) as client:
         referral, place = qualified(client), community(client)
         payload = {
@@ -377,18 +377,18 @@ def test_extension_registration_and_stop(tmp_path):
             self.routes = routers
 
     registry = Registry()
-    install(registry, {"data_dir": str(tmp_path), "organization_id": "vhin", "allowed_user_ids": ["justin"]})
-    assert registry.routes[0].prefix == "/api/vhin"
+    install(registry, {"data_dir": str(tmp_path), "organization_id": "northwind", "allowed_user_ids": ["jordan"]})
+    assert registry.routes[0].prefix == "/api/northwind"
     app, service = build_test_app(tmp_path)
     asyncio.run(service.stop())
     with TestClient(app) as client:
-        assert client.get("/api/vhin/state").status_code == 503
+        assert client.get("/api/northwind/state").status_code == 503
 
 
 def test_required_retry_key_no_cache_and_unknown_fields(client):
-    assert client.post("/api/vhin/referrals", json=referral_data()).status_code == 422
+    assert client.post("/api/northwind/referrals", json=referral_data()).status_code == 422
     assert post(client, "/referrals", referral_data(status="Placed")).status_code == 422
-    assert client.get("/api/vhin/state").headers["cache-control"] == "no-store"
+    assert client.get("/api/northwind/state").headers["cache-control"] == "no-store"
 
 
 def test_real_host_csrf_middleware(tmp_path, monkeypatch):
@@ -398,14 +398,14 @@ def test_real_host_csrf_middleware(tmp_path, monkeypatch):
         assert post(client, "/referrals", referral_data()).status_code == 403
         client.cookies.set("csrf_token", "synthetic-test-token")
         headers = {"Idempotency-Key": "csrf-success", "X-CSRF-Token": "wrong-token"}
-        assert client.post("/api/vhin/referrals", json=referral_data(), headers=headers).status_code == 403
+        assert client.post("/api/northwind/referrals", json=referral_data(), headers=headers).status_code == 403
         headers["X-CSRF-Token"] = "synthetic-test-token"
-        assert client.post("/api/vhin/referrals", json=referral_data(), headers=headers).status_code == 201
-        assert len(client.get("/api/vhin/state").json()["referrals"]) == 1
+        assert client.post("/api/northwind/referrals", json=referral_data(), headers=headers).status_code == 201
+        assert len(client.get("/api/northwind/state").json()["referrals"]) == 1
 
 
 def test_business_dates_follow_florida_midnight(client, monkeypatch):
-    monkeypatch.setattr("vhin_placement.api.now", lambda: datetime(2026, 10, 21, 1, tzinfo=UTC))
+    monkeypatch.setattr("northwind_placement.api.now", lambda: datetime(2026, 10, 21, 1, tzinfo=UTC))
     referral, place = qualified(client), community(client)
     data = {
         "referral_id": referral["id"],
@@ -422,9 +422,9 @@ def test_business_dates_follow_florida_midnight(client, monkeypatch):
     assert response.status_code == 201
     record = response.json()
     assert record["installments"][0]["due_date"] == "2026-10-21"
-    assert client.get("/api/vhin/state").json()["briefing"]["due_cents"] == 0
+    assert client.get("/api/northwind/state").json()["briefing"]["due_cents"] == 0
     receipt = {"kind": "invoiced", "day": 30, "amount_cents": 300000, "event_date": "2026-10-21", "receipt_ref": "synthetic-invoice"}
     assert post(client, f"/placements/{record['id']}/ledger", receipt).status_code == 422
-    monkeypatch.setattr("vhin_placement.api.now", lambda: datetime(2026, 10, 21, 4, tzinfo=UTC))
-    assert client.get("/api/vhin/state").json()["briefing"]["due_cents"] == 300000
+    monkeypatch.setattr("northwind_placement.api.now", lambda: datetime(2026, 10, 21, 4, tzinfo=UTC))
+    assert client.get("/api/northwind/state").json()["briefing"]["due_cents"] == 300000
     assert post(client, f"/placements/{record['id']}/ledger", receipt).status_code == 201

@@ -1,6 +1,6 @@
-# Jason Fallon | MomoBot Max role context
+# Sales Lead | MomoBot Max role context
 
-Use this profile only after confirming the authenticated person is Jason Fallon and the workspace is verified private. Stop if identity, workspace ownership, or effective profile storage is uncertain, including when a read might be served from a legacy shared file.
+Use this profile only after confirming the authenticated person is the sales lead and the workspace is verified private. Stop if identity, workspace ownership, or effective profile storage is uncertain, including when a read might be served from a legacy shared file.
 
 Prepare qualified pipeline reviews, meeting briefs, and proposal handoffs from the current authorized CRM connection and other attributable sources. Before using CRM data, compare its live portal identity with the expected portal binding stored privately for this workspace; stop on mismatch or uncertainty. Do not put portal IDs, account IDs, or connector locators in this profile.
 
