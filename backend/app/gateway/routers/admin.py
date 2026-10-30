@@ -12,10 +12,15 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
 
 from app.gateway.auth.models import SystemRole
 from app.gateway.authz import role_has_policy
 from app.gateway.deps import get_audit_repo, get_current_user_from_request, get_local_provider, record_audit_event, require_admin_user
+from app.gateway.no_phi import configured_no_phi_slugs, operator_config
+from deerflow.persistence.clients.model import ClientRow
+from deerflow.persistence.engine import get_session_factory
+from deerflow.persistence.organizations.model import OrganizationRow
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -132,6 +137,115 @@ async def set_user_role(user_id: str, body: SetUserRoleRequest, request: Request
         **_network_meta(request),
     )
     return AdminUserRoleResponse(id=str(user.id), email=user.email, system_role=user.system_role)
+
+
+class SetNoPhiRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    no_phi: bool
+
+
+class OrganizationNoPhiResponse(BaseModel):
+    id: str
+    slug: str
+    name: str
+    no_phi: bool
+    # True when the operator config lists this workspace; the API can't clear that.
+    configured: bool
+    # What the gateway enforces: the stored flag, the bound client's flag, or the config.
+    effective: bool
+
+
+class ClientNoPhiResponse(BaseModel):
+    id: str
+    display_name: str
+    no_phi: bool
+
+
+def _require_session_factory():
+    factory = get_session_factory()
+    if factory is None:
+        raise HTTPException(status_code=503, detail="Workspace persistence is unavailable")
+    return factory
+
+
+async def _organization_no_phi_response(session, organization: OrganizationRow) -> OrganizationNoPhiResponse:
+    configured = organization.slug.strip().lower() in configured_no_phi_slugs(operator_config())
+    client_flag = False
+    if organization.customer_client_id:
+        client_flag = bool(await session.scalar(select(ClientRow.no_phi).where(ClientRow.id == organization.customer_client_id)))
+    return OrganizationNoPhiResponse(
+        id=organization.id,
+        slug=organization.slug,
+        name=organization.name,
+        no_phi=bool(organization.no_phi),
+        configured=configured,
+        effective=bool(organization.no_phi) or configured or client_flag,
+    )
+
+
+@router.get("/organizations/{organization_id}/no-phi", response_model=OrganizationNoPhiResponse)
+async def get_organization_no_phi(organization_id: str, request: Request) -> OrganizationNoPhiResponse:
+    """Read a workspace's no-PHI flag (health-sector clients). Admin only."""
+    await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
+    async with _require_session_factory()() as session:
+        organization = await session.get(OrganizationRow, organization_id)
+        if organization is None:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        return await _organization_no_phi_response(session, organization)
+
+
+@router.put("/organizations/{organization_id}/no-phi", response_model=OrganizationNoPhiResponse)
+async def set_organization_no_phi(organization_id: str, body: SetNoPhiRequest, request: Request) -> OrganizationNoPhiResponse:
+    """Flag or unflag a workspace as no-PHI. Only a system admin can; a client never can."""
+    await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
+    actor = await get_current_user_from_request(request)
+    async with _require_session_factory()() as session:
+        organization = await session.get(OrganizationRow, organization_id)
+        if organization is None:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        previous = bool(organization.no_phi)
+        organization.no_phi = body.no_phi
+        await session.commit()
+        response = await _organization_no_phi_response(session, organization)
+    await record_audit_event(
+        request,
+        action="admin.organization.no_phi_changed",
+        outcome="success",
+        actor_user_id=str(actor.id),
+        organization_id=organization_id,
+        target_type="organization",
+        target_id=organization_id,
+        details={"from": previous, "to": body.no_phi},
+        **_network_meta(request),
+    )
+    return response
+
+
+@router.put("/clients/{client_id}/no-phi", response_model=ClientNoPhiResponse)
+async def set_client_no_phi(client_id: str, body: SetNoPhiRequest, request: Request) -> ClientNoPhiResponse:
+    """Flag or unflag a client as no-PHI; every workspace bound to it is then treated as no-PHI. Admin only."""
+    await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
+    actor = await get_current_user_from_request(request)
+    async with _require_session_factory()() as session:
+        client = await session.get(ClientRow, client_id)
+        if client is None:
+            raise HTTPException(status_code=404, detail="Client not found")
+        previous = bool(client.no_phi)
+        client.no_phi = body.no_phi
+        await session.commit()
+        response = ClientNoPhiResponse(id=client.id, display_name=client.display_name, no_phi=bool(client.no_phi))
+    await record_audit_event(
+        request,
+        action="admin.client.no_phi_changed",
+        outcome="success",
+        actor_user_id=str(actor.id),
+        target_type="client",
+        target_id=client_id,
+        details={"from": previous, "to": body.no_phi},
+        **_network_meta(request),
+    )
+    return response
 
 
 class AuditEventResponse(BaseModel):

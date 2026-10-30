@@ -17,21 +17,21 @@ from deerflow.persistence.bootstrap import _get_alembic_config, bootstrap_schema
 
 PREVIOUS = "0047_merge_agent_room_exec"
 REPAIR = "0048_repair_audit_events"
-HEAD = "0053_board_work_plan"  # later revisions chain after the repair; their table is outside this test
+HEAD = "0054_no_phi_flag"  # later revisions chain after the repair; their table is outside this test
 INDEXES = {"ix_audit_events_occurred_at", "ix_audit_events_action", "ix_audit_events_organization_id", "ix_audit_events_actor_user_id"}
 
 
 # Later revisions (0052) add these columns to pre-existing tables, and
 # bootstrap_schema adds runs.run_limits_json outside Alembic; the repair
 # under test must preserve everything else, so the snapshot leaves them out.
-LATER_COLUMNS = {"organizations": ("customer_client_id",), "threads_meta": ("client_actor_id",), "board_messages": ("visibility", "attachments"), "runs": ("run_limits_json",)}
+LATER_COLUMNS = {"organizations": ("customer_client_id", "no_phi"), "clients": ("no_phi",), "threads_meta": ("client_actor_id",), "board_messages": ("visibility", "attachments"), "runs": ("run_limits_json",)}
 SKIP = "('audit_events','pending_actions','client_corrections','alembic_version')"
 LATER_OBJECTS = ("board_portal", "ix_threads_meta_client_actor_id", "ix_board_portal_organization_id")
 
 
 def _without_later_columns(table, sql):
     for column in LATER_COLUMNS.get(table, ()):
-        sql = re.sub(r",\s*" + column + r" (VARCHAR\(\d+\)|JSON)( DEFAULT '[a-z]+')?( NOT NULL)?", "", sql)
+        sql = re.sub(r",\s*" + column + r" (VARCHAR\(\d+\)|JSON|BOOLEAN)( DEFAULT ('[a-z]+'|0))?( NOT NULL)?", "", sql)
     return sql
 
 

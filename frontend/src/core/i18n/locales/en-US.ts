@@ -991,6 +991,9 @@ export const enUS: Translations = {
       "Models couldn't be loaded. Model selection and token usage may be unavailable.",
     modelLoadRetry: "Retry",
     modelLoadRetrying: "Retrying…",
+    noPhiBanner: "Please don't share patient or health information here.",
+    noPhiBannerDetail:
+      "This workspace is for marketing work only, and file uploads are turned off.",
   },
 
   // Conversation

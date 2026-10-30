@@ -106,6 +106,15 @@ class MomentumInternalConfig(BaseModel):
     )
 
 
+class NoPhiConfig(BaseModel):
+    """Health-sector workspaces that must never receive patient health information."""
+
+    organization_slugs: list[str] = Field(
+        default_factory=list,
+        description="Slugs of workspaces (organizations) treated as no-PHI, in addition to any an admin flags through the API. Operator-owned: the API can't clear an entry listed here.",
+    )
+
+
 class LlmCallConfig(BaseModel):
     """Configuration for LLM call execution (concurrency / rate shaping).
 
@@ -285,6 +294,7 @@ class AppConfig(BaseModel):
     agents_api: AgentsApiConfig = Field(default_factory=AgentsApiConfig, description="Custom-agent management API configuration")
     private_workspace: PrivateWorkspaceConfig = Field(default_factory=PrivateWorkspaceConfig, description="Owner-only private workspace switches (the Desk home)")
     momentum_internal: MomentumInternalConfig = Field(default_factory=MomentumInternalConfig, description="Staff-only Team channels and AI Academy for the agency's own workspace")
+    no_phi: NoPhiConfig = Field(default_factory=NoPhiConfig, description="Health-sector workspaces that get the no-patient-information guard, an upload block and a portal banner")
     momobot_max: MomobotMaxConfig = Field(default_factory=MomobotMaxConfig, description="MomoBot Max, the built-in all-in-one agent for client accounts (off by default)")
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")
     subagents: SubagentsAppConfig = Field(default_factory=SubagentsAppConfig, description="Subagent runtime configuration")

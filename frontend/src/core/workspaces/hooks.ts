@@ -6,10 +6,12 @@ type WorkspaceList = {
   workspaces: { id: string; name: string; role: string }[];
   active_workspace_id: string | null;
   private_workspace_name?: string | null;
+  // Health-sector workspace: the portal shows a no-patient-information banner.
+  active_no_phi?: boolean;
 };
 
-export function useWorkspaceSelection() {
-  const query = useQuery({
+function useWorkspaceListQuery() {
+  return useQuery({
     queryKey: ["workspaces"],
     queryFn: async ({ signal }): Promise<WorkspaceList> => {
       const response = await fetch("/api/workspaces", { signal });
@@ -17,6 +19,15 @@ export function useWorkspaceSelection() {
       return response.json() as Promise<WorkspaceList>;
     },
   });
+}
+
+/** True when the active workspace is a health-sector (no-PHI) one. */
+export function useNoPhiWorkspace(): boolean {
+  return useWorkspaceListQuery().data?.active_no_phi === true;
+}
+
+export function useWorkspaceSelection() {
+  const query = useWorkspaceListQuery();
   const busy = useIsMutating({ mutationKey: ["workspace-selection"] }) > 0;
   const selection = useMutation({
     mutationKey: ["workspace-selection"],

@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.gateway.authz import require_permission, try_acquire_sandbox_for_request
 from app.gateway.deps import get_checkpointer, get_config, get_run_manager, get_thread_store
+from app.gateway.no_phi import require_uploads_allowed
 from app.gateway.upload_ingestion import ThreadUploadIngestionService, UnsafeFilenameError, UnsafeUploadDestinationError
 from deerflow.config.app_config import AppConfig
 from deerflow.config.paths import get_paths
@@ -389,6 +390,7 @@ async def upload_files(
     sync (the upload itself still succeeds — files stay in the uploads dir;
     a sandbox-denied agent cannot consume them anyway).
     """
+    await require_uploads_allowed(config, thread_id=thread_id)
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
 

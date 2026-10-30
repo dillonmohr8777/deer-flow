@@ -38,6 +38,7 @@ from app.gateway.internal_auth import (
 from app.gateway.knowledge_scope_admission import admit_message_knowledge_scope
 from app.gateway.momentum_internal import is_momentum_staff
 from app.gateway.momobot_max import apply_run_policy as apply_momobot_max_run_policy
+from app.gateway.no_phi import NO_PHI_CONTEXT_KEY, apply_no_phi_policy
 from app.gateway.run_models import RunCreateRequest
 from app.gateway.utils import sanitize_log_param
 from app.mcp_tasks.errors import PermanentNotificationError
@@ -654,6 +655,8 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
             PRIVATE_MCP_SESSION_CONTEXT_KEY,
             STAFF_MEMORY_SCOPE_KEY,
             WSL_DIAGNOSTICS_CONTEXT_KEY,
+            # Health-client guard: stamped from the workspace's admin-owned flag at run start, never from a request.
+            NO_PHI_CONTEXT_KEY,
         }
     )
     | WORKSPACE_IDENTITY_CONTEXT_KEYS
@@ -2007,6 +2010,8 @@ async def start_run(
         # Client runs are pinned to MomoBot Max, and every MomoBot Max run gets its
         # config-owned effort and delegation settings, whatever the request said.
         await apply_momobot_max_run_policy(config, user=user, actor_user_id=actor_user_id, app_config=get_app_config(), internal=is_internal_caller)
+        # Health-sector workspaces: every run, whichever agent, carries the no-patient-information guard.
+        await apply_no_phi_policy(config, request=request, app_config=get_app_config())
 
         replay_kind = run_metadata.get("replay_kind")
         target_message_id = run_metadata.get("regenerate_from_message_id")

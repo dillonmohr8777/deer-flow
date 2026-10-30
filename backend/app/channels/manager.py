@@ -1100,8 +1100,22 @@ def _make_inbound_file_sandbox_readable(file_path: Path) -> None:
     apply_upload_sandbox_permits(file_path, stat.S_IRGRP | stat.S_IROTH)
 
 
+NO_PHI_FILES_REFUSAL = "I can't take file attachments in this workspace. Please don't share patient or health information here. The files were not saved."
+
+
+async def _inbound_files_blocked(thread_id: str, msg: InboundMessage) -> bool:
+    """True when the message's workspace (its connection's delegation) or thread's client is no-PHI."""
+    from app.gateway.no_phi import delegation_is_no_phi
+
+    return await delegation_is_no_phi(msg.delegation_id, thread_id=thread_id)
+
+
 async def _ingest_inbound_files(thread_id: str, msg: InboundMessage, *, user_id: str | None = None) -> list[dict[str, Any]]:
     if not msg.files:
+        return []
+    if await _inbound_files_blocked(thread_id, msg):
+        # No-PHI workspace: nothing is downloaded or written, and no descriptor survives.
+        msg.files = []
         return []
 
     from deerflow.uploads.manager import (
@@ -1619,6 +1633,21 @@ class ChannelManager:
             return
 
         self._maybe_spawn_followup_watcher(thread_id, result, carrier_msg)
+
+    async def _publish_text_reply(self, msg: InboundMessage, thread_id: str, text: str) -> None:
+        await self.bus.publish_outbound(
+            OutboundMessage(
+                channel_name=msg.channel_name,
+                chat_id=msg.chat_id,
+                thread_id=thread_id,
+                text=text,
+                is_final=True,
+                thread_ts=msg.thread_ts,
+                connection_id=msg.connection_id,
+                owner_user_id=msg.owner_user_id,
+                metadata=_response_metadata(msg.metadata),
+            )
+        )
 
     async def _publish_progress_update(self, msg: InboundMessage, thread_id: str, text: str) -> None:
         await self.bus.publish_outbound(
@@ -2489,6 +2518,13 @@ class ChannelManager:
         # materialize (download) them and update msg.text to include sandbox file paths.
         # This enables downstream models to access user-uploaded files by path.
         # Channels that do not support file download will simply return the original message.
+        if msg.files and await _inbound_files_blocked(thread_id, msg):
+            # Before receive_file: some channels download and store attachments there.
+            msg.files = []
+            if not (msg.text or "").strip():
+                await self._publish_text_reply(msg, thread_id, NO_PHI_FILES_REFUSAL)
+                return
+            await self._publish_progress_update(msg, thread_id, NO_PHI_FILES_REFUSAL)
         if msg.files:
             from .service import get_channel_service
 

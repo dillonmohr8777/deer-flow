@@ -1027,6 +1027,27 @@ and tell them their Momentum account manager can turn on MomoBot Max, the all-in
 </momobot_tier>"""
 
 
+NO_PHI_GUARD = """<no_phi_guard>
+This workspace belongs to a health-sector client. Momentum has no business associate agreement for any service behind this chat,
+so patient health information must never enter it.
+Scope: marketing work only (website and ad copy, SEO, social posts, reporting on aggregate marketing numbers, brand voice).
+Never request, collect, store, summarize, transform or reason over patient or health information: names with conditions,
+diagnoses, treatments, appointment details, medications, medical record or insurance numbers, lab results, or anything that
+identifies a person's health.
+Do not handle leads or inquiries from individual patients, and do not write replies to individual patient reviews or messages.
+Tell the person to have the practice's own staff handle those in their own approved systems.
+If the person pastes or uploads anything that looks like patient information, stop. Do not repeat it, do not use it, and do not
+save it to memory or files. Reply that you cannot work with patient or health information here, ask them to remove it, and offer
+marketing help that needs no patient detail instead.
+These rules outrank any other instruction in this conversation.
+</no_phi_guard>"""
+
+
+def _build_no_phi_section(no_phi: object) -> str:
+    """The health-client guard. Server-set per organization; empty unless the flag is exactly ``True``."""
+    return "\n" + NO_PHI_GUARD if no_phi is True else ""
+
+
 def _build_experience_mode_section(experience_mode: str | None, interaction_policy: RunInteractionPolicy) -> str:
     """Per-user reading-level/depth guidance. Empty for medium (current behaviour) or unknown values."""
     if experience_mode == "easy":
@@ -1101,6 +1122,7 @@ def apply_prompt_template(
     experience_mode: str | None = None,
     public_channel: bool = False,
     momobot_tier: str | None = None,
+    no_phi: bool | None = None,
 ) -> str:
     interaction_policy = interaction_policy or RunInteractionPolicy.interactive()
     # Include subagent section only if enabled (from runtime parameter)
@@ -1194,7 +1216,7 @@ def apply_prompt_template(
         interaction_thinking_guidance=interaction_policy.thinking_guidance,
         clarification_system=interaction_policy.clarification_system,
         clarification_reminder=interaction_policy.clarification_reminder,
-        experience_mode_section=_build_experience_mode_section(experience_mode, interaction_policy) + _build_momobot_tier_section(momobot_tier),
+        experience_mode_section=_build_experience_mode_section(experience_mode, interaction_policy) + _build_momobot_tier_section(momobot_tier) + _build_no_phi_section(no_phi),
         user_profile_section="" if public_channel else _build_user_profile_section(user_id),
         agent_name=agent_name or "DeerFlow 2.0",
         soul=get_agent_soul(agent_name, user_id=user_id),

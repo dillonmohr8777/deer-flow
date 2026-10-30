@@ -925,6 +925,8 @@ export const zhCN: Translations = {
       "模型列表加载失败，模型选择和 Token 用量信息可能暂时不可用。",
     modelLoadRetry: "重试",
     modelLoadRetrying: "正在重试…",
+    noPhiBanner: "请勿在此分享患者或健康信息。",
+    noPhiBannerDetail: "此工作区仅用于营销工作，并已关闭文件上传。",
   },
 
   // Conversation

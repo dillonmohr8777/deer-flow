@@ -272,6 +272,7 @@ class SubagentBatchService:
                 run_id=batch.get("run_id"),
                 channel_user_id=spec.get("channel_user_id"),
                 channel_name=channel_name,
+                no_phi=spec.get("no_phi") is True,
                 is_internal=spec.get("is_internal") is True,
                 authz_attributes=spec.get("authz_attributes"),
                 knowledge_scope=spec.get("knowledge_scope"),
