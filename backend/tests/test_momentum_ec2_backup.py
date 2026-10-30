@@ -43,14 +43,14 @@ def test_snapshot_roundtrip_and_credentials_excluded(tmp_path):
     (deploy / "data/skills/.env.local").write_text("do-not-back-up")
     portraits = deploy / "data/brand/daily-people"
     portraits.mkdir()
-    (portraits / "sean-boyle.webp").write_bytes(b"portrait-fixture")
+    (portraits / "pat-example.webp").write_bytes(b"portrait-fixture")
     module.snapshot(deploy, stage)
     with tarfile.open(stage / "ec2-mounts.tgz") as archive:
         names = archive.getnames()
         assert len([m for m in archive.getmembers() if m.isfile()]) == 9
         assert not any(name.endswith(".env") for name in names)
         assert archive.extractfile("data/skills/keep.txt").read() == b"skills"
-        assert archive.extractfile("data/brand/daily-people/sean-boyle.webp").read() == b"portrait-fixture"
+        assert archive.extractfile("data/brand/daily-people/pat-example.webp").read() == b"portrait-fixture"
     settings = json.loads((stage / "ec2-recovery.json").read_text())
     assert settings["settings.env"]["MOMOBOT_DOMAIN"] == "example.test"
     assert settings["frontend.env"] == {"MOMO_DAILY_CLOUD_OWNER_USER_ID": "owner-test"}

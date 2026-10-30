@@ -1,16 +1,16 @@
-# VHIN extension boundaries
+# Northwind extension boundaries
 
 - This independent package uses `deerflow_extension_api`, FastAPI, Pydantic, and
   the Python standard library. Production code must not import `app.*` or
   `deerflow.*`; the test-only host CSRF integration may import the actual Gateway.
-- `vhin_placement/api.py` owns routes and business gates; `models.py` owns bounded
+- `northwind_placement/api.py` owns routes and business gates; `models.py` owns bounded
   input validation; `store.py` owns SQLite transactions, idempotency, and audit.
   `static/` is the API-backed dashboard. Keep its contract in sync with the API.
 - Resolve identity using the public extension resolver. Require host-stamped
   session auth, the exact configured organization, and an explicit user allowlist.
   Only configured confirmer user IDs can confirm a move-in. Never trust a request
-  name, header, checkbox, or storage-owner identity as Justin's authority.
-- Grace and Justin share the configured organization/workspace database. Keep
+  name, header, checkbox, or storage-owner identity as Jordan's authority.
+- Avery and Jordan share the configured organization/workspace database. Keep
   audit actors and retry keys actor-specific. Cross-organization and unlisted
   access fails closed. Preserve the host CSRF and membership checks.
 - Persist source replay receipts, contact suppression, drafts, fee receipts,

@@ -148,6 +148,10 @@ Admission never waits for queue space, because waiting producer coroutines would
 
 Shutdown first closes admission and cancels follow-up watchers, but keeps provider transports alive while workers drain accepted messages for up to `shutdown_grace_period_seconds`. Once that grace expires, it cancels active handlers, discards queue entries that never began, and awaits every manager-owned worker and watcher. Provider coroutines submitted from SDK threads are likewise retained, cancelled, and awaited before their channel tears down SDK resources. A successful stop therefore leaves no owned handler able to use a closed transport. The Gateway's outer shutdown timeout remains the process-level bound; if it cancels cleanup, the service retains its transports and singleton instead of reporting a successful stop or hiding unfinished ownership.
 
+### Public news channel route
+
+One Slack channel can be routed to the public `ai-tech-news` agent (web search and fetch only, no memory or private context). The channel is named in `channels.slack.public_news` (`channel_id` and `team_id`, see `config.example.yaml`); a message is routed only when both match, and the setting is read at startup. The ids are deployment config, not code: with `public_news` unset, or either id missing, no channel gets this route and every Slack channel follows its normal routing. An operator who relies on the route must carry the setting into each deployment's `config.yaml`.
+
 ## Sync vs Streaming Channels
 
 The two paths split on `ChannelRunPolicy.supports_streaming` (per-channel registration in `CHANNEL_CAPABILITIES`):

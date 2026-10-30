@@ -48,7 +48,7 @@ def test_promotion_keeps_the_same_memory_bucket():
 
 def test_other_actor_or_agent_still_gets_a_different_bucket():
     base = staff_memory_scope(_context("user", "member"), agent_name="momobot-max")
-    other_agent = staff_memory_scope(_context("user", "member"), agent_name="vhin-max-plus")
+    other_agent = staff_memory_scope(_context("user", "member"), agent_name="northwind-max-plus")
     other_actor = staff_memory_scope({**_context("user", "member"), "actor_user_id": "staff-b"}, agent_name="momobot-max")
     assert len({base.user_id, other_agent.user_id, other_actor.user_id}) == 3
 

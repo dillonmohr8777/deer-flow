@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import ValidationError
 
-from vhin_placement.models import (
+from northwind_placement.models import (
     Availability,
     Community,
     ContactEvent,
@@ -26,24 +26,24 @@ from vhin_placement.models import (
     contacts,
     missing_info,
 )
-from vhin_placement.store import Store, encode, get, now, put, records
+from northwind_placement.store import Store, encode, get, now, put, records
 
 
 class Service:
     def __init__(self, config):
         self.data_dir = Path(config.get("data_dir", ""))
         if not self.data_dir.is_absolute():
-            raise ValueError("VHIN requires an absolute persistent data_dir")
+            raise ValueError("Northwind requires an absolute persistent data_dir")
         self.organization_id = config.get("organization_id")
-        self.workspace_id = config.get("workspace_id", "vhin-placement")
+        self.workspace_id = config.get("workspace_id", "northwind-placement")
         if not isinstance(self.organization_id, str) or not self.organization_id.strip():
-            raise ValueError("VHIN requires an explicit organization_id")
+            raise ValueError("Northwind requires an explicit organization_id")
         if not isinstance(self.workspace_id, str) or not self.workspace_id.strip():
-            raise ValueError("VHIN requires a nonempty workspace_id")
+            raise ValueError("Northwind requires a nonempty workspace_id")
         allowed = config.get("allowed_user_ids", [])
         confirmers = config.get("placement_confirmer_user_ids", [])
         if not isinstance(allowed, list) or not allowed or not all(isinstance(x, str) and x.strip() for x in allowed):
-            raise ValueError("VHIN requires explicit allowed_user_ids")
+            raise ValueError("Northwind requires explicit allowed_user_ids")
         if not isinstance(confirmers, list) or not all(isinstance(x, str) and x in allowed for x in confirmers):
             raise ValueError("Placement confirmers must be explicitly allowed user IDs")
         self.allowed_user_ids = frozenset(allowed)
@@ -62,9 +62,9 @@ class Service:
         if principal is None or getattr(request.state, "auth_source", None) != "session" or not isinstance(organization, str) or not organization:
             raise HTTPException(401, "A signed-in MomoBot workspace session is required")
         if principal.is_internal or principal.user_id not in self.allowed_user_ids or organization != self.organization_id:
-            raise HTTPException(403, "VHIN is not enabled for this account")
+            raise HTTPException(403, "Northwind is not enabled for this account")
         if not self.ready:
-            raise HTTPException(503, "VHIN is not running")
+            raise HTTPException(503, "Northwind is not running")
         response.headers["Cache-Control"] = "no-store"
         return Store(self.data_dir, organization, self.workspace_id, principal.user_id)
 
@@ -116,7 +116,7 @@ def duplicate_ids(connection, candidate, exclude=None):
 
 
 def build_router(service):
-    router = APIRouter(prefix="/api/vhin", tags=["vhin"])
+    router = APIRouter(prefix="/api/northwind", tags=["northwind"])
     account = Depends(service.account)
     retry = Depends(retry_key)
 
@@ -318,7 +318,7 @@ def build_router(service):
     @router.post("/placements", status_code=201)
     def confirm_placement(payload: Placement, store: Store = account, key: str = retry):
         if store.user_id not in service.confirmers:
-            raise HTTPException(403, "Only the configured Justin account can confirm a placement")
+            raise HTTPException(403, "Only the configured Jordan account can confirm a placement")
 
         def operation(connection):
             referral = get(connection, "referral", payload.referral_id)
@@ -373,7 +373,7 @@ def build_router(service):
 
     @router.get("/dashboard", include_in_schema=False)
     def dashboard_redirect(store: Store = account):
-        return RedirectResponse("/api/vhin/dashboard/", headers={"Cache-Control": "no-store"})
+        return RedirectResponse("/api/northwind/dashboard/", headers={"Cache-Control": "no-store"})
 
     @router.get("/dashboard/{asset:path}", include_in_schema=False)
     def dashboard(asset: str, store: Store = account):

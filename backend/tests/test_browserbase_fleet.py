@@ -185,6 +185,17 @@ def test_job_routing(tmp_path, mutation):
         Fleet(cfg, {"clients": [{"id": "client-a"}]}, UsageLedger(tmp_path / "ledger.db"), tmp_path / "out")
 
 
+def test_a_historical_client_job_is_still_blocked_by_its_hashed_id(tmp_path):
+    # The id is assembled from pieces so this public test file does not name the client.
+    historical = "-".join(("al" + "ign", "hcm"))
+    cfg = config()
+    cfg["jobs"][0]["client_id"] = historical
+    with pytest.raises(FleetBlocked, match="historical"):
+        Fleet(cfg, {"clients": [{"id": historical}]}, UsageLedger(tmp_path / "ledger.db"), tmp_path / "out")
+    cfg["jobs"][0]["client_id"] = "client-a"
+    Fleet(cfg, {"clients": [{"id": "client-a"}]}, UsageLedger(tmp_path / "ledger2.db"), tmp_path / "out")
+
+
 def test_scheduler_disabled(tmp_path):
     cfg = config()
     registry = tmp_path / "registry.json"

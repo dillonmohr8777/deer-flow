@@ -31,8 +31,8 @@ services:
       # Placement extension from a pinned git worktree (README "Operator extensions"). Inert until a
       # plugins: entry in /opt/momobot/config.yaml names it. A missing source fails the start.
       - type: bind
-        source: /opt/momobot/extensions/placement/examples/vhin-placement/vhin_placement
-        target: /app/backend/vhin_placement
+        source: /opt/momobot/extensions/placement/examples/northwind-placement/northwind_placement
+        target: /app/backend/northwind_placement
         read_only: true
         bind:
           create_host_path: false

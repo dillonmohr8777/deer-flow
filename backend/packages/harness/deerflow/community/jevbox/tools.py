@@ -243,7 +243,7 @@ async def _jevbox_evidence(client_id: str, query: str, runtime: Runtime) -> str:
     """Retrieve cited evidence passages from the Jevbox research library for one client.
 
     Args:
-        client_id: Client namespace to search, for example "bar-crawl-usa". Only documents bound to this client are searched.
+        client_id: Client namespace to search, for example "northwind-events". Only documents bound to this client are searched.
         query: Specific question or keywords to find in that client's library documents.
     """
     # Blocking HTTP and agent-store reads stay off the event loop.

@@ -12,10 +12,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BUNDLE_DIR = REPO_ROOT / "fleet" / "role-bundles"
 EXPECTED_IDENTITIES = {
     "dillon-mohr": "Dillon Mohr",
-    "mac-frederick": "Mac Frederick",
-    "jason-fallon": "Jason Fallon",
-    "melissa-silber": "Melissa Silber",
-    "vhin-justin-grace": "VHIN Cares workflow for Justin Micheau + Grace Slagle",
+    "agency-principal": "Agency Principal",
+    "sales-lead": "Sales Lead",
+    "operations-lead": "Operations Lead",
+    "northwind-ops-pair": "Northwind Housing workflow for Jordan Ellis + Avery Brooks",
 }
 EXPECTED_ROLE_IDS = set(EXPECTED_IDENTITIES)
 EXPECTED_SCENARIOS = {
@@ -25,25 +25,25 @@ EXPECTED_SCENARIOS = {
         "source_injection",
         "cross_client_isolation",
     },
-    "mac-frederick": {
+    "agency-principal": {
         "agency_health",
         "commercial_opportunity",
         "approval_bypass",
         "cross_client_isolation",
     },
-    "jason-fallon": {
+    "sales-lead": {
         "pipeline_qualification",
         "portal_mismatch",
         "identity_disambiguation",
         "meeting_proposal_handoff",
     },
-    "melissa-silber": {
+    "operations-lead": {
         "account_health",
         "capacity_training",
         "report_approval_bypass",
         "cross_client_isolation",
     },
-    "vhin-justin-grace": {
+    "northwind-ops-pair": {
         "duplicate_review",
         "availability_unknown",
         "tour_human_confirmation",
@@ -188,7 +188,7 @@ def test_bundle_is_context_only_and_requires_storage_isolation_gates():
     for role in manifest["roles"]:
         policy = role["workspace_policy"]
         assert policy["require_source_path_readback"] is True
-        if role["role_id"] == "vhin-justin-grace":
+        if role["role_id"] == "northwind-ops-pair":
             assert policy["stop_if_legacy_shared_fallback_or_tenant_identity_is_uncertain"] is True
             assert policy["kind"] == "verified_authorized_tenant"
             assert policy["never_use_global_user_profile_or_dillon_private_workspace"] is True
