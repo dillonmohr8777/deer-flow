@@ -6,6 +6,7 @@
 	reverse_proxy https://{$MOMOBOT_ORIGIN} {
 		header_up Host {host}
 		header_up X-Forwarded-Host {host}
+		header_up X-Real-IP {remote_host}
 		flush_interval -1
 		transport http {
 			tls_server_name {$MOMOBOT_ORIGIN_SNI}

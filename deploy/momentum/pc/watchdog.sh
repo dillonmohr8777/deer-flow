@@ -2,7 +2,7 @@
 # MomoBot self-heal (PC). Every 2 min: /health on 127.0.0.1:2026. Two misses in a row -> restart the stack.
 # Writes one JSON line per run to /var/log/momobot/health.jsonl and a one-word status to /run/momobot-health.
 set -u
-LOG=/var/log/momobot/health.jsonl; STATE=/var/lib/momobot-watchdog; mkdir -p "$STATE"
+LOG=/var/log/momobot/health.jsonl; STATE=/var/lib/momobot-watchdog; mkdir -p "$STATE" /var/log/momobot
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://127.0.0.1:2026/health || echo 000)
 disk=$(df -Pm /var/lib/docker | awk 'NR==2{print $4}')
 fails=$(cat "$STATE/fails" 2>/dev/null || echo 0)
