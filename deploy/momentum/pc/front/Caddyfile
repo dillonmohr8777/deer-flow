@@ -1,0 +1,28 @@
+{
+	email dillonmohr8777@gmail.com
+}
+(momobot) {
+	encode zstd gzip
+	reverse_proxy https://{$MOMOBOT_ORIGIN} {
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		flush_interval -1
+		transport http {
+			tls_server_name {$MOMOBOT_ORIGIN_SNI}
+			dial_timeout 10s
+			response_header_timeout 600s
+		}
+	}
+	handle_errors 502 503 504 {
+		respond "MomoBot is restarting. Try again in a minute." 503
+	}
+}
+momobot.needmomentum.com {
+	import momobot
+}
+{$MOMOBOT_FRONT_SSLIP} {
+	import momobot
+}
+:80 {
+	respond /healthz "front ok" 200
+}
