@@ -23,7 +23,7 @@ export COMPOSE_PROJECT_NAME=$PROJECT PORT=2026 BIND_HOST=127.0.0.1
 export DEER_FLOW_CONFIG_PATH=$DEPLOY/config.yaml
 export DEER_FLOW_EXTENSIONS_CONFIG_PATH=$DEPLOY/extensions_config.json
 export DEER_FLOW_HOME=$DEPLOY/deer-flow-home
-export MOMOBOT_REALIP_CONF=$REPO/deploy/momentum/mac/nginx-realip.conf
+export MOMOBOT_REALIP_CONF=$REPO/deploy/momentum/pc/nginx-realip.conf
 MOMENTUM_GATEWAY_IMAGE="$(get MOMENTUM_GATEWAY_IMAGE)"; export MOMENTUM_GATEWAY_IMAGE
 MOMENTUM_FRONTEND_IMAGE="$(get MOMENTUM_FRONTEND_IMAGE)"; export MOMENTUM_FRONTEND_IMAGE
 compose=(docker compose --env-file "$ENV_FILE" -p "$PROJECT"

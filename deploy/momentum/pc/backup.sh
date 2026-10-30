@@ -20,11 +20,13 @@ cp "$DEPLOY/config.yaml" "$DEPLOY/extensions_config.json" "$STAGE/"
 docker exec "${PROJECT}-redis" redis-cli --rdb - >"$STAGE/redis.rdb" 2>/dev/null
 tar czf "$STAGE/ec2-mounts.tgz" -C "$DEPLOY" data code
 (cd "$STAGE" && sha256sum ./* >MANIFEST.sha256)
+trap 'rm -f "$OUT/momobot-$stamp.tgz.enc"; cleanup' EXIT
 tar czf - -C "$STAGE" . | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass file:"$KEY" -out "$OUT/momobot-$stamp.tgz.enc"
 # read-back: decrypt and list, so a bad archive never counts as a backup
 openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:"$KEY" -in "$OUT/momobot-$stamp.tgz.enc" | tar tzf - > "$STAGE/.list"
 grep -q "gateway-data.tgz" "$STAGE/.list" || { rm -f "$OUT/momobot-$stamp.tgz.enc"; echo "read-back failed" >&2; exit 1; }
 sha=$(sha256sum "$OUT/momobot-$stamp.tgz.enc" | cut -d' ' -f1); size=$(stat -c %s "$OUT/momobot-$stamp.tgz.enc")
 printf '{"state":"PASS","file":"momobot-%s.tgz.enc","sha256":"%s","bytes":%s,"at":"%s"}\n' "$stamp" "$sha" "$size" "$(date -u +%FT%TZ)" > "$OUT/momobot-$stamp.json"
+trap cleanup EXIT
 ls -1t "$OUT"/momobot-*.tgz.enc | tail -n +8 | while read -r f; do rm -f "$f" "${f%.tgz.enc}.json"; done
 echo "backup ok: $OUT/momobot-$stamp.tgz.enc ($size bytes)"
