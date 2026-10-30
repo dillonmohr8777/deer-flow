@@ -1,0 +1,5 @@
+[Unit]
+Description=MomoBot nightly encrypted backup (PC, off AWS)
+[Service]
+Type=oneshot
+ExecStart=/opt/momobot/ops/backup.sh
