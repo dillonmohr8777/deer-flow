@@ -1,0 +1,62 @@
+{
+  "title": "Leadership and operations management",
+  "slug": "work-12-leadership-ops",
+  "description": "Weekly leadership read covering accepted work, aging promises, blockers, approval decisions and measured cost, each with source dates. Keeps revenue, retainer and billing truth separate from ad spend, then delegates one bounded outcome with an independent acceptor.",
+  "chapters": [
+    {
+      "title": "Who this is for",
+      "narration": "Hi, I'm Dillon. This lesson is for the people who run the business week to week: the Founder, the Managing Partner, the Sales Director or VP, the Director of Operations, the AI Director and the account team lead. By the end you will have a weekly leadership read that covers accepted work, aging promises, blockers, approval decisions and measured cost, plus one delegated outcome with an owner and an independent acceptor. The example account is Sample Dental Group, a synthetic client. Every figure in the walkthrough is an example field, not a result.",
+      "visual": "Lesson card listing the six leadership roles and the five sections of the weekly read, with a tag reading example account, Sample Dental Group."
+    },
+    {
+      "title": "Who owns what",
+      "narration": "Here is who owns what. The Founder and Managing Partner decide approvals and any spend, and nobody else signs for money. The Sales Director or VP reads the pipeline and the promises made to prospects. The Director of Operations owns blockers and measured cost. The AI Director owns how MomoBot is set up in the workspace, including agents, scheduled tasks and approvals. The account team lead owns accepted client work and the promises made to clients.",
+      "visual": "Role map with six named roles, each listing the decisions or outputs it owns in the weekly read."
+    },
+    {
+      "title": "Accepted work",
+      "narration": "Start with accepted work, meaning items where an acceptance is recorded. A draft that looks finished is not accepted. For each item, write the name, the account, the acceptor, and the acceptance date from the record. Count only what has an acceptance. Items waiting on review go into a separate line, so nobody reads a pending item as done.",
+      "visual": "Accepted work list with item, account, acceptor and acceptance date columns, and a separate pending section below it."
+    },
+    {
+      "title": "Aging promises",
+      "narration": "Next, aging promises. Pull every promise the firm has made to a client or prospect that is still open. Age each one in days from the date it was made, not the date someone last touched it. Sort the oldest first, and name one owner for each. A promise with no owner goes to the top of the list, because nobody is watching it.",
+      "visual": "Aging promise sort with promise, age in days and owner columns, and unowned items at the top flagged."
+    },
+    {
+      "title": "Blockers and approvals",
+      "narration": "Now blockers and approval decisions. A blocker is anything that stops accepted work or a promise from moving, with the owner who can clear it and the action that clears it. List pending approvals separately, with who must decide and how long each has waited. A blocker without a clearing action is a complaint, so rewrite it until it names the next step.",
+      "visual": "Blocker table with blocker, clearing action and owner, and a separate approval table with decision owner and wait time."
+    },
+    {
+      "title": "Revenue and retainer truth",
+      "narration": "Revenue gets its own section and its own source. Use the billing export for invoiced and collected amounts, and the signed retainer for the monthly retainer terms. Each figure carries its source name and export date. If a figure is not in either source, write not in source. Do not estimate revenue from pipeline or from ad results, because those are different questions.",
+      "visual": "Revenue block listing the billing export name and date, the retainer source and date, and figures marked not in source where absent."
+    },
+    {
+      "title": "Ad spend and measured cost",
+      "narration": "Ad spend lives in its own block, pulled from the ad platform export with its date. Never net it against revenue or subtract it from the retainer. Measured cost is only what someone measured: an export, an invoice, a receipt. If nothing measured it, write not measured. An estimate can sit in the notes, but it cannot sit in the cost line.",
+      "visual": "Ad spend block kept apart from the revenue block, with the platform export name and date, and cost lines showing not measured where nothing was measured."
+    },
+    {
+      "title": "Delegate one bounded outcome",
+      "narration": "Finally, delegate one outcome, and keep it small. Good example: close one aging promise for Sample Dental Group by a named date, with the account team lead as owner. Write the acceptance rule before the work starts, such as the client confirms in writing and the promise record shows closed. The Director of Operations accepts it, not the owner, so the person who did the work is not the one who signs it off.",
+      "visual": "Delegation card with outcome, owner, due date, acceptance rule and an acceptor field that must differ from the owner."
+    },
+    {
+      "title": "Judge the read",
+      "narration": "Judge the read before it goes to the leadership table. Each section needs a source and a date. Revenue and ad spend must be separate, with no netting. Each aging promise has an owner, and each approval has a decision owner. The delegated outcome has an acceptor who is not the owner. If any of those fail, the read is not accepted, and the gap is listed on top.",
+      "visual": "Read checklist with pass or fail per section and a gap list placed at the top of the page."
+    },
+    {
+      "title": "Approval and spend limits",
+      "narration": "Nothing in this read authorizes spend, publication or a client send. Any new spend, ad budget change, or client-facing message goes to the approval queue, and the Founder or Managing Partner decides on spend. A recorded approval is the only signal that a decision was made. Until one exists, the item stays open, with its owner and age showing.",
+      "visual": "Approval queue view with a pending spend item, an approver field and a line showing that no spend has been recorded."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Try this in Momo. Input: this week's accepted items list, the open promise list, the approval queue export, the billing export and the ad platform export, all from a test workspace. Acceptance: the Director of Operations checks that revenue and ad spend sit in separate, dated blocks, and that the delegated outcome has an acceptor who is not its owner.",
+      "visual": "Try-this worksheet listing the five input exports on the left, and the Director of Operations acceptance row on the right."
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "title": "Virtual-tour operations and shoot coordination",
+  "slug": "work-06-360-operations",
+  "description": "Synthetic shoot packet walkthrough for Sample Dental Group: intake, access checks, photographer request, time zones, scoped deliverables, editing handoff and a confirmation draft held for approval.",
+  "chapters": [
+    {
+      "title": "Why shoot coordination goes wrong",
+      "narration": "Shoot problems usually start with missing details, not with the camera work. Nobody knew the access window, the front desk did not know a crew was coming, or the editor got files with no room names. In this lesson I walk through one synthetic shoot for Sample Dental Group, from the first intake form to the confirmation draft. Everything here is example data. Momo helps me organize the packet and check it. I still decide what is ready to send.",
+      "visual": "Cover page of the synthetic Sample Dental Group packet showing the practice name, the shoot date, both time zones and a status line that reads intake complete, photographer requested."
+    },
+    {
+      "title": "Start with the intake",
+      "narration": "The intake is one form with the same fields every time. I need the practice name, the street address, the suite or entrance, an on-site contact with a phone number, and the access window in local time. I also need the rooms in scope. For the example, the intake says reception and two operatory rooms, matching the signed scope. If a field is blank, Momo marks it missing instead of guessing.",
+      "visual": "Intake form with labeled fields for practice name, street address, suite or entrance, on-site contact, access window and in-scope rooms, with one blank field highlighted as missing."
+    },
+    {
+      "title": "Check the access contact",
+      "narration": "I check who can let the crew in. The client names the on-site contact, not a website guess. I confirm that person can take a call during the window, and I note a backup. If the client record is connected for this client, Momo compares the contact against it. If not, the packet says missing and I fill it in by hand. Only a written reply from the client counts as confirmed.",
+      "visual": "Access checklist table with columns for contact name, phone, backup, call-during-window confirmed and the date of the client's written reply, each cell filled from the intake or left blank."
+    },
+    {
+      "title": "Photographer and availability",
+      "narration": "Now the photographer. The request names the shoot date, the window, the rooms and the equipment needed, such as a tripod and a wide-angle lens. I do not treat the photographer as booked when I draft it. Momo writes the availability request. A person checks the photographer's calendar outside Momo and records the answer. If there is no reply, the status stays requested. It does not turn into booked because we hoped it would.",
+      "visual": "Availability request draft with date, window, rooms and equipment fields, and a status selector set to requested until a human records a reply."
+    },
+    {
+      "title": "Set the time zone",
+      "narration": "Timezones are easy to get wrong. I write the window twice, once in the client's time and once in the photographer's, with the city name and offset. For the example, the practice is on Eastern time and the photographer works from Central. The packet shows 9:00 to 11:00 Eastern, which is 8:00 to 10:00 Central. Momo does the conversion, and I check it by hand before anything goes out.",
+      "visual": "Two-column time block showing 9:00 to 11:00 Eastern beside 8:00 to 10:00 Central, with city names and offsets labeled."
+    },
+    {
+      "title": "Scope the deliverables",
+      "narration": "Deliverables are where scope creep starts. For the example, the signed scope says one virtual tour of reception and two operatory rooms, plus a floor plan only if the client confirms it in writing. I list each item with a count and a file format. If an item is not in the signed scope, it goes on a separate request. Momo flags anything in the notes that is not in the scope.",
+      "visual": "Deliverables table with item, count, file format and in-scope yes or no, with the floor plan row marked pending client confirmation."
+    },
+    {
+      "title": "Build the editing handoff",
+      "narration": "The editor should never have to ask where a file came from. My handoff lists the shoot date, the rooms in capture order, the device used, the file names and the delivery format. It also lists the rights status for any staff photos or logos. Each item is marked owned, licensed or missing. Momo builds the list from the intake and the folder names I give it. It does not judge image quality. That is the editor's call.",
+      "visual": "Handoff list of rooms in capture order with file names and a rights column showing owned, licensed or missing for each item."
+    },
+    {
+      "title": "Draft the confirmation",
+      "narration": "Momo writes the first confirmation draft from the packet, and it stays a draft. It names the practice, the date, the window in local time, the on-site contact, the access steps and the scope in plain words. It asks for any changes. I read it against the intake line by line, because a wrong suite number in an email is hard to take back. The draft goes to the approval step, and a person decides whether it is sent.",
+      "visual": "Email draft view with a draft label, the client's local window, the on-site contact and an approval status line, with the send step held for approval."
+    },
+    {
+      "title": "Acceptance and readback",
+      "narration": "Here is my acceptance test before the packet is called ready. I read it back from the top. The dates, addresses and contacts must match the intake exactly. Both time zones must show, and the conversion must check out by hand. Every deliverable must match the signed scope. The photographer status must say requested or booked, with the date of the reply. Momo flags mismatches, and I read each one myself. If any line fails, the packet is not ready.",
+      "visual": "Readback view with each packet line compared to the intake, and mismatched rows listed for review."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Here is your exercise. Take the synthetic Sample Dental Group intake from this lesson and add one blank field for the on-site contact's backup. Ask Momo to build the packet with the access checklist, the two time zones, the scope list and a confirmation draft marked as draft. The external acceptance check: a person on the ops team confirms the photographer's availability and the client's access contact by a reply outside Momo. Until that reply exists, the confirmation stays unsent and the packet says requested.",
+      "visual": "The synthetic Sample Dental Group intake with one added backup contact field, next to the generated packet awaiting human confirmation."
+    }
+  ]
+}

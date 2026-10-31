@@ -1,0 +1,65 @@
+{
+  "title": "The Terminal: Find Your Way and Make a Safe Scratch Folder",
+  "slug": "terminal",
+  "description": "A beginner walkthrough of pwd, ls, cd, mkdir, cat, echo, quotes, Ctrl+C, and reviewing commands inside a generic scratch folder.",
+  "chapters": [
+    {
+      "title": "A conversation with your computer",
+      "narration": "The terminal lets me give my computer written instructions. It can look intimidating because it leaves out the buttons, but the basic idea is simple. I type a command, press Enter, and read the response. Today I am going to find my location, make a scratch folder, and create a tiny text note. Everything stays inside that practice folder. Take this slowly, and read each command before you run it. You do not need to memorize everything today.",
+      "visual": "Large terminal with an empty prompt. Diagram: type command → Enter → read response. Task card: locate, create scratch folder, write and read note."
+    },
+    {
+      "title": "Find your current location",
+      "narration": "First I type p w d, with no spaces between the letters. It means print working directory. The output tells me which folder the terminal is currently using. That location matters because many commands act relative to it. Your answer will show your own computer's path, so it may look different from mine. I read the whole line and notice the final folder name. When I feel lost later, this is the first command I reach for.",
+      "visual": "Terminal zoom on pwd output. A folder breadcrumb highlights the current directory. Caption: working directory = the folder this terminal is using.",
+      "code": "pwd"
+    },
+    {
+      "title": "Look around with ls",
+      "narration": "Next I type l s, again with no spaces. This lists the names in my current folder. It does not move me somewhere else. I can compare the names with the folder I just saw from p w d. Some items may be files, and others may be folders. For now, I only need to recognize a few names. If the output is long, that is fine. I do not need to open every item to continue.",
+      "visual": "Terminal lists a few neutral filenames and folders. Fixed breadcrumb stays unchanged before and after ls. Caption: list contents; location stays the same.",
+      "code": "ls"
+    },
+    {
+      "title": "Move to your home folder",
+      "narration": "I want a predictable place to practice, so I type c d, a space, and the tilde symbol. That moves this terminal to my home folder. Then I run p w d again to verify the move. The command c d means change directory. Moving around in the terminal changes its current location. It does not move the folders themselves. That distinction helps a lot: I am changing where I stand, then checking where I landed.",
+      "visual": "Folder map with a marker moving to Home. Folder icons remain stationary. Follow with pwd confirmation under the cd command.",
+      "code": "cd ~\npwd"
+    },
+    {
+      "title": "Make a scratch folder",
+      "narration": "Now I make a practice folder with m k d i r, a space, and academy scratch joined by a hyphen. That command creates a directory with that name. If the terminal says it already exists, I stop and inspect it with l s before continuing. I do not assume an existing folder is empty. Once I know this is my intended practice folder, I change into it and verify the full location with p w d.",
+      "visual": "New academy-scratch folder appears inside Home. Alternate branch: already exists → inspect first. Final breadcrumb ends in academy-scratch.",
+      "code": "mkdir academy-scratch\nls\ncd academy-scratch\npwd"
+    },
+    {
+      "title": "Print a message with echo",
+      "narration": "Inside the scratch folder, I try echo followed by a quoted message. Echo prints the message to the terminal. The quote marks keep the words together as one piece of text. I use ordinary straight quotes, like the ones shown here. This command does not create a note file yet. It simply displays the words. Reading the result gives me a quick, harmless way to see the connection between what I typed and what the computer received.",
+      "visual": "Quote marks frame Hello from my scratch folder. Terminal prints the message below. File area remains empty. Caption: echo displays text.",
+      "code": "echo \"Hello from my scratch folder\""
+    },
+    {
+      "title": "Write a new note carefully",
+      "narration": "Now I create a note using echo and the greater than symbol. That symbol sends the text into a file instead of displaying it. Here is the part I always check: this form replaces an existing file with the same name. I run l s first and choose a fresh filename if practice note already exists. Only then do I run the writing command. A tiny command can change data, so I read the destination just as carefully as the message.",
+      "visual": "First show ls check. Large arrow from quoted text through > to practice-note.txt. Highlight: > replaces existing contents; use a fresh name.",
+      "code": "ls\necho \"I am learning the terminal.\" > practice-note.txt"
+    },
+    {
+      "title": "Read the file with cat",
+      "narration": "To check the note, I use cat followed by its filename. Cat displays the file's contents in the terminal. I compare the output with the sentence I meant to save. Then I use l s to confirm the file appears in this folder. This gives me two useful checks: the filename exists where I expected, and the contents are correct. If a filename contains spaces, I wrap the entire name in quotes so the terminal treats it as one name.",
+      "visual": "cat opens practice-note.txt contents on screen. Side-by-side checks: correct name, correct sentence. Small example shows quotes enclosing a filename with spaces.",
+      "code": "cat practice-note.txt\nls"
+    },
+    {
+      "title": "Go back and stop a command",
+      "narration": "When I want the parent folder, I type c d, a space, and two dots. Then p w d confirms where I am. I can return with c d and the scratch folder's name. Another useful control is Control C. It asks a running foreground command to stop. It does not undo changes that command already made. If something runs longer than expected, I can stop, read the screen, and decide what happened before typing anything else.",
+      "visual": "Folder map moves up one level, then back into academy-scratch. Separate Control + C keys point to a stopped running command. Caption: stop is not undo.",
+      "code": "cd ..\npwd\ncd academy-scratch\npwd"
+    },
+    {
+      "title": "Review before you press Enter",
+      "narration": "Here is my review habit. Before Enter, I ask: where am I, what does this command do, and what will it change? If I cannot answer, I pause and get an explanation. I check unfamiliar commands from a trusted reference and avoid pasting a whole block blindly. Today you found your location, listed files, changed folders, created a directory, and wrote and read a note. Keep that scratch folder for practice. Small, checked steps are enough to get comfortable.",
+      "visual": "Three large review questions above terminal: where, action, changes. End on command map: pwd location; ls contents; cd move; mkdir create; echo write; cat read."
+    }
+  ]
+}

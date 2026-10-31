@@ -1,0 +1,436 @@
+{
+  "01": [
+    [
+      "A job you can judge",
+      "THREE DINNERS",
+      "For two people\nAfter-work cooking\nOne checked shopping list",
+      "TASK \u2192 FACTS \u2192 CHECK"
+    ],
+    [
+      "What a model does",
+      "PATTERNS + CONTEXT",
+      "Explain\nOrganize\nCompare\nDraft",
+      "A fluent draft still needs a check"
+    ],
+    [
+      "A useful first prompt",
+      "PLAN THREE DINNERS",
+      "For two people \u2022 under $60\nAbout 30 minutes each\nAvoid peanuts\nMeals + list + assumptions",
+      "Outcome + constraints + format"
+    ],
+    [
+      "Add the missing context",
+      "ALREADY IN THE PANTRY",
+      "Rice\nOnions\nCanned tomatoes",
+      "Use what you have before buying more"
+    ],
+    [
+      "Name the assumptions",
+      "SHOPPING LIST",
+      "2 people \u2192 quantities for 2\n1 can \u2260 1 case\n$48 total \u2192 estimated prices",
+      "Label the assumptions"
+    ],
+    [
+      "Tools need a connection",
+      "CALCULATOR",
+      "Supplied prices\n$8 + $6 + $12 = $26\nCurrent store prices need a current source",
+      "Tool + permission + correct input"
+    ],
+    [
+      "Give memory a home",
+      "THIS CHAT \u2192 SAVED NOTE",
+      "Preference: avoid peanuts\nCheck what was actually saved\nKeep your own important preference note",
+      "Remembering is separate from permission"
+    ],
+    [
+      "Give focused feedback",
+      "TWO REPAIRS",
+      "45-minute dinner \u2192 30-minute option\nPeanut sauce \u2192 remove throughout\nRegenerate the combined list",
+      "Check the repair and the whole plan"
+    ],
+    [
+      "Check the real world",
+      "REVIEW THE PLAN",
+      "Add the prices\nCompare quantities\nRead package labels\nCheck cooking time",
+      "Match the check to the consequence"
+    ],
+    [
+      "Use the complete loop",
+      "YOUR TURN",
+      "Pick one small task\nSupply useful context\nCheck one important claim\nSave the useful result",
+      "DEFINE \u2192 DRAFT \u2192 CHECK \u2192 SAVE"
+    ]
+  ],
+  "02": [
+    [
+      "Open with one outcome",
+      "WATER CYCLE PRACTICE",
+      "Understand the water cycle\nExplain it without reading\nSave the useful study guide",
+      "One small task you can check"
+    ],
+    [
+      "Give a clear request",
+      "EXPLAIN \u2192 EXAMPLE \u2192 QUESTIONS",
+      "Evaporation, condensation, precipitation\nBeginner level\nOne everyday example each\nAsk three practice questions",
+      "Use ordinary words"
+    ],
+    [
+      "Choose a mode",
+      "EASY \u00b7 MEDIUM \u00b7 HARD",
+      "Easy: Guide me\nMedium: Balanced\nHard: Expert",
+      "Explanation style; permissions remain separate"
+    ],
+    [
+      "Read before asking for more",
+      "TWO EVERYDAY EXAMPLES",
+      "Drying puddle \u2192 evaporation\nCold glass \u2192 condensation\nCompare the difference",
+      "Check the explanation against a source"
+    ],
+    [
+      "Use context",
+      "CONTINUE THIS CHAT",
+      "Explain the cold glass more slowly\nBeginner level\nGoal: explain the water cycle",
+      "Restate key facts in a new conversation"
+    ],
+    [
+      "Bring in a file",
+      "YOUR STUDY NOTE",
+      "Choose the intended note\nConfirm the file is present\nName it in your request",
+      "Explain what you want done with it"
+    ],
+    [
+      "Check the source was used",
+      "NOTE \u2194 STUDY GUIDE",
+      "Compare specific details\nLocate the source for each question\nIdentify added background",
+      "A filename does not prove a successful read"
+    ],
+    [
+      "Save deliberately",
+      "WATER CYCLE PRACTICE",
+      "Choose the useful version\nSave to the intended workspace\nReopen a recognizable line",
+      "Confirm the result at its destination"
+    ],
+    [
+      "Check persistence",
+      "COME BACK TO THE WORK",
+      "Revisit the mode selector\nReopen the saved guide\nConfirm the result again",
+      "Verify what survives a new visit"
+    ],
+    [
+      "Finish with learning",
+      "YOUR TURN",
+      "Answer three questions without looking\nCompare corrections with your notes\nReopen your saved guide",
+      "ASK \u2192 INSPECT \u2192 CHECK \u2192 CONFIRM"
+    ]
+  ],
+  "03": [
+    [
+      "Talk to your computer",
+      "COMMAND \u2192 OUTPUT",
+      "Type a command\nRead what it returns\nUnderstand before running the next step",
+      "Your terminal works in a current folder"
+    ],
+    [
+      "Find your location",
+      "PWD",
+      "$ pwd\n/Users/you",
+      "Start by knowing where you are"
+    ],
+    [
+      "Look around",
+      "LS",
+      "$ ls\nDesktop  Documents  Downloads",
+      "Read the names before choosing one"
+    ],
+    [
+      "Move home",
+      "CD + PWD",
+      "$ cd ~\n$ pwd\n/Users/you",
+      "The tilde means your home folder"
+    ],
+    [
+      "Make a scratch folder",
+      "YOUR PRACTICE SPACE",
+      "$ mkdir academy-scratch\n$ ls\n$ cd academy-scratch\n$ pwd",
+      "Use a new folder for this exercise"
+    ],
+    [
+      "Print a message",
+      "ECHO",
+      "$ echo \"Hello from my scratch folder\"\nHello from my scratch folder",
+      "This prints text in your terminal"
+    ],
+    [
+      "Write a note",
+      "CHECK THE NAME FIRST",
+      "$ ls\n$ echo \"I am learning the terminal.\" > practice-note.txt",
+      "The redirect can replace an existing file"
+    ],
+    [
+      "Read the note",
+      "CAT",
+      "$ cat practice-note.txt\nI am learning the terminal.\n$ ls\npractice-note.txt",
+      "Compare what you asked for with what was saved"
+    ],
+    [
+      "Go back or stop",
+      "CD ..  /  CTRL + C",
+      "$ cd ..\n$ pwd\n$ cd academy-scratch\n$ pwd",
+      "Ctrl + C interrupts; it does not undo"
+    ],
+    [
+      "Review the next command",
+      "YOUR TURN",
+      "What does it read?\nWhat does it change?\nWhere does it act?\nWhat will prove it worked?",
+      "Ask AI to explain each piece first"
+    ]
+  ],
+  "04": [
+    [
+      "Start with the job",
+      "ONE APPOINTMENT",
+      "Calendar \u2192 time\nNotes \u2192 context\nEmail \u2192 conversation\nBrowser \u2192 service",
+      "AI helps find, compare and draft"
+    ],
+    [
+      "Give each place one job",
+      "FIND THE SOURCE",
+      "Calendar: confirmed time\nEmail: office instructions\nNote: questions + source link",
+      "Keep the original source easy to open"
+    ],
+    [
+      "Choose one capture inbox",
+      "CAPTURE FIRST",
+      "Ask about paperwork\nCheck the address\nRemember your appointment question",
+      "ONE INBOX \u2192 DO \u00b7 KEEP \u00b7 DISCARD"
+    ],
+    [
+      "Use an API when it fits",
+      "STRUCTURED INFORMATION",
+      "Calendar event\nAccount\nStart time\nLocation",
+      "Read and create are different scopes"
+    ],
+    [
+      "Use the browser when needed",
+      "AVAILABLE \u2260 BOOKED",
+      "View times\nCompare your calendar\nRecommend a slot\nReview and confirm",
+      "Read the actual confirmation"
+    ],
+    [
+      "Make the source visible",
+      "BRING THE COMPLETED FORM",
+      "Source: office email\nReceived: Tuesday\nPreference: morning appointments",
+      "Current instruction + saved preference"
+    ],
+    [
+      "Keep memory useful",
+      "PREFERENCE NOTE",
+      "Prefer morning appointments\nSource: you\nUpdated: today\nCorrection: update this note",
+      "Credentials belong in a protected store"
+    ],
+    [
+      "Review before action",
+      "THREE USEFUL OUTPUTS",
+      "Summary with source\nReply draft\nCalendar proposal",
+      "Prepared \u2192 reviewed \u2192 chosen \u2192 confirmed"
+    ],
+    [
+      "Handle a change once",
+      "ONE APPOINTMENT",
+      "Old: Tuesday, 10 AM\nLatest email: Wednesday, 11 AM\nUpdate the existing event",
+      "Read back one correct Wednesday event"
+    ],
+    [
+      "Build one working path",
+      "YOUR TURN",
+      "Choose one inbox\nTry one appointment\nCheck the confirmation\nKeep useful links",
+      "Connect the task before adding more tools"
+    ]
+  ],
+  "05": [
+    [
+      "Choose a repeatable result",
+      "FIVE DINNERS",
+      "Five meals\nOne matching grocery list\nA result you can recognize",
+      "Choose an output you can judge"
+    ],
+    [
+      "Write the finish line",
+      "DONE WHEN\u2026",
+      "5 dinners for 2\nUses available equipment\nFits your chosen budget\nConnects two leftover meals",
+      "Your constraints define success"
+    ],
+    [
+      "Name the sources",
+      "INPUT TRAY",
+      "Today's pantry note\nSaved recipes\nYour budget\nCurrent prices, when available",
+      "Estimated prices stay labeled"
+    ],
+    [
+      "Make a short plan",
+      "FOUR STEPS",
+      "1  Check pantry\n2  Choose dinners\n3  Combine ingredients\n4  Review the list",
+      "Keep unrelated work outside the boundary"
+    ],
+    [
+      "Place one checkpoint",
+      "BEFORE THE SHOPPING LIST",
+      "Does this fit my week?\nIs anything unavailable?\nDo I want these meals?",
+      "Review the choice before expanding it"
+    ],
+    [
+      "Limit access and cost",
+      "READ \u2192 DRAFT",
+      "Read the pantry\nRead supplied prices\nDraft the list\nStop at your chosen limit",
+      "Placing an order is a separate choice"
+    ],
+    [
+      "Shape the useful output",
+      "READY TO SHOP",
+      "Produce: onions, 2\nPantry: rice, already on hand\nChilled: yogurt, 1 tub",
+      "Combine quantities and mark what to buy"
+    ],
+    [
+      "Check mechanically",
+      "PASS OR NEEDS FIX",
+      "Dinner count = 5\nEvery recipe covered\nDuplicates combined\nLeftovers connected",
+      "Make the price status visible"
+    ],
+    [
+      "Define when it stops",
+      "THREE STOP PATHS",
+      "Checks pass \u2192 finish\nLimit reached \u2192 save draft\nSource missing \u2192 name the gap",
+      "Repair only the failed step"
+    ],
+    [
+      "Repeat the checklist",
+      "YOUR TURN",
+      "Goal \u2192 sources \u2192 plan\nCheckpoint \u2192 output \u2192 check\nStop and refresh inputs next time",
+      "Automate after the manual loop works"
+    ]
+  ],
+  "06": [
+    [
+      "Ask what proves it",
+      "CLAIM \u2192 EVIDENCE",
+      "Draft prepared \u2192 visible draft\nEvent created \u2192 calendar event\nMessage sent \u2192 sent record",
+      "Check the actual destination"
+    ],
+    [
+      "Confidence is not evidence",
+      "TRAVEL EXAMPLE",
+      "Operator\nRoute\nTravel date\nDeparture time",
+      "Match each claim to its source"
+    ],
+    [
+      "Check freshness and scope",
+      "DOES THIS APPLY?",
+      "Checked when?\nWhich travel date?\nWhich location?\nWhich account?",
+      "Use the timetable for your actual journey"
+    ],
+    [
+      "Read back the destination",
+      "REQUESTED \u2194 SAVED",
+      "Call office\nWednesday at 10 AM\nCorrect time zone\nPersonal reminder list",
+      "Compare the same fields on both sides"
+    ],
+    [
+      "Understand the boundaries",
+      "THREE QUESTIONS",
+      "Allowed? \u2192 permission\nCorrect? \u2192 account and content\nChosen? \u2192 user decision",
+      "Access is one part of a complete action"
+    ],
+    [
+      "Make the choice explicit",
+      "REVIEW THE ACTION",
+      "Send: recipient + exact text\nSpend: item + total\nDelete: named files + scope",
+      "Choose after reviewing the consequence"
+    ],
+    [
+      "Verify the cost",
+      "THE COMPLETE PRICE",
+      "Chosen limit\nEstimated run cost\nRecorded charge\nExpected frequency",
+      "Cost per run \u00d7 runs per month"
+    ],
+    [
+      "Avoid duplicate actions",
+      "TIMEOUT \u2192 READ BACK",
+      "Exists? Use the result\nAbsent? Consider a retry\nUnknown? Keep it unresolved",
+      "Check the original destination first"
+    ],
+    [
+      "Check your understanding",
+      "EXPLAIN \u2192 TRY \u2192 COMPARE",
+      "3 items\n$4 each\n3 \u00d7 4 = $12 before other charges",
+      "Try a small example you can judge"
+    ],
+    [
+      "Use a finishing check",
+      "YOUR TURN",
+      "Requested\nMatching evidence\nChecked when\nCompleted or still open",
+      "WORK \u2192 CHECK \u2192 FIX \u2192 CHECK \u2192 FINISH"
+    ]
+  ],
+  "07": [
+    [
+      "Start with today",
+      "YOUR MORNING VIEW",
+      "Calendar\nCapture inbox\nUnfinished notes",
+      "Three priorities and one first action"
+    ],
+    [
+      "Collect without chasing",
+      "ONE INBOX",
+      "Appointment email\nTrip idea\nRenewal reminder",
+      "Capture and do are separate stages"
+    ],
+    [
+      "Choose one outcome",
+      "A WEEKEND PLAN",
+      "2 travel options\n1 lodging option\nCurrent costs\nYour dates and budget",
+      "Compare first; booking comes later"
+    ],
+    [
+      "Give a clear request",
+      "YOUR FIRST PROMPT",
+      "Result: compare two routes\nSources: official operator pages\nConstraints: dates and budget\nFormat: one page + unknowns",
+      "Make the first output easy to review"
+    ],
+    [
+      "Protect a focus block",
+      "ONE TASK AT A TIME",
+      "Work from sources\nPark new ideas in the inbox\nSave the draft\nChoose a useful time boundary",
+      "Finish a useful unit before switching"
+    ],
+    [
+      "Review the result",
+      "CHECK THE TRIP DRAFT",
+      "Dates and transfers\nTotal travel time\nIncluded fees\nSource freshness",
+      "Research, choose an option, or stop"
+    ],
+    [
+      "Do a midday reset",
+      "WHAT CHANGED?",
+      "What is done?\nWhat remains?\nWhat comes next?",
+      "Keep fixed commitments; update the next action"
+    ],
+    [
+      "Finish with evidence",
+      "PREPARED AND CHECKED",
+      "Plan: saved with sources\nReminder: created and read back\nStatus: matches what happened",
+      "Discussed \u00b7 drafted \u00b7 completed"
+    ],
+    [
+      "Capture the handoff",
+      "YOUR EVENING NOTE",
+      "Finished: compared routes\nDecision: prefer option B\nStill open: cancellation terms\nNext: check those terms tomorrow",
+      "Save the links with the decision"
+    ],
+    [
+      "Make one habit repeat",
+      "YOUR TURN",
+      "MORNING \u2192 choose\nMIDDAY \u2192 adjust\nEVENING \u2192 capture",
+      "Start with these three anchors"
+    ]
+  ]
+}
