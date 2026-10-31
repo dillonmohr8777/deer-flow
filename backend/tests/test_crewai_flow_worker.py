@@ -11,10 +11,11 @@ from app.gateway.workflow_adapters import worker_environment
 
 WORKER = Path(__file__).resolve().parents[2] / "workers/browser-teams/python"
 
-# CI builds this venv (backend-unit-tests.yml), so a missing one must still fail there.
-# Locally it is an opt-in build, so skip instead of failing.
+# GitHub Actions builds this venv (backend-unit-tests.yml), so a missing one must still fail there.
+# Everywhere else it is an opt-in build, so skip instead of failing. Keyed on GITHUB_ACTIONS, not CI:
+# the merge queue's sandbox also sets CI=1 but builds no workers.
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("CI") and not (WORKER / ".venv/bin/python").is_file(),
+    not os.environ.get("GITHUB_ACTIONS") and not (WORKER / ".venv/bin/python").is_file(),
     reason="browser-teams python worker venv is not built in this checkout",
 )
 
