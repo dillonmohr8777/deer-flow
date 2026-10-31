@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { useEffect, type ReactNode } from "react";
@@ -100,6 +100,18 @@ function buildTree(
     </I18nProvider>
   );
 }
+
+beforeEach(() => {
+  // The mock sidecar thread still loads history through the LangGraph SDK;
+  // answer it locally so no real request hits localhost:3000.
+  rs.spyOn(globalThis, "fetch").mockImplementation(
+    async () =>
+      new Response("[]", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+  );
+});
 
 afterEach(() => {
   rs.restoreAllMocks();
