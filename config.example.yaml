@@ -2418,6 +2418,14 @@ momentum_internal:
   enabled: false
   organization_slugs: []
 
+# Health-sector workspaces (no business associate agreement exists for this
+# stack, so patient information must never enter it). Every workspace listed by
+# slug here, plus any an admin flags through PUT /api/admin/organizations/{id}/no-phi,
+# gets a marketing-only guard in every agent run, a persistent portal banner and
+# blocked file uploads. Entries here can't be cleared through the API.
+no_phi:
+  organization_slugs: []
+
 # The client chat. MomoBot Max is the base subscription plus the all-in-one
 # agent: every client account chats with this one built-in agent (one memory),
 # a client listed in `clients` gets it as MomoBot Max (`model`, effort, subagent

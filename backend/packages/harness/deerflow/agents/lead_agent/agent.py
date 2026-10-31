@@ -1042,7 +1042,8 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             raise ValueError("Public news agent must disable private knowledge and integrations")
         requested_subagent_enabled = False
         is_plan_mode = False
-    memory_enabled = getattr(agent_config, "memory_enabled", True) is not False
+    # A no-PHI workspace keeps nothing: no memory middleware, tools or injection (see app/gateway/no_phi.py).
+    memory_enabled = getattr(agent_config, "memory_enabled", True) is not False and cfg.get("no_phi") is not True
     # Keep compatibility with lightweight AgentConfig-shaped objects used by
     # integrations that predate caller-level subagent restrictions.
     allowed_subagents = getattr(agent_config, "allowed_subagents", None) if agent_config is not None else None
@@ -1227,6 +1228,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             memory_enabled=memory_enabled,
             experience_mode=cfg.get("experience_mode"),
             momobot_tier=cfg.get("momobot_tier"),
+            no_phi=cfg.get("no_phi"),
         )
         graph = create_agent(
             model=chat_model,
@@ -1398,6 +1400,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         memory_enabled=memory_enabled,
         experience_mode=cfg.get("experience_mode"),
         momobot_tier=cfg.get("momobot_tier"),
+        no_phi=cfg.get("no_phi"),
     )
     from deerflow.extensions import get_agent_build_extensions
     from deerflow.sandbox.native_startup import configure_native_lazy_startup
