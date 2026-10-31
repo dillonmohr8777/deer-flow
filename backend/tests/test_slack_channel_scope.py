@@ -168,9 +168,10 @@ def test_public_news_route_overrides_user_and_thread_agent_choices(tmp_path):
         bus=MessageBus(),
         store=ChannelStore(path=tmp_path / "store.json"),
         channel_sessions={"slack": {"users": {"UMEMBER": {"assistant_id": "private-agent", "context": {"public_news_channel": True, "is_bootstrap": True, "subagent_enabled": True}}}}},
+        public_news={"channel_id": "C000TEST01", "team_id": "T000TEST01"},
     )
     manager._thread_agent_names["thread"] = "private-agent"
-    msg = InboundMessage(channel_name="slack", chat_id="C04HXSVN2CS", user_id="UMEMBER", text="hi", metadata={"team_id": "T066HGS7N"})
+    msg = InboundMessage(channel_name="slack", chat_id="C000TEST01", user_id="UMEMBER", text="hi", metadata={"team_id": "T000TEST01"})
     assistant, _, context = manager._resolve_run_params(msg, "thread")
     assert assistant == "lead_agent"
     assert context["agent_name"] == "ai-tech-news"
@@ -179,6 +180,23 @@ def test_public_news_route_overrides_user_and_thread_agent_choices(tmp_path):
     assert context["subagent_enabled"] is False
     msg.chat_id = "OTHER"
     assert manager._resolve_run_params(msg, "thread")[2]["public_news_channel"] is False
+    msg.chat_id, msg.metadata = "C000TEST01", {"team_id": "T000OTHER1"}
+    assert manager._resolve_run_params(msg, "thread")[2]["public_news_channel"] is False  # right channel id, wrong team
+
+
+@pytest.mark.parametrize("public_news", [None, {}, {"channel_id": "C000TEST01"}, {"team_id": "T000TEST01"}, {"channel_id": " ", "team_id": "T000TEST01"}, {"channel_id": 1, "team_id": "T000TEST01"}, "C000TEST01"])
+def test_public_news_route_is_off_unless_channel_and_team_are_configured(tmp_path, public_news):
+    manager = ChannelManager(bus=MessageBus(), store=ChannelStore(path=tmp_path / "store.json"), public_news=public_news)
+    msg = InboundMessage(channel_name="slack", chat_id="C000TEST01", user_id="UMEMBER", text="hi", metadata={"team_id": "T000TEST01"})
+    assert manager._resolve_run_params(msg, "thread")[2]["public_news_channel"] is False
+
+
+def test_channel_service_reads_the_public_news_route_from_the_slack_channel_config():
+    from app.channels.service import ChannelService
+
+    service = ChannelService({"slack": {"enabled": False, "public_news": {"channel_id": " C000TEST01 ", "team_id": "T000TEST01"}}})
+    assert service.manager._public_news_route == ("C000TEST01", "T000TEST01")
+    assert ChannelService({"slack": {"enabled": False}}).manager._public_news_route is None
 
 
 def test_allowlisted_user_posting_via_third_party_app_is_admitted():

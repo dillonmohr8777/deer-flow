@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import hashlib
 import json
 import math
 import os
@@ -249,6 +250,16 @@ class FleetJob:
     max_minutes: int = 10
 
 
+# Client ids whose jobs are refused because the account is historical. Kept as salted hashes so this
+# public file does not name a client; the check is exact-match, same as comparing the plain id.
+_HISTORICAL_CLIENT_SALT = "deerflow-fleet-historical-client"
+_HISTORICAL_CLIENT_HASHES = frozenset({"e1a426c81524720184f090f9f6a52d2250830f1121b26523e2a1b769b73f8478"})
+
+
+def _is_historical_client(client_id: str) -> bool:
+    return hashlib.sha256(f"{_HISTORICAL_CLIENT_SALT}:{client_id}".encode()).hexdigest() in _HISTORICAL_CLIENT_HASHES
+
+
 class Fleet:
     def __init__(self, config: dict, registry: dict, ledger: UsageLedger, output: Path):
         self.config = config
@@ -259,7 +270,7 @@ class Fleet:
         self.jobs: dict[str, FleetJob] = {}
         for raw in config.get("jobs", []):
             job = FleetJob(**{**raw, "allowed_hosts": tuple(raw.get("allowed_hosts", []))})
-            if job.id in self.jobs or job.client_id not in clients or job.client_id == "align-hcm":
+            if job.id in self.jobs or job.client_id not in clients or _is_historical_client(job.client_id):
                 raise FleetBlocked("Unknown, duplicate or historical client job")
             if job.workflow not in {"mobile_qa", "public_research", "report_retrieval", "local_draft", "native_agent"}:
                 raise FleetBlocked("Workflow not admitted")

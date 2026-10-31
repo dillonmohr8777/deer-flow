@@ -195,6 +195,7 @@ class ChannelService:
         gateway_url = _resolve_service_url(config, "gateway_url", _CHANNELS_GATEWAY_URL_ENV, DEFAULT_GATEWAY_URL)
         default_session = config.pop("session", None)
         channel_sessions = {name: channel_config.get("session") for name, channel_config in config.items() if isinstance(channel_config, dict)}
+        slack_config = config.get("slack")
         from app.channels.dedupe_store import make_inbound_dedupe_store
 
         self.manager = ChannelManager(
@@ -210,6 +211,7 @@ class ChannelService:
             require_bound_identity=require_bound_identity,
             inbound_dedupe_store=make_inbound_dedupe_store(app_config),
             get_stream_bridge=get_stream_bridge,
+            public_news=slack_config.get("public_news") if isinstance(slack_config, dict) else None,
         )
         self._channels: dict[str, Any] = {}  # name -> Channel instance
         self._config = config

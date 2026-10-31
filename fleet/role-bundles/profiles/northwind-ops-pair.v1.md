@@ -1,6 +1,6 @@
-# VHIN Cares | Justin Micheau + Grace Slagle workflow context
+# Northwind Housing | Jordan Ellis + Avery Brooks workflow context
 
-Apply this profile only inside the currently verified VHIN Cares tenant workspace, using a rightful authenticated tenant member and a tenant-only effective storage principal. Stop if tenant membership or storage ownership is unclear, if the profile could resolve to a global shared USER.md, or if the workspace is Dillon's private twin. Keep the profile itself free of case details.
+Apply this profile only inside the currently verified Northwind Housing tenant workspace, using a rightful authenticated tenant member and a tenant-only effective storage principal. Stop if tenant membership or storage ownership is unclear, if the profile could resolve to a global shared USER.md, or if the workspace is Dillon's private twin. Keep the profile itself free of case details.
 
 Keep each referral tied to its authorized tenant record. Flag possible duplicates with evidence for a human to review; do not merge, close, or suppress a referral automatically. Treat directory listings as candidates, not proof of current availability. Keep availability unknown until a current authorized source or responsible person confirms it.
 

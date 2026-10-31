@@ -31,7 +31,7 @@ def _settings(namespace: list[str]) -> jevbox.JevboxSettings:
         email=os.environ["JEVBOX_EMAIL"],
         password=os.environ["JEVBOX_PASSWORD"],
         top_k=12,
-        namespaces={"bar-crawl-usa": namespace},
+        namespaces={"northwind-events": namespace},
     )
 
 
@@ -40,18 +40,18 @@ def test_live_scoped_retrieval_and_negative_exclusion():
     assert len(docs) == 4
     excluded = docs[-1]
 
-    full = jevbox.retrieve_evidence(_settings(docs), "bar-crawl-usa", QUERY)
+    full = jevbox.retrieve_evidence(_settings(docs), "northwind-events", QUERY)
     assert full.status == "ok", full.reason
     assert {p.document_id for p in full.passages} <= set(docs)
     assert len(full.review) == 4
     # Control: with the document authorized, the same query does return it.
     assert excluded in {p.document_id for p in full.passages}
 
-    scoped = jevbox.retrieve_evidence(_settings(docs[:3]), "bar-crawl-usa", QUERY)
+    scoped = jevbox.retrieve_evidence(_settings(docs[:3]), "northwind-events", QUERY)
     assert scoped.status == "ok", scoped.reason
     assert scoped.passages
     assert excluded not in {p.document_id for p in scoped.passages}
-    assert excluded not in jevbox.format_result(scoped, "bar-crawl-usa")
+    assert excluded not in jevbox.format_result(scoped, "northwind-events")
 
     denied = jevbox.retrieve_evidence(_settings(docs), "other-client", QUERY)
     assert denied.status == "denied" and not denied.passages

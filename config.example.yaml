@@ -2919,6 +2919,9 @@ run_ownership:
 #       user_ids: []                  # Slack user IDs who receive the DM and may press the buttons
 #       base_url: http://127.0.0.1:2026  # Command Center URL used for the item link
 #     reply_in_thread: true           # false = post replies as top-level channel messages instead of thread replies
+#     public_news:                    # route ONE channel to the public `ai-tech-news` agent (web search/fetch only, no memory)
+#       channel_id: C000TEST01        # Slack channel id; both ids must match, and unset (or either missing) turns the route off
+#       team_id: T000TEST01           # Slack workspace (team) id of that channel
 #
 #   telegram:
 #     enabled: false

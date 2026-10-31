@@ -11,8 +11,8 @@ import {
 import type { TeamMember, TeamMessage } from "@/core/team";
 
 const members: TeamMember[] = [
-  { user_id: "u-owner", email: "dillon@momentum.example", role: "owner" },
-  { user_id: "u-member", email: "jesse.d@momentum.example", role: "member" },
+  { user_id: "u-owner", email: "owner@momentum.example", role: "owner" },
+  { user_id: "u-member", email: "designer@momentum.example", role: "member" },
 ];
 
 function message(patch: Partial<TeamMessage>): TeamMessage {
@@ -36,7 +36,7 @@ describe("team data", () => {
   });
 
   it("names authors from the directory, with You and a stable fallback", () => {
-    expect(authorLabel("u-member", members, "u-owner")).toBe("jesse.d");
+    expect(authorLabel("u-member", members, "u-owner")).toBe("designer");
     expect(authorLabel("u-owner", members, "u-owner")).toBe("You");
     expect(authorLabel("u-gone", members, "u-owner")).toBe("Former teammate");
     expect(authorLabel("u-member", undefined, null)).toBe("Former teammate");

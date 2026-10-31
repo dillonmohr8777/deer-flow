@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { useEffect, type ReactNode } from "react";
@@ -100,6 +100,18 @@ function buildTree(
     </I18nProvider>
   );
 }
+
+// The mock-mode thread stream fetches history from localhost:3000, which has no
+// server under test. Answer every request with an empty list.
+beforeEach(() => {
+  rs.spyOn(globalThis, "fetch").mockImplementation(
+    async () =>
+      new Response("[]", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+});
 
 afterEach(() => {
   rs.restoreAllMocks();

@@ -1,0 +1,27 @@
+name: Client Name Guard
+
+# This repository is public. Fails when a tracked file, or a file path, contains a
+# real client name. The deny-list is stored only as salted SHA-256 hashes
+# (scripts/client_name_denylist.json); see docs/CLIENT_NAME_GUARD.md.
+
+on:
+  push:
+    branches: [ 'main', '2.0.x-dev' ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  client-name-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Check tracked files and paths for client names
+        run: python scripts/client_name_guard.py check --annotations
