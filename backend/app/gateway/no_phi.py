@@ -24,6 +24,7 @@ dev, tests), or a database-less setup with an empty slug list, is unflagged.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import Depends, HTTPException, Request
@@ -40,6 +41,7 @@ from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.runtime.user_context import resolve_organization_id
 
 NO_PHI_CONTEXT_KEY = "no_phi"
+_LOOKUP_TIMEOUT_SECONDS = 10.0
 UPLOADS_BLOCKED_DETAIL = "File uploads are turned off in this workspace. Please don't share patient or health information here."
 
 
@@ -66,6 +68,23 @@ async def _project_client_id(session: AsyncSession, project_id: str | None, thre
 
 
 async def organization_is_no_phi(
+    organization_id: str | None,
+    app_config: AppConfig | None = None,
+    *,
+    project_id: str | None = None,
+    thread_id: str | None = None,
+) -> bool:
+    """Bounded :func:`_organization_is_no_phi`: a lookup that stalls past the limit counts as flagged (fail closed)."""
+    try:
+        return await asyncio.wait_for(
+            _organization_is_no_phi(organization_id, app_config, project_id=project_id, thread_id=thread_id),
+            timeout=_LOOKUP_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        return True
+
+
+async def _organization_is_no_phi(
     organization_id: str | None,
     app_config: AppConfig | None = None,
     *,
