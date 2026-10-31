@@ -137,9 +137,10 @@ def test_worker_environment_does_not_inherit_keys_or_auth(monkeypatch):
 
 
 def _skip_if_worker_missing(adapter, framework):
-    # CI installs every worker (backend-unit-tests.yml), so a missing one must still fail there.
-    # Locally the workers are an opt-in build, so skip instead of failing.
-    if not os.environ.get("CI") and adapter.capabilities()[framework]["detail"] == "worker_not_installed":
+    # GitHub Actions installs every worker (backend-unit-tests.yml), so a missing one must still fail there.
+    # Everywhere else the workers are an opt-in build, so skip instead of failing. Keyed on GITHUB_ACTIONS,
+    # not CI: the merge queue's sandbox also sets CI=1 but builds no workers.
+    if not os.environ.get("GITHUB_ACTIONS") and adapter.capabilities()[framework]["detail"] == "worker_not_installed":
         pytest.skip(f"{framework} worker is not built in this checkout")
 
 
