@@ -202,6 +202,15 @@ def write_receipt(root: Path, run_id: str, content: bytes) -> str:
             os.close(handle)
 
 
+def _write_with_resolved_root(root: Path | None, run_id: str, content: bytes) -> str:
+    """Resolve configured paths and write on the file-I/O worker together."""
+    if root is None:
+        from deerflow.config.paths import get_paths
+
+        root = get_paths().base_dir
+    return write_receipt(root, run_id, content)
+
+
 async def persist_new_run_receipt(snapshot: Mapping[str, str | None] | None, run_id: str, run_created_at: str, root: Path | None = None) -> str | None:
     """Best-effort drained persistence; failure leaves provenance unknown.
 
@@ -215,15 +224,11 @@ async def persist_new_run_receipt(snapshot: Mapping[str, str | None] | None, run
         return None
     try:
         content = build_receipt(snapshot, run_id, run_created_at)
-        if root is None:
-            from deerflow.config.paths import get_paths
-
-            root = get_paths().base_dir
     except Exception:
         logger.warning("Run provenance unavailable for run %s: invalid receipt", run_id)
         return None
     try:
-        return await await_drained(run_file_io(write_receipt, root, run_id, content))
+        return await await_drained(run_file_io(_write_with_resolved_root, root, run_id, content))
     except ProvenanceConflict:
         logger.error("Run provenance conflict for run %s; original receipt kept", run_id)
     except Exception:

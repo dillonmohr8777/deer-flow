@@ -111,6 +111,8 @@ def test_symlink_unsafe_id_and_mode_fail_closed(tmp_path):
     linked = tmp_path / "linked"
     final = linked.joinpath(*rp.PRIVATE_PARTS)
     final.mkdir(parents=True, mode=0o700)
+    for directory in (linked / "private", linked / "private" / "run-provenance", final):
+        directory.chmod(0o700)
     os.symlink(elsewhere / "target", final / "run-1.json")
     with pytest.raises(rp.ProvenanceConflict):
         rp.write_receipt(linked, "run-1", content)
@@ -123,6 +125,27 @@ def test_sink_failure_is_unknown_not_fatal(tmp_path, caplog):
     assert asyncio.run(rp.persist_new_run_receipt(None, "run-1", "2026-11-02T15:00:00+00:00", root=tmp_path)) is None
     assert not tmp_path.joinpath("private").exists()
     assert "user-actor" not in caplog.text and "storage-shared" not in caplog.text
+
+
+def test_default_path_resolution_stays_off_event_loop(tmp_path, monkeypatch):
+    """Exercise the production default-path branch, including DEER_FLOW_HOME."""
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path))
+    resolve = Path.resolve
+    resolutions = []
+
+    def guarded_resolve(path, *args, **kwargs):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            resolutions.append(threading.current_thread().name)
+            return resolve(path, *args, **kwargs)
+        pytest.fail("configured receipt path resolved on the event loop")
+
+    monkeypatch.setattr(Path, "resolve", guarded_resolve)
+    result = asyncio.run(rp.persist_new_run_receipt(_snapshot(), "run-default", "2026-11-02T15:00:00+00:00"))
+    assert result == "created"
+    assert resolutions and all(name.startswith("file-io") for name in resolutions)
+    assert tmp_path.joinpath(*rp.PRIVATE_PARTS, "run-default.json").exists()
 
 
 def test_cancellation_drains_write_before_propagating(tmp_path, monkeypatch):
