@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
 import subprocess
 from pathlib import Path
 
@@ -129,6 +128,6 @@ def test_the_committed_deny_list_is_hashes_only():
     assert len(data["hashes"]) > 50 and all(len(h) == 64 and set(h) <= set("0123456789abcdef") for h in data["hashes"])
 
 
-@pytest.mark.skipif(not os.environ.get("CLIENT_NAME_GUARD_FULL_SCAN"), reason="whole-repo scan is slow; the client-name-guard workflow runs it")
+# GitHub Actions is off on this fork, so this is the only place the whole-repo scan runs automatically.
 def test_the_repo_is_clean():
     assert guard.run_check(REPO_ROOT, guard.DENYLIST_PATH) == 0
