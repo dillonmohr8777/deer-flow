@@ -656,7 +656,8 @@ def _stub_app_config():
 
 
 @pytest.mark.anyio
-async def test_start_run_reuses_store_backed_running_row_without_attaching_worker(_stub_app_config):
+@pytest.mark.parametrize("same_worker", [False, True])
+async def test_start_run_reuses_store_backed_running_row_without_attaching_worker(_stub_app_config, same_worker):
     from app.gateway.services import start_run
 
     input_payload = {"messages": [{"role": "user", "content": "hello"}]}
@@ -680,19 +681,56 @@ async def test_start_run_reuses_store_backed_running_row_without_attaching_worke
     with (
         patch("app.gateway.services.resolve_agent_factory", return_value=object()),
         patch("app.gateway.services.run_agent", side_effect=fake_run_agent),
+        patch("app.gateway.services.persist_new_run_receipt", new_callable=AsyncMock) as persist,
     ):
         record = await start_run(
             RunCreateRequest(input=input_payload),
             "thread-1",
-            _make_start_run_request(peer),
+            _make_start_run_request(owner if same_worker else peer),
             idempotency_key="http-run:same",
         )
 
     assert record.run_id == first.run_id
     assert record.idempotency_reused is True
-    assert record.store_only is True
+    assert record.store_only is (not same_worker)
     assert record.task is None
     assert attached is False
+    persist.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_start_run_persists_new_admission_before_metadata_and_agent(_stub_app_config):
+    """Exercise the real admission worker rather than only its source ordering."""
+    manager = RunManager(store=MemoryRunStore(), worker_id="worker-new")
+    steps = []
+    snapshot = {"actor_user_id": "actor-verified", "storage_user_id": "shared-storage"}
+
+    async def persist(actual, run_id, created_at):
+        assert actual is snapshot
+        assert run_id and created_at
+        steps.append("provenance")
+
+    async def metadata(*args, **kwargs):
+        steps.append("metadata")
+
+    async def agent(*args, **kwargs):
+        steps.append("agent")
+
+    with (
+        patch.object(services, "resolve_agent_factory", return_value=object()),
+        patch.object(services, "capture_admission_snapshot", return_value=snapshot),
+        patch.object(services, "persist_new_run_receipt", side_effect=persist),
+        patch.object(services, "_ensure_thread_metadata", side_effect=metadata),
+        patch.object(services, "run_agent", side_effect=agent),
+    ):
+        record = await services.start_run(
+            RunCreateRequest(input={"messages": [{"role": "user", "content": "hello"}]}),
+            "thread-provenance",
+            _make_start_run_request(manager),
+        )
+        await asyncio.wait_for(record.task, timeout=2)
+
+    assert steps == ["provenance", "metadata", "agent"]
 
 
 @pytest.mark.anyio
