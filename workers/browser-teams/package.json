@@ -16,7 +16,7 @@
     "@browserbasehq/sdk": "2.16.0",
     "@browserbasehq/stagehand": "4.1.0",
     "@mastra/core": "1.72.0",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@types/node": "24.10.9",

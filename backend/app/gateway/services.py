@@ -39,6 +39,7 @@ from app.gateway.knowledge_scope_admission import admit_message_knowledge_scope
 from app.gateway.momentum_internal import is_momentum_staff
 from app.gateway.momobot_max import apply_run_policy as apply_momobot_max_run_policy
 from app.gateway.run_models import RunCreateRequest
+from app.gateway.run_provenance import capture_admission_snapshot, persist_new_run_receipt
 from app.gateway.utils import sanitize_log_param
 from app.mcp_tasks.errors import PermanentNotificationError
 from deerflow.agents.human_input import read_human_input_response
@@ -2224,6 +2225,11 @@ async def start_run(
             run_ctx = replace(run_ctx, client_project_access=ClientProjectReadAccess(project_id=selected_scope["project_id"], client_id=selected_scope["client_id"], authorize=authorize_client_project_read))
 
         async def run_after_metadata(record: RunRecord) -> None:
+            # Only NEW admissions reach this worker (the idempotent-reuse branch
+            # returns the original record first), so reused/legacy runs are never
+            # restamped. The drained off-loop write precedes metadata/inference;
+            # failure leaves provenance unknown without blocking product work.
+            await persist_new_run_receipt(provenance_snapshot, record.run_id, record.created_at)
             metadata_task = asyncio.create_task(
                 _ensure_thread_metadata(
                     run_ctx,
@@ -2361,6 +2367,15 @@ async def start_run(
                             run_record_config[section].pop(CLIENT_PROJECT_ACCESS_CONTEXT_KEY, None)
                             run_record_config[section].pop(STAFF_MEMORY_SCOPE_KEY, None)
                             run_record_config[section].pop(CLIENT_WORK_PLAN_ACCESS_CONTEXT_KEY, None)
+                # Frozen allowlisted primitives after the final authorization
+                # recheck; never derived from body/config/caller metadata.
+                provenance_snapshot = capture_admission_snapshot(
+                    request,
+                    content_user_id=content_user_id,
+                    thread_id=thread_id,
+                    portal_work_scope=portal_work_scope,
+                    runtime_context=config.get("context"),
+                )
                 record = await run_mgr.create_or_reject(
                     thread_id,
                     body.assistant_id,
