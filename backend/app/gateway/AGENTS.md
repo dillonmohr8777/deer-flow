@@ -2,6 +2,12 @@
 
 Read [upload](../../docs/UPLOAD_OWNERSHIP.md).
 
+`run_provenance.py`: each NEW admission writes one private 0700/0600 receipt
+(`<base_dir>/private/run-provenance/v1/<run_id>.json`) at the start of the run
+worker, from the authenticated actor/auth_source/org/storage/thread and validated
+portal scope only. Reused/legacy runs get none; failure means unknown. Keep no
+await between admission and task attachment.
+
 `wsl_bridge` is default-disabled, a separate diagnostic exchange, never an
 executor. Thread routes bind actual actor/org/thread and storage identity;
 only delegated internal callers or existing SSH operator CLI may ingest
