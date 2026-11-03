@@ -101,16 +101,27 @@ function buildTree(
   );
 }
 
+// The live sidecar thread makes the panel's stream hook load thread history
+// (LangGraph SDK, against happy-dom's http://localhost:3000 origin) and its
+// uploads hook load upload limits. Nothing serves those in a unit test, so the
+// outcome depended on the host: where `localhost` resolves to IPv4 only (Linux)
+// the refused connect surfaced as an unhandled SDK ConnectionError that failed
+// this file, while dual-stack hosts (macOS) retried quietly past teardown.
+// Answer the network deterministically: an empty history for the fresh
+// sidecar thread, and a 404 for anything else this gating test does not need.
 beforeEach(() => {
-  // The mock sidecar thread still loads history through the LangGraph SDK;
-  // answer it locally so no real request hits localhost:3000.
-  rs.spyOn(globalThis, "fetch").mockImplementation(
-    async () =>
-      new Response("[]", {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-  );
+  rs.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url =
+      input instanceof Request
+        ? input.url
+        : input instanceof URL
+          ? input.href
+          : input;
+    if (new URL(url, "http://localhost:3000").pathname.endsWith("/history")) {
+      return Response.json([]);
+    }
+    return Response.json({ detail: "not stubbed" }, { status: 404 });
+  });
 });
 
 afterEach(() => {
