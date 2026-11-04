@@ -1,4 +1,4 @@
-"""System-admin controls: user disable/enable/force-logout, role changes and the audit log.
+"""System-admin controls: user disable/enable/force-logout, role changes, SSO links and the audit log.
 
 Every endpoint here requires ``system_role == "admin"`` (``require_admin_user``,
 the same predicate ``managed_models`` and ``mcp`` config routes use) and is
@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.gateway.auth.models import SystemRole
 from app.gateway.authz import role_has_policy
@@ -132,6 +132,155 @@ async def set_user_role(user_id: str, body: SetUserRoleRequest, request: Request
         **_network_meta(request),
     )
     return AdminUserRoleResponse(id=str(user.id), email=user.email, system_role=user.system_role)
+
+
+# ── SSO identity link ───────────────────────────────────────────────────
+#
+# A user row holds at most one SSO identity (oauth_provider, oauth_id). These
+# routes are the fallback for links the sign-in path refuses to make on its own
+# (user_provisioning._link_refusal_reason): the refusal's audit event
+# (``auth.oauth.link_refused``) carries the subject to pass here.
+
+_SSO_IDENTITY_TAKEN_DETAIL = "That SSO identity is already linked to another account. Unlink it there first."
+_SSO_LINK_CHANGED_DETAIL = "This account's SSO link changed while you were editing it. Reload and try again."
+
+
+class SetUserOAuthRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str = Field(min_length=1, max_length=32, description="A configured auth.oidc.providers key, e.g. 'google'")
+    subject: str = Field(min_length=1, max_length=128, pattern=r"^[\x21-\x7e]+$", description="The provider's stable subject (``sub``) for the person")
+
+
+class AdminUserOAuthResponse(BaseModel):
+    id: str
+    email: str
+    oauth_provider: str | None
+    has_password: bool
+    token_version: int
+
+
+def _configured_oidc_providers() -> set[str]:
+    from deerflow.config.app_config import get_app_config
+
+    try:
+        return set(get_app_config().auth.oidc.providers)
+    except FileNotFoundError:
+        return set()
+
+
+def _oauth_response(user: Any) -> AdminUserOAuthResponse:
+    return AdminUserOAuthResponse(
+        id=str(user.id),
+        email=user.email,
+        oauth_provider=user.oauth_provider,
+        has_password=user.password_hash is not None,
+        token_version=user.token_version,
+    )
+
+
+async def _guard_sso_link_change(user_id: str, request: Request):
+    # Imported here: routers.auth is the larger module and imports far more.
+    from app.gateway.routers.auth import require_session_source
+
+    await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
+    # Linking a sign-in identity is credential management: only an
+    # interactive session may do it (the PAT-management / change-password rule).
+    require_session_source(request)
+    actor = await get_current_user_from_request(request)
+    if str(actor.id) == user_id:
+        # Unlinking your own SSO-only account would lock you out.
+        raise HTTPException(status_code=400, detail="You can't change your own sign-in link")
+    return actor
+
+
+@router.put("/users/{user_id}/oauth", response_model=AdminUserOAuthResponse)
+async def link_user_oauth(user_id: str, body: SetUserOAuthRequest, request: Request) -> AdminUserOAuthResponse:
+    """Link an SSO identity to a user, replacing any identity they already had.
+
+    Replacing an identity also ends the user's existing sessions, so a session
+    from the old identity cannot outlive the change. Only verify the subject
+    with the person first: whoever holds it can sign in as this user.
+    """
+    actor = await _guard_sso_link_change(user_id, request)
+    if body.provider not in _configured_oidc_providers():
+        raise HTTPException(status_code=400, detail=f"Unknown SSO provider: {body.provider}")
+    user = await _load_target_user(user_id)
+    provider = get_local_provider()
+    holder = await provider.get_user_by_oauth(body.provider, body.subject)
+    if holder is not None:
+        if str(holder.id) == str(user.id):
+            return _oauth_response(user)  # already linked: nothing to change or audit
+        raise HTTPException(status_code=409, detail=_SSO_IDENTITY_TAKEN_DETAIL)
+    previous_provider, previous_subject = user.oauth_provider, user.oauth_id
+    replacing = previous_provider is not None or previous_subject is not None
+    try:
+        updated = await provider.set_oauth_identity(
+            str(user.id),
+            body.provider,
+            body.subject,
+            expected_provider=previous_provider,
+            expected_oauth_id=previous_subject,
+            revoke_sessions=replacing,
+        )
+    except ValueError:
+        # Lost a race with a sign-in or another admin linking the same identity.
+        raise HTTPException(status_code=409, detail=_SSO_IDENTITY_TAKEN_DETAIL) from None
+    if updated is None:
+        # A sign-in or another admin changed the link (or the user is gone)
+        # since it was read; never overwrite what we did not see.
+        raise HTTPException(status_code=409, detail=_SSO_LINK_CHANGED_DETAIL)
+    user = updated
+    await record_audit_event(
+        request,
+        action="admin.user.oauth_linked",
+        outcome="success",
+        actor_user_id=str(actor.id),
+        target_type="user",
+        target_id=str(user.id),
+        details={"provider": body.provider, "subject": body.subject, "replaced_provider": previous_provider, "replaced_subject": previous_subject, "sessions_revoked": replacing},
+        **_network_meta(request),
+    )
+    return _oauth_response(user)
+
+
+@router.delete("/users/{user_id}/oauth", response_model=AdminUserOAuthResponse)
+async def unlink_user_oauth(user_id: str, request: Request) -> AdminUserOAuthResponse:
+    """Remove a user's SSO identity and end their existing sessions.
+
+    This is for relinking, not for locking someone out: while the provider
+    has ``link_existing_accounts`` on, the next verified SSO sign-in for the
+    account's email links again. To stop a person signing in, disable the
+    account. A user without a password (``has_password: false``) cannot sign
+    in until an identity is linked again.
+    """
+    actor = await _guard_sso_link_change(user_id, request)
+    user = await _load_target_user(user_id)
+    if user.oauth_provider is None and user.oauth_id is None:
+        raise HTTPException(status_code=409, detail="This account has no SSO identity linked")
+    previous_provider, previous_subject = user.oauth_provider, user.oauth_id
+    updated = await get_local_provider().set_oauth_identity(
+        str(user.id),
+        None,
+        None,
+        expected_provider=previous_provider,
+        expected_oauth_id=previous_subject,
+        revoke_sessions=True,
+    )
+    if updated is None:
+        raise HTTPException(status_code=409, detail=_SSO_LINK_CHANGED_DETAIL)
+    user = updated
+    await record_audit_event(
+        request,
+        action="admin.user.oauth_unlinked",
+        outcome="success",
+        actor_user_id=str(actor.id),
+        target_type="user",
+        target_id=str(user.id),
+        details={"provider": previous_provider, "subject": previous_subject, "sessions_revoked": True},
+        **_network_meta(request),
+    )
+    return _oauth_response(user)
 
 
 class AuditEventResponse(BaseModel):
