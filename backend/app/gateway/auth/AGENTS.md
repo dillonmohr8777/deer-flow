@@ -34,6 +34,24 @@ renders a button per enabled provider from `GET /api/v1/auth/providers`;
 adding Google is a config change plus the Cloud Console steps in
 `AUTH_DESIGN.md`, not a frontend change.
 
+Existing local accounts and SSO: by default an SSO login whose email matches
+a local account is a 409 (`ExistingAccountConflict`). `link_existing_accounts`
+(per provider, default false) links the subject onto that account instead,
+only when `_link_refusal_reason` in `user_provisioning.py` finds nothing:
+verified ASCII email, local self-registration closed, exactly one
+case-insensitive match, no SSO identity yet, not disabled, no MFA. The write
+is the conditional `link_oauth_identity_if_unlinked` UPDATE. Every refusal
+keeps the same public 409 detail; the callback audits `auth.oauth.linked` and
+`auth.oauth.link_refused` (reason plus subject). The registration and MFA
+lookups are lazy callables the callback passes; leaving them out refuses
+every link. The registration check sees only the current setting, so the
+flag is for deployments where no account was self-registered while
+registration was open. Admins fix the rest with `PUT`/`DELETE
+/api/admin/users/{id}/oauth` (interactive session, never self, audited,
+compare-and-set `set_oauth_identity`, `token_version` bumped in SQL when an
+identity is replaced or removed). Unlink is for relinking; disabling is how
+to lock someone out, since a verified sign-in relinks while the flag is on.
+
 Workspace invitations work with it too, as "sign in, then accept".
 `POST /invitations/inspect` says only `requires_login` (does the invited email
 already have an account); it never says how that account signs in. A new

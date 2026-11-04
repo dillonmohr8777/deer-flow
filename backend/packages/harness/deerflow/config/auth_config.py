@@ -39,6 +39,19 @@ class OIDCProviderConfig(BaseModel):
             "after their invitation is used."
         ),
     )
+    link_existing_accounts: bool = Field(
+        default=False,
+        description=(
+            "Let a first SSO login link to the one existing local account with the same email "
+            "(case-insensitive) instead of refusing with 409. Only when the provider reports the email "
+            "verified, auth.local.allow_registration is false (a self-registered account never proved it "
+            "owns its email), exactly one account has that email, and it is active, has no SSO identity "
+            "yet and no two-factor authentication. Every link and refusal is audited. The registration "
+            "check sees only the current setting: enable this only if no account on the deployment was "
+            "self-registered while registration was open (or after reviewing those accounts), and only "
+            "for a provider that verifies email ownership, such as Google."
+        ),
+    )
     require_verified_email: bool = Field(
         default=True,
         description="Reject authentication if the provider does not report the email as verified",

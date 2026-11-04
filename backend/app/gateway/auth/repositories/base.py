@@ -105,3 +105,60 @@ class UserRepository(ABC):
             User if found, None otherwise
         """
         raise NotImplementedError
+
+    @abstractmethod
+    async def count_users_by_email(self, email: str) -> int:
+        """Count accounts whose email matches ``email`` case-insensitively.
+
+        ``get_user_by_email`` resolves to the oldest row when a legacy
+        database holds two rows differing only in case; this lets a caller
+        that must act on exactly one account detect that ambiguity.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def link_oauth_identity_if_unlinked(self, user_id: str, provider: str, oauth_id: str) -> User | None:
+        """Atomically attach an SSO identity to an active account that has none.
+
+        The write only happens while the row still has no ``oauth_provider`` /
+        ``oauth_id`` and is not disabled, so a concurrent link, an admin
+        disable or a second callback cannot be overwritten.
+
+        Returns:
+            The updated User, or None when the row no longer qualifies.
+
+        Raises:
+            ValueError: If the (provider, oauth_id) pair is already linked to
+                another account.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def set_oauth_identity(
+        self,
+        user_id: str,
+        provider: str | None,
+        oauth_id: str | None,
+        *,
+        expected_provider: str | None,
+        expected_oauth_id: str | None,
+        revoke_sessions: bool,
+    ) -> User | None:
+        """Set or clear (both None) an account's SSO identity, compare-and-set.
+
+        The write only happens while the row still holds
+        ``expected_provider`` / ``expected_oauth_id`` (the identity the caller
+        read), so a sign-in that linked the account in between is never
+        silently overwritten. ``revoke_sessions`` also bumps ``token_version``
+        in the same statement, so sessions issued before the change stop
+        working.
+
+        Returns:
+            The updated User, or None when the row is gone or no longer holds
+            the expected identity.
+
+        Raises:
+            ValueError: If the (provider, oauth_id) pair is already linked to
+                another account.
+        """
+        raise NotImplementedError
