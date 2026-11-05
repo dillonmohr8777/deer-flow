@@ -16,6 +16,7 @@ export function AccountSettingsPage() {
   const { user, logout } = useAuth();
   const { t } = useI18n();
   const isSsoUser = Boolean(user?.oauth_provider);
+  const hasPassword = user?.has_password ?? !isSsoUser;
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -98,7 +99,7 @@ export function AccountSettingsPage() {
         </div>
       </SettingsSection>
 
-      {!isSsoUser ? (
+      {hasPassword ? (
         <SettingsSection
           title={t.settings.account.changePasswordTitle}
           description={t.settings.account.changePasswordDescription}
