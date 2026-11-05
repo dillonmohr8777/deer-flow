@@ -675,7 +675,7 @@ async def register(request: Request, response: Response, body: RegisterRequest):
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request, remember_me=body.remember_me)
 
-    return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role, oauth_provider=user.oauth_provider)
+    return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role, oauth_provider=user.oauth_provider, has_password=user.password_hash is not None)
 
 
 @router.post("/logout", response_model=MessageResponse)
@@ -784,6 +784,7 @@ async def get_me(request: Request):
         system_role=user.system_role,
         needs_setup=user.needs_setup,
         oauth_provider=user.oauth_provider,
+        has_password=user.password_hash is not None,
         permissions=permissions,
         mfa_enabled=mfa_enabled,
     )
@@ -1191,7 +1192,7 @@ async def initialize_admin(request: Request, response: Response, body: Initializ
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request, remember_me=body.remember_me)
 
-    return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role, oauth_provider=user.oauth_provider)
+    return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role, oauth_provider=user.oauth_provider, has_password=user.password_hash is not None)
 
 
 # ── OIDC / SSO Endpoints ────────────────────────────────────────────────

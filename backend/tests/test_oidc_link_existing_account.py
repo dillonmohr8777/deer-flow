@@ -153,6 +153,25 @@ async def test_verified_email_links_the_one_matching_password_account(db):
     assert again == {"user": again["user"], "created": False}
 
 
+async def test_linked_account_me_reports_has_password(db, monkeypatch):
+    await _password_account(db)
+    await _provision(db)
+    # Next sign-in resolves the linked account by its identity.
+    linked = (await _provision(db, config=_config(link_existing_accounts=False)))["user"]
+    assert linked.oauth_provider == "google"
+
+    async def _current_user(request):
+        return linked
+
+    monkeypatch.setattr(auth_router, "get_current_user_from_request", _current_user)
+    request = SimpleNamespace(state=SimpleNamespace(auth=SimpleNamespace(permissions=[])), app=SimpleNamespace(state=SimpleNamespace(mfa_repo=None)))
+
+    me = await auth_router.get_me(request)
+
+    assert me.oauth_provider == "google"
+    assert me.has_password is True
+
+
 async def test_link_matches_the_email_case_insensitively(db):
     account = await _password_account(db)
     result = await _provision(db, identity=_identity("Member@Example.COM"))

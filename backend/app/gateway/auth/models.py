@@ -49,6 +49,7 @@ class UserResponse(BaseModel):
     system_role: SystemRole
     needs_setup: bool = False
     oauth_provider: str | None = Field(None, description="OAuth/SSO provider ID if the user logged in via SSO (e.g. 'keycloak')")
+    has_password: bool = Field(default=True, description="Whether the account has a local password (password_hash is set). SSO-linked accounts can have both an oauth_provider and a password.")
     permissions: list[str] | None = Field(
         None,
         description=("Effective route permissions granted to this credential (RFC #4063 Phase 4). Only GET /api/v1/auth/me resolves them; credential-creation responses leave it None."),
