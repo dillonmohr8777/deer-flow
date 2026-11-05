@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Newspaper,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -33,7 +34,11 @@ import {
   useIsRoleUnresolved,
 } from "@/core/auth/AuthProvider";
 import { useBoardThreads } from "@/core/board";
-import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
+import {
+  useCrmEnabled,
+  useDeskEnabled,
+  useMomentumInternalEnabled,
+} from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 import { MOMO_DAILY_NAME, MOMO_DAILY_PATH } from "@/core/momo-daily";
 import { useBrandKit } from "@/core/momobot-brand";
@@ -127,6 +132,7 @@ export function WorkspaceNavChatList() {
     agentsEnabled && agents.some((agent) => agent.name === "momobot-max");
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
+  const { enabled: crmEnabled } = useCrmEnabled();
   const { data: brandKit } = useBrandKit();
   const { user } = useAuth();
   const isAdmin = user?.system_role === "admin";
@@ -241,6 +247,18 @@ export function WorkspaceNavChatList() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {/* The CRM at /crm/ is served by the deployment's reverse proxy, not by Next.js: keep this a plain anchor (a full page load); next/link would look for a client route that does not exist. */}
+          {crmEnabled && (
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild>
+                {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- /crm/ is not a Next.js route */}
+                <a className="text-muted-foreground" href="/crm/">
+                  <TrendingUp />
+                  <span>Growth</span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
         </SidebarMenu>
         <ExperienceModeSwitch />
       </SidebarGroup>

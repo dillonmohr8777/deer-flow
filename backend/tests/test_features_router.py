@@ -14,6 +14,11 @@ def _no_openai_key(monkeypatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _no_crm_flag(monkeypatch) -> None:
+    monkeypatch.delenv("MOMENTUM_CRM_ENABLED", raising=False)
+
+
 def _app_with_config(
     *,
     agents_api_enabled: bool,
@@ -85,6 +90,7 @@ def test_features_reports_agents_api_enabled() -> None:
         "desk": {"enabled": False},
         "momentum_internal": {"enabled": False},
         "openai_agents": {"configured": False},
+        "crm": False,
     }
 
 
@@ -109,6 +115,7 @@ def test_features_reports_agents_api_disabled() -> None:
         "desk": {"enabled": False},
         "momentum_internal": {"enabled": False},
         "openai_agents": {"configured": False},
+        "crm": False,
     }
 
 
@@ -117,6 +124,34 @@ def test_features_reports_openai_agents_configured_only_with_an_api_key(monkeypa
         assert client.get("/api/features").json()["openai_agents"] == {"configured": False}
         monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-real")
         assert client.get("/api/features").json()["openai_agents"] == {"configured": True}
+
+
+def test_features_reports_crm_off_when_the_env_flag_is_unset() -> None:
+    with TestClient(_app_with_config(agents_api_enabled=True)) as client:
+        assert client.get("/api/features").json()["crm"] is False
+
+
+@pytest.mark.parametrize("value", ["true", "True", "TRUE", "1", "yes", "YES", " true "])
+def test_features_reports_crm_on_for_true_values(monkeypatch, value: str) -> None:
+    monkeypatch.setenv("MOMENTUM_CRM_ENABLED", value)
+    with TestClient(_app_with_config(agents_api_enabled=True)) as client:
+        assert client.get("/api/features").json()["crm"] is True
+
+
+@pytest.mark.parametrize("value", ["", "0", "false", "False", "no", "off", "garbage", "2", "truthy"])
+def test_features_reports_crm_off_for_anything_but_a_true_value(monkeypatch, value: str) -> None:
+    monkeypatch.setenv("MOMENTUM_CRM_ENABLED", value)
+    with TestClient(_app_with_config(agents_api_enabled=True)) as client:
+        assert client.get("/api/features").json()["crm"] is False
+
+
+def test_features_reads_the_crm_flag_on_every_request(monkeypatch) -> None:
+    with TestClient(_app_with_config(agents_api_enabled=True)) as client:
+        assert client.get("/api/features").json()["crm"] is False
+        monkeypatch.setenv("MOMENTUM_CRM_ENABLED", "true")
+        assert client.get("/api/features").json()["crm"] is True
+        monkeypatch.setenv("MOMENTUM_CRM_ENABLED", "0")
+        assert client.get("/api/features").json()["crm"] is False
 
 
 def test_features_reports_conversation_references_when_the_tool_is_configured() -> None:

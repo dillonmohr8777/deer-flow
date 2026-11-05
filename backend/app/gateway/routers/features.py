@@ -7,6 +7,8 @@ request, while startup-scoped capabilities report the runtime that actually
 started.
 """
 
+import os
+
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
@@ -96,6 +98,7 @@ class FeaturesResponse(BaseModel):
     desk: DeskFeature
     momentum_internal: MomentumInternalFeature
     openai_agents: OpenAIAgentsFeature
+    crm: bool = Field(..., description="Whether the deployment serves the optional CRM at /crm/, so the Growth link is shown")
 
 
 @router.get(
@@ -142,7 +145,18 @@ async def list_features(request: Request, config: AppConfig = Depends(get_config
         # the same predicate.
         momentum_internal=MomentumInternalFeature(enabled=await is_momentum_staff(request, config)),
         openai_agents=OpenAIAgentsFeature(configured=openai_agents_configured()),
+        crm=_crm_enabled(),
     )
+
+
+def _crm_enabled() -> bool:
+    """Whether ``MOMENTUM_CRM_ENABLED`` is true/1/yes (any case); unset or anything else is off.
+
+    The CRM is served by the deployment's reverse proxy at ``/crm/``, not by
+    this Gateway, so the deployment says whether it is there. Read per request,
+    like ``openai_agents_configured``.
+    """
+    return os.environ.get("MOMENTUM_CRM_ENABLED", "").strip().lower() in {"1", "true", "yes"}
 
 
 def _knowledge_scope_selection_enabled(config: AppConfig) -> bool:
