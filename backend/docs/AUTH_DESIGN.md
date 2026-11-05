@@ -349,7 +349,7 @@ Google 走的是完全通用的 OIDC 流程（`app/gateway/auth/oidc.py`），�
 
 本仓库不会创建也不会持有任何真实的 Google OAuth 客户端凭据；以上步骤由部署者在自己的 Google Cloud 项目中完成。
 
-已有密码账号用 Google 登录：默认情况下，Google 返回的邮箱与已有本地账号相同时返回 409。provider 设置 `link_existing_accounts: true` 后，满足以下全部条件时会把 Google `sub` 关联到该账号并直接登录：Google 报告邮箱已验证、邮箱为 ASCII、`auth.local.allow_registration` 为 false（自助注册的账号从未证明拥有该邮箱）、按大小写不敏感恰好匹配一个账号、该账号尚无 SSO 身份、未被禁用、未开启 MFA。其他情况保持原有 409 和同一条提示。每次关联记 `auth.oauth.linked`，每次拒绝记 `auth.oauth.link_refused`（含原因和 subject）。管理员可用 `PUT /api/admin/users/{id}/oauth` 手动关联、`DELETE` 解除关联。
+已有密码账号用 Google 登录：默认情况下，Google 返回的邮箱与已有本地账号相同时返回 409。provider 设置 `link_existing_accounts: true` 后，满足以下全部条件时会把 Google `sub` 关联到该账号并直接登录：Google 报告邮箱已验证、邮箱为 ASCII、`auth.local.allow_registration` 为 false（自助注册的账号从未证明拥有该邮箱）、按大小写不敏感恰好匹配一个账号、该账号尚无 SSO 身份、未被禁用、未开启 MFA、且该账号不是通过接受非全局管理员签发的工作区邀请创建的（接受邀请无论 `allow_registration` 如何都会为受邀邮箱创建密码账号，邀请人持有令牌并可设置密码，因此邮箱归属未经证明；按邮箱加 `created_at` 等于邀请的 `consumed_at` 匹配，拒绝原因为 `invitation_account`）。其他情况保持原有 409 和同一条提示。每次关联记 `auth.oauth.linked`，每次拒绝记 `auth.oauth.link_refused`（含原因和 subject）。管理员可用 `PUT /api/admin/users/{id}/oauth` 手动关联、`DELETE` 解除关联。
 
 ## 平台信任接入
 

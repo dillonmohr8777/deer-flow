@@ -15,6 +15,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
+from sqlalchemy import func, select
 
 from app.gateway.auth.local_provider import LocalAuthProvider
 from app.gateway.auth.models import User
@@ -22,7 +23,9 @@ from app.gateway.auth.oidc import OIDCIdentity
 from app.gateway.authz import role_has_policy
 from deerflow.config.auth_config import OIDCProviderConfig
 from deerflow.persistence.engine import get_session_factory
+from deerflow.persistence.organizations.invitation import InvitationRow
 from deerflow.persistence.organizations.invitation_policy import pending_invitation_roles
+from deerflow.persistence.user.model import UserRow
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +60,46 @@ async def _identity_pending_invitation_roles(identity: OIDCIdentity, email: str)
         return set()
     async with session_factory() as session:
         return await pending_invitation_roles(session, email, now=datetime.now(UTC))
+
+
+def _as_utc(value: datetime) -> datetime:
+    # SQLite hands back naive datetimes; every stored value is UTC.
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+async def _created_by_non_admin_invitation(local_user: User, email: str) -> bool:
+    """Whether ``local_user`` was created by accepting an invitation a non-global-admin issued.
+
+    Invitation acceptance creates a password account for the invited address
+    whatever ``auth.local.allow_registration`` says, and the token goes to the
+    inviter, so the person who set the password may not own the email. Accept
+    stamps the new user's ``created_at`` with the same ``now`` as the
+    invitation's ``consumed_at``, which is what ties the two together.
+
+    Fails closed: with no database to check, or an issuer that cannot be
+    found, the account counts as invitation-created.
+    """
+    session_factory = get_session_factory()
+    if session_factory is None:
+        logger.warning("SSO account linking cannot check invitation-created accounts: no database is configured")
+        return True
+    created_at = _as_utc(local_user.created_at)
+    async with session_factory() as session:
+        invitations = (
+            await session.scalars(
+                select(InvitationRow).where(
+                    func.lower(InvitationRow.email) == email.strip().lower(),
+                    InvitationRow.consumed_at.is_not(None),
+                )
+            )
+        ).all()
+        for invitation in invitations:
+            if invitation.consumed_at is None or _as_utc(invitation.consumed_at) != created_at:
+                continue
+            issuer = await session.get(UserRow, invitation.created_by)
+            if issuer is None or issuer.system_role != "admin":
+                return True
+    return False
 
 
 async def _link_refusal_reason(
@@ -94,6 +137,11 @@ async def _link_refusal_reason(
         # Counts disabled rows too: with two rows for one email, which one the
         # person owns is not ours to guess.
         return "multiple_accounts"
+    if await _created_by_non_admin_invitation(local_user, email):
+        # Accepting a workspace invitation creates a password account for the
+        # invited email even with registration closed; the inviter holds the
+        # token and can set the password, so the email was never proven.
+        return "invitation_account"
     if mfa_enabled is None or await mfa_enabled(str(local_user.id)):
         # An SSO login skips the TOTP step, so linking would downgrade the
         # account's sign-in. An admin can still link it explicitly.
