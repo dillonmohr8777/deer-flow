@@ -349,6 +349,8 @@ Google 走的是完全通用的 OIDC 流程（`app/gateway/auth/oidc.py`），�
 
 本仓库不会创建也不会持有任何真实的 Google OAuth 客户端凭据；以上步骤由部署者在自己的 Google Cloud 项目中完成。
 
+已有密码账号用 Google 登录：默认情况下，Google 返回的邮箱与已有本地账号相同时返回 409。provider 设置 `link_existing_accounts: true` 后，满足以下全部条件时会把 Google `sub` 关联到该账号并直接登录：Google 报告邮箱已验证、邮箱为 ASCII、`auth.local.allow_registration` 为 false（自助注册的账号从未证明拥有该邮箱）、按大小写不敏感恰好匹配一个账号、该账号尚无 SSO 身份、未被禁用、未开启 MFA、且该账号不是通过接受非全局管理员签发的工作区邀请创建的（接受邀请无论 `allow_registration` 如何都会为受邀邮箱创建密码账号，邀请人持有令牌并可设置密码，因此邮箱归属未经证明；按邮箱加 `created_at` 等于邀请的 `consumed_at` 匹配，拒绝原因为 `invitation_account`）。其他情况保持原有 409 和同一条提示。每次关联记 `auth.oauth.linked`，每次拒绝记 `auth.oauth.link_refused`（含原因和 subject）。管理员可用 `PUT /api/admin/users/{id}/oauth` 手动关联、`DELETE` 解除关联。
+
 ## 平台信任接入
 
 **IM Channel 绑定** 与 **Internal Auth** 可归为同一大类：**平台信任模型**——DeerFlow 把渠道/合作平台视为已认证边界，由平台把“自己的用户”映射到 DeerFlow 的运行时身份，而不是让每个终端用户再走 DeerFlow 注册登录。
@@ -479,8 +481,8 @@ SOC 2 风格的最小控制集，为向外部客户开放做准备。
 
 - **`audit_events` 表**（append only，迁移 `0033_audit_events`）记录 `occurred_at` / `actor_user_id` / `organization_id` / `action`（形如 `auth.login.succeeded` 的点分字符串）/ `target_type` / `target_id` / `outcome`（`success` / `denied` / `failed`）/ `ip` / `user_agent` / `details`（JSON）。`AuditEventRepository.record()` 永远不向请求路径抛异常：写入失败只记日志，不能让被审计的动作本身失败。
 - `details` 在写入前统一走 `deerflow.persistence.audit_events.redact_audit_details`：键名包含 password / token / secret / cookie / api_key / authorization / credential / private_key / access_key / client_secret 等字样的值一律替换为 `"[redacted]"`。
-- 已接入 `record`（一行调用，见 `app.gateway.deps.record_audit_event`）的动作：本地登录成功 / 失败、登出、改密码、PAT 创建 / 撤销、邀请创建 / 接受 / 撤销（含成员角色变更）、MCP 配置写入、managed model 保存、managed subagent 增改删、run 取消、MFA 启用 / 关闭 / 验证失败 / 恢复码使用（`mfa.enabled` / `mfa.disabled` / `mfa.challenge.failed` / `mfa.recovery_code.used`），以及下面三个管理员动作本身。
-- **管理员操作**（`app/gateway/routers/admin.py`，`/api/admin/*`，`require_admin_user` 门禁，与 Models / MCP 配置同一断言）：`POST /users/{id}/disable`、`POST /users/{id}/enable`、`POST /users/{id}/force-logout`（复用已有的 `token_version` 机制），以及只读的 `GET /audit-events`（按 action 前缀 / actor / since / until 过滤，游标分页，跨组织，供系统管理员纵览整个部署）。
+- 已接入 `record`（一行调用，见 `app.gateway.deps.record_audit_event`）的动作：本地登录成功 / 失败、登出、改密码、PAT 创建 / 撤销、邀请创建 / 接受 / 撤销（含成员角色变更）、MCP 配置写入、managed model 保存、managed subagent 增改删、run 取消、MFA 启用 / 关闭 / 验证失败 / 恢复码使用（`mfa.enabled` / `mfa.disabled` / `mfa.challenge.failed` / `mfa.recovery_code.used`），SSO 身份关联 / 拒绝（`auth.oauth.linked` / `auth.oauth.link_refused`），以及下面的管理员动作本身。
+- **管理员操作**（`app/gateway/routers/admin.py`，`/api/admin/*`，`require_admin_user` 门禁，与 Models / MCP 配置同一断言）：`POST /users/{id}/disable`、`POST /users/{id}/enable`、`POST /users/{id}/force-logout`（复用已有的 `token_version` 机制）、`PUT` / `DELETE /users/{id}/oauth`（关联或解除 SSO 身份，仅限交互式会话、不能改自己，替换或解除已有身份时同时使旧会话失效），以及只读的 `GET /audit-events`（按 action 前缀 / actor / since / until 过滤，游标分页，跨组织，供系统管理员纵览整个部署）。
 - 共享工作区邀请默认角色已改为 `member`（最小权限：不能管理成员、不能改组织设置），邀请人可显式选择 `admin`；见 `app/gateway/routers/invitations.py` 的 `CreateInvitationRequest.role`。
 
 ## 已知边界

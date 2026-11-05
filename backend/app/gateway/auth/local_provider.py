@@ -108,6 +108,34 @@ class LocalAuthProvider(AuthProvider):
         """Get user by email."""
         return await self._repo.get_user_by_email(email)
 
+    async def count_users_by_email(self, email: str) -> int:
+        """Count accounts whose email matches case-insensitively."""
+        return await self._repo.count_users_by_email(email)
+
+    async def link_oauth_identity_if_unlinked(self, user_id: str, provider: str, oauth_id: str) -> User | None:
+        """Attach an SSO identity to an active account that has none (atomic)."""
+        return await self._repo.link_oauth_identity_if_unlinked(user_id, provider, oauth_id)
+
+    async def set_oauth_identity(
+        self,
+        user_id: str,
+        provider: str | None,
+        oauth_id: str | None,
+        *,
+        expected_provider: str | None,
+        expected_oauth_id: str | None,
+        revoke_sessions: bool,
+    ) -> User | None:
+        """Set or clear an account's SSO identity if it still holds the expected one (admin path)."""
+        return await self._repo.set_oauth_identity(
+            user_id,
+            provider,
+            oauth_id,
+            expected_provider=expected_provider,
+            expected_oauth_id=expected_oauth_id,
+            revoke_sessions=revoke_sessions,
+        )
+
     async def create_oauth_user(
         self,
         email: str,
