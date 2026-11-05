@@ -21,6 +21,8 @@ export interface FeaturesResponse {
   desk?: { enabled?: boolean };
   momentum_internal?: { enabled?: boolean };
   openai_agents?: { configured?: boolean };
+  /** True when the deployment serves an optional CRM at /crm/. */
+  crm?: boolean;
 }
 
 export interface ConversationReferencesCapability {
@@ -120,4 +122,17 @@ export function isOpenAIAgentsConfigured(features: FeaturesResponse): boolean {
 
 export async function fetchOpenAIAgentsConfigured(): Promise<boolean> {
   return isOpenAIAgentsConfigured(await fetchFeatures());
+}
+
+/**
+ * An optional CRM the deployment serves at /crm/ (its reverse proxy, not this
+ * app). Anything but an explicit true, including a Gateway that predates the
+ * field, reads as off, so the sidebar's Growth link stays hidden.
+ */
+export function isCrmEnabled(features: FeaturesResponse): boolean {
+  return features.crm === true;
+}
+
+export async function fetchCrmEnabled(): Promise<boolean> {
+  return isCrmEnabled(await fetchFeatures());
 }

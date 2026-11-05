@@ -20,6 +20,7 @@ const mocks = rs.hoisted(() => ({
   desk: false,
   internal: false,
   openai: false,
+  crm: false,
   agents: true,
   brandKit: true,
   agentsLoading: false,
@@ -50,6 +51,23 @@ rs.mock("@/core/features", () => ({
     configured: mocks.openai,
     isLoading: false,
   }),
+  useCrmEnabled: () => ({ enabled: mocks.crm, isLoading: false }),
+}));
+// Mark every anchor next/link renders so a test can tell a client-routed link
+// from a plain <a>.
+rs.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: string;
+    children: ReactNode;
+  }) => (
+    <a data-next-link="" href={href} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 rs.mock("@/core/agents/hooks", () => ({
   useAgentsApiEnabled: () => ({ enabled: mocks.agents, isLoading: false }),
@@ -109,6 +127,7 @@ beforeEach(() => {
   mocks.desk = false;
   mocks.internal = false;
   mocks.openai = false;
+  mocks.crm = false;
   mocks.agents = true;
   mocks.brandKit = true;
   mocks.agentsLoading = false;
@@ -252,6 +271,42 @@ describe("the internal sidebar", () => {
     const links = hrefs(container);
     expect(links).toContain("/workspace/chats/new");
     expect(links).toContain("/workspace/command-center");
+  });
+});
+
+describe("the Growth link", () => {
+  it.each(["admin", "exec", "user"] as const)(
+    "stays hidden for a %s while the CRM flag is off",
+    (role) => {
+      const { container } = renderAs(role, <WorkspaceNavChatList />);
+      expect(screen.queryByText("Growth")).toBeNull();
+      expect(hrefs(container)).not.toContain("/crm/");
+    },
+  );
+
+  it.each(["admin", "exec", "user"] as const)(
+    "is a plain link to /crm/ for a %s when the CRM flag is on",
+    (role) => {
+      mocks.crm = true;
+      const { container } = renderAs(role, <WorkspaceNavChatList />);
+      const growth = screen.getByText("Growth").closest("a");
+      expect(growth?.getAttribute("href")).toBe("/crm/");
+      // /crm/ is served by the reverse proxy, not by Next.js, so it must be a
+      // plain anchor (a full page load) and never a client-routed next/link.
+      expect(growth?.hasAttribute("data-next-link")).toBe(false);
+      expect(
+        container
+          .querySelector('a[href="/workspace/approvals"]')
+          ?.hasAttribute("data-next-link"),
+      ).toBe(true);
+    },
+  );
+
+  it("never shows a client the Growth link, even with the CRM flag on", () => {
+    mocks.crm = true;
+    const { container } = renderAs("client", <WorkspaceNavChatList />);
+    expect(screen.queryByText("Growth")).toBeNull();
+    expect(hrefs(container)).not.toContain("/crm/");
   });
 });
 

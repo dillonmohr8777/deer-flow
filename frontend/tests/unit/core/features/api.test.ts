@@ -6,6 +6,7 @@ rs.mock("@/core/config", () => ({ getBackendBaseURL: () => "" }));
 import { fetch } from "@/core/api/fetcher";
 import {
   fetchConversationReferencesCapability,
+  fetchCrmEnabled,
   fetchDeskEnabled,
   fetchSubagentBatchesCapability,
 } from "@/core/features/api";
@@ -116,5 +117,27 @@ describe("desk feature", () => {
       jsonResponse({ agents_api: { enabled: true }, desk: { enabled: "yes" } }),
     );
     await expect(fetchDeskEnabled()).resolves.toBe(false);
+  });
+});
+
+describe("crm feature", () => {
+  it("is on only for an explicit true from the gateway", async () => {
+    mockedFetch.mockResolvedValueOnce(
+      jsonResponse({ agents_api: { enabled: true }, crm: true }),
+    );
+    await expect(fetchCrmEnabled()).resolves.toBe(true);
+    mockedFetch.mockResolvedValueOnce(
+      jsonResponse({ agents_api: { enabled: true }, crm: false }),
+    );
+    await expect(fetchCrmEnabled()).resolves.toBe(false);
+    // A gateway that predates the flag never shows the Growth link.
+    mockedFetch.mockResolvedValueOnce(
+      jsonResponse({ agents_api: { enabled: true } }),
+    );
+    await expect(fetchCrmEnabled()).resolves.toBe(false);
+    mockedFetch.mockResolvedValueOnce(
+      jsonResponse({ agents_api: { enabled: true }, crm: "yes" }),
+    );
+    await expect(fetchCrmEnabled()).resolves.toBe(false);
   });
 });

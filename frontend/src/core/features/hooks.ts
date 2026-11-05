@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   fetchBrowserControlEnabled,
   fetchConversationReferencesCapability,
+  fetchCrmEnabled,
   fetchDeskEnabled,
   fetchKnowledgeBaseFeature,
   fetchMcpTasksEnabled,
@@ -119,4 +120,16 @@ export function useOpenAIAgentsConfigured() {
     retry: false,
   });
   return { configured: data ?? false, isLoading: isPending };
+}
+
+/** The sidebar's Growth link shows only when the deployment serves a CRM at /crm/. */
+export function useCrmEnabled() {
+  const { data, isPending } = useQuery({
+    queryKey: ["features", "crm"],
+    queryFn: fetchCrmEnabled,
+    staleTime: 0,
+    refetchOnMount: true,
+    retry: false,
+  });
+  return { enabled: data ?? false, isLoading: isPending };
 }
