@@ -1,5 +1,5 @@
 # Florida assisted living regulations (Rule Chapter 59A-36, F.A.C., and Part I of Chapter 429, F.S.): index
-Primary sources retrieved 2026-11-06T16:53:13+00:00. Text is verbatim from the official publisher; check the official URL before relying on it.
+Primary sources retrieved 2026-11-06T16:54:40+00:00. Text is verbatim from the official publisher; check the official URL before relying on it.
 
 - 59A-36.002 Definitions -> s/59A-36.002.md
 - 59A-36.003 Licensing and Change of Ownership -> s/59A-36.003.md

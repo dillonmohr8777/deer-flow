@@ -300,7 +300,7 @@ def build(state: str) -> dict:
 
 
 def slug(citation: str) -> str:
-    return re.sub(r"[^0-9A-Za-z.]+", "_", citation.replace(", F.A.C.", "").replace(", F.S.", "").replace("Rule ", "").replace("Section ", "")).strip("_")
+    return re.sub(r"[^0-9A-Za-z.-]+", "_", citation.replace(", F.A.C.", "").replace(", F.S.", "").replace("Rule ", "").replace("Section ", "")).strip("_")
 
 
 def write_mirror(corpus: dict) -> None:
