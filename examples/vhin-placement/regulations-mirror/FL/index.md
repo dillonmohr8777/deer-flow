@@ -1,0 +1,49 @@
+# Florida assisted living regulations (Rule Chapter 59A-36, F.A.C., and Part I of Chapter 429, F.S.): index
+Primary sources retrieved 2026-11-06T16:53:13+00:00. Text is verbatim from the official publisher; check the official URL before relying on it.
+
+- 59A-36.002 Definitions -> s/59A-36.002.md
+- 59A-36.003 Licensing and Change of Ownership -> s/59A-36.003.md
+- 59A-36.004 License Requirements -> s/59A-36.004.md
+- 59A-36.005 Inspection Responsibilities -> s/59A-36.005.md
+- 59A-36.006 Admission Procedures, Appropriateness of Placement and Continued Residency Criteria -> s/59A-36.006.md
+- 59A-36.007 Resident Care Standards -> s/59A-36.007.md
+- 59A-36.008 Medication Practices -> s/59A-36.008.md
+- 59A-36.009 Do Not Resuscitate Orders (DNROs) and Advance Directives -> s/59A-36.009.md
+- 59A-36.010 Staffing Standards -> s/59A-36.010.md
+- 59A-36.011 Staff Training Requirements and Competency Test -> s/59A-36.011.md
+- 59A-36.012 Food Service Standards -> s/59A-36.012.md
+- 59A-36.013 Fiscal Standards -> s/59A-36.013.md
+- 59A-36.014 Physical Plant Standards -> s/59A-36.014.md
+- 59A-36.015 Records -> s/59A-36.015.md
+- 59A-36.018 Resident Contracts -> s/59A-36.018.md
+- 59A-36.019 Emergency Management -> s/59A-36.019.md
+- 59A-36.020 Limited Mental Health -> s/59A-36.020.md
+- 59A-36.021 Extended Congregate Care Services -> s/59A-36.021.md
+- 59A-36.022 Limited Nursing Services -> s/59A-36.022.md
+- 59A-36.023 Administrative Enforcement -> s/59A-36.023.md
+- 59A-36.024 Waivers -> s/59A-36.024.md
+- 59A-36.025 Emergency Environmental Control for Assisted Living Facilities -> s/59A-36.025.md
+- 59A-36.027 ALF Core Training Provider Qualifications -> s/59A-36.027.md
+- 59A-36.028 ALF Minimum Core Training Curriculum Requirements -> s/59A-36.028.md
+- 59A-36.029 ALF Core Training Provider Initial Registration Process -> s/59A-36.029.md
+- 59A-36.030 Process for Maintaining ALF Core Training Provider Registration -> s/59A-36.030.md
+- 59A-36.031 Registered ALF Core Training Provider Responsibilities -> s/59A-36.031.md
+- 429.01 Short title; purpose -> s/429.01.md
+- 429.02 Definitions -> s/429.02.md
+- 429.04 Facilities to be licensed; exemptions -> s/429.04.md
+- 429.07 License required; fee -> s/429.07.md
+- 429.075 Limited mental health license -> s/429.075.md
+- 429.076 Memory care services license -> s/429.076.md
+- 429.08 Unlicensed facilities; referral of person for residency to unlicensed facility; penalties -> s/429.08.md
+- 429.11 Initial application for license -> s/429.11.md
+- 429.12 Sale or transfer of ownership of a facility -> s/429.12.md
+- 429.14 Administrative penalties -> s/429.14.md
+- 429.17 Expiration of license; renewal; conditional license -> s/429.17.md
+- 429.174 Background screening -> s/429.174.md
+- 429.176 Notice of change of administrator -> s/429.176.md
+- 429.177 Patients with Alzheimer’s disease or other related disorders; certain disclosures -> s/429.177.md
+- 429.178 Special care for persons with Alzheimer’s disease or other related disorders -> s/429.178.md
+- 429.18 Disposition of fees and administrative fines -> s/429.18.md
+- 429.19 Violations; imposition of administrative fines; grounds -> s/429.19.md
+- 429.195 Rebates prohibited; penalties -> s/429.195.md
+Next page: index.p2.md
