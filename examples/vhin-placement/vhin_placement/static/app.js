@@ -98,7 +98,7 @@ document.addEventListener("click", (event) => {
   const openCase = event.target.closest("[data-open-case]");
   if (openCase) { selected = openCase.dataset.openCase; render(); view("cases"); return; }
   const rate = event.target.closest("[data-rate]");
-  if (rate) { action(async () => { await api(`/communities/${rate.dataset.rate}/rating`,{stars:Number(rate.dataset.stars)}); }); return; }
+  if (rate) { action(async () => { await api(`/communities/${encodeURIComponent(rate.dataset.rate)}/rating`,{stars:Number(rate.dataset.stars)}); }); return; }
   const button = event.target.closest("[data-transition], [data-contact]");
   if (!button) return;
   action(async () => {
@@ -138,12 +138,14 @@ document.addEventListener("submit", (event) => {
       data.start_at = new Date(data.start_at).toISOString(); data.end_at = new Date(data.end_at).toISOString();
       await api("/tours",data);
     } else if (form.dataset.contract) {
-      await api(`/communities/${form.dataset.contract}/contract`,{status:data.status, agreement_ref:data.agreement_ref || null, human_confirmed:true});
+      await api(`/communities/${encodeURIComponent(form.dataset.contract)}/contract`,{status:data.status, agreement_ref:data.agreement_ref || null, human_confirmed:true});
     } else if (form.id === "tour-plan-form") {
-      await api("/tour-plans",{referral_id:selected, community_ids:[0,1,2].map((i) => data[`community_${i}`]).filter(Boolean), options:[0,1,2].map((i) => data[`option_${i}`]).filter(Boolean).map((v) => new Date(v).toISOString()), tour_minutes:Number(data.tour_minutes || 45), travel_minutes:Number(data.travel_minutes || 30)});
+      const open = (state.tour_plans || []).find((p) => p.referral_id === selected && ["awaiting_replies","needs_new_times"].includes(p.status));
+      if (open && !confirm("This replaces the family's open tour plan. Continue?")) return;
+      await api("/tour-plans",{...(open ? {supersedes_plan_id:open.id} : {}), referral_id:selected, community_ids:[0,1,2].map((i) => data[`community_${i}`]).filter(Boolean), options:[0,1,2].map((i) => data[`option_${i}`]).filter(Boolean).map((v) => new Date(v).toISOString()), tour_minutes:Number(data.tour_minutes || 45), travel_minutes:Number(data.travel_minutes || 30)});
     } else if (form.dataset.tourResponse) {
       const [party, communityId] = data.who.split(":");
-      await api(`/tour-plans/${form.dataset.tourResponse}/responses`,compact({party, community_id:communityId || "", response:data.response, option:data.option === "" ? "" : Number(data.option), source_ref:data.source_ref}));
+      await api(`/tour-plans/${encodeURIComponent(form.dataset.tourResponse)}/responses`,compact({party, community_id:communityId || "", response:data.response, option:data.option === "" ? "" : Number(data.option), source_ref:data.source_ref}));
     } else if (form.id === "placement-form") {
       data.referral_id = selected; data.terms = "50_50_day30_day60"; data.fee_cents = Math.round(Number(data.fee) * 100); delete data.fee;
       await api("/placements",data);
@@ -160,7 +162,7 @@ async function lookup(form) {
   $(target).innerHTML = '<p class="muted">Searching...</p>';
   try {
     if (form.id === "rules-form") {
-      const found = await api(`/regulations/FL/search?${new URLSearchParams({q:data.q, limit:"6"})}`);
+      const found = await api(`/regulations/FL/search?${new URLSearchParams({q:data.q, limit:"8"})}`);
       $(target).innerHTML = found.results.map(ruleCard).join("") || "<p>No matching rule text. Try plainer words, or ask Justin to check with AHCA.</p>";
     } else {
       const found = await api(`/recommendations?${new URLSearchParams(data)}`);

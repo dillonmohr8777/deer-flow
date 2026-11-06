@@ -177,6 +177,19 @@ def recommend(communities, city=None, services=(), category=None, max_miles=None
     return {"recommendations": picks, "fit_count": len(fits), "excluded_unknown_distance": excluded_unknown_distance}
 
 
+ACTIVE_PLAN = ("awaiting_replies", "needs_new_times")
+
+
+def block_family_in_plans(connection, referral_id):
+    """A stop or decline removes family drafts from open tour plans and closes them."""
+    for plan in records(connection, "tour_plan"):
+        if plan["referral_id"] == referral_id and plan["status"] in ACTIVE_PLAN:
+            plan["drafts"]["family"] = None
+            plan["parties"]["family"] = {"status": "blocked"}
+            plan["status"] = "family_contact_blocked"
+            put(connection, "tour_plan", plan)
+
+
 def require_confirmer(service, store, what):
     if store.user_id not in service.confirmers:
         raise HTTPException(403, f"Only the configured Justin account can {what}")
@@ -310,6 +323,7 @@ def build_router(service):
                 for draft in records(connection, "draft"):
                     if draft["referral_id"] == referral_id:
                         put(connection, "draft", {**draft, "status": "suppressed"})
+                block_family_in_plans(connection, referral_id)
             return referral_view(connection, put(connection, "referral", updated))
 
         return store.mutate(key, f"referral.update:{referral_id}", data, operation)
@@ -338,6 +352,8 @@ def build_router(service):
                 for kind, value in contacts(referral).items():
                     connection.execute("INSERT OR IGNORE INTO suppressed VALUES (?,?)", (kind, value))
             put(connection, "contact_event", create_record({**payload.model_dump(mode="json"), "referral_id": referral_id}))
+            if stopped or payload.event == "decline":
+                block_family_in_plans(connection, referral_id)
             for draft in records(connection, "draft"):
                 if draft["referral_id"] == referral_id:
                     draft["status"] = "suppressed" if stopped else "paused"
@@ -516,6 +532,18 @@ def build_router(service):
             communities = [get(connection, "community", community_id) for community_id in payload.community_ids]
             if any(option <= now() for option in payload.options):
                 raise HTTPException(422, "Every candidate start time must be in the future")
+            plans = [p for p in records(connection, "tour_plan") if p["referral_id"] == referral["id"] and p["status"] in ACTIVE_PLAN]
+            if any(p["id"] != payload.supersedes_plan_id for p in plans):
+                raise HTTPException(
+                    409, {"message": "This family already has an open tour plan; pass supersedes_plan_id to replace it", "plan_ids": [p["id"] for p in plans]}
+                )
+            if payload.supersedes_plan_id and not plans:
+                raise HTTPException(409, "The plan to supersede is not open for this family")
+            for old in plans:
+                put(connection, "tour_plan", {**old, "status": "superseded"})
+                for draft in records(connection, "draft"):
+                    if draft.get("tour_plan_id") == old["id"] and draft["status"] == "draft":
+                        put(connection, "draft", {**draft, "status": "superseded"})
             existing = records(connection, "tour")
             options = []
             for start in sorted(payload.options):
@@ -546,7 +574,7 @@ def build_router(service):
             plan = {
                 "id": plan_id,
                 **payload.model_dump(mode="json"),
-                "status": "awaiting_replies",
+                "status": "family_contact_blocked" if blocked else "awaiting_replies",
                 "options": usable,
                 "dropped_conflicting_options": len(options) - len(usable),
                 "parties": {
@@ -570,8 +598,15 @@ def build_router(service):
 
     @router.post("/tour-plans/{plan_id}/responses")
     def record_tour_response(plan_id: str, payload: TourResponse, store: Store = account, key: str = retry):
+        if payload.party == "justin":
+            require_confirmer(service, store, "record Justin's reply")
+
         def operation(connection):
             plan = get(connection, "tour_plan", plan_id)
+            referral = get(connection, "referral", plan["referral_id"])
+            if is_suppressed(connection, referral):
+                block_family_in_plans(connection, referral["id"])
+                raise HTTPException(409, "The family asked to stop contact; this tour plan is closed")
             if plan["status"] not in ("awaiting_replies", "needs_new_times"):
                 raise HTTPException(409, f"This tour plan is {plan['status']}")
             if payload.option is not None and payload.option > len(plan["options"]):
@@ -597,6 +632,10 @@ def build_router(service):
             everyone_accepted = all(p["status"] == "accepts" for p in parties)
             if everyone_accepted and len(agreed) == 1:
                 chosen = plan["options"][agreed.pop() - 1]
+                if referral["status"] not in ("Qualified", "Touring"):
+                    raise HTTPException(409, "The family's case is no longer qualified for tours")
+                if datetime.fromisoformat(chosen["stops"][0]["start_at"]) <= now():
+                    raise HTTPException(409, "The agreed time has passed; prepare a new plan with supersedes_plan_id")
                 tours = records(connection, "tour")
                 for stop in chosen["stops"]:
                     start, end = datetime.fromisoformat(stop["start_at"]), datetime.fromisoformat(stop["end_at"])

@@ -101,7 +101,20 @@ def justin_summary(referral: dict, options: list[dict], blocked: bool) -> str:
 
 
 def escape_ics(text: str) -> str:
+    text = "".join(" " if ord(c) < 32 and c != "\n" else c for c in text.replace("\r\n", "\n").replace("\r", "\n"))
     return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+
+def fold(line: str) -> str:
+    """RFC 5545 line folding at 75 octets."""
+    out, current = [], ""
+    for char in line:
+        if len((current + char).encode()) > 75:
+            out.append(current)
+            current = " " + char
+        else:
+            current += char
+    return "\r\n".join(out + [current])
 
 
 def tentative_calendar(plan_id: str, option_number: int, stops: list[dict], stamp: datetime) -> str:
@@ -123,4 +136,5 @@ def tentative_calendar(plan_id: str, option_number: int, stops: list[dict], stam
             "STATUS:TENTATIVE",
             "END:VEVENT",
         ]
-    return "\r\n".join(["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//VHIN placement//tour plan//EN", "METHOD:PUBLISH", *events, "END:VCALENDAR"]) + "\r\n"
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//VHIN placement//tour plan//EN", "METHOD:PUBLISH", *events, "END:VCALENDAR"]
+    return "\r\n".join(fold(line) for line in lines) + "\r\n"

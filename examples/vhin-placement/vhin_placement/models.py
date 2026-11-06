@@ -135,6 +135,7 @@ class TourPlan(Input):
     community_ids: Annotated[list[Text], Field(min_length=1, max_length=3)]
     options: Annotated[list[AwareDatetime], Field(min_length=1, max_length=3)]
     tour_minutes: Annotated[StrictInt, Field(ge=15, le=180)] = 45
+    supersedes_plan_id: Text | None = None
     travel_minutes: Annotated[StrictInt, Field(ge=0, le=120)] = 30
 
     @model_validator(mode="after")

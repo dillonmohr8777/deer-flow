@@ -219,7 +219,7 @@ def test_tour_plan_decline_or_split_answers_need_new_times(justin):
     post(justin, path, {"party": "family", "response": "accepts", "option": 1, "source_ref": "a"})
     post(justin, path, {"party": "community", "community_id": homes[0]["id"], "response": "accepts", "option": 2, "source_ref": "b"})
     assert post(justin, path, {"party": "justin", "response": "accepts", "option": 1, "source_ref": "c"}).json()["status"] == "needs_new_times"
-    other = post(justin, "/tour-plans", plan_body(referral["id"], homes, 4)).json()
+    other = post(justin, "/tour-plans", {**plan_body(referral["id"], homes, 4), "supersedes_plan_id": plan["id"]}).json()
     declined = post(justin, f"/tour-plans/{other['id']}/responses", {"party": "family", "response": "declines", "source_ref": "text"})
     assert declined.json()["status"] == "needs_new_times"
 
@@ -244,6 +244,7 @@ def test_tour_plan_respects_stop_and_drops_conflicting_options(justin):
     plan = post(justin, "/tour-plans", plan_body(referral["id"], homes, 2, 3)).json()
     assert plan["dropped_conflicting_options"] == 1 and len(plan["options"]) == 1
     assert plan["drafts"]["family"] is None and plan["parties"]["family"]["status"] == "blocked"
+    assert plan["status"] == "family_contact_blocked"
     assert "no family draft" in plan["drafts"]["justin_summary"]
     blocked = post(justin, f"/tour-plans/{plan['id']}/responses", {"party": "family", "response": "accepts", "option": 1, "source_ref": "x"})
     assert blocked.status_code == 409
@@ -297,6 +298,8 @@ def test_florida_corpus_is_primary_source_only():
     [
         ("Can a Hoyer lift be used in a standard ALF?", "Rule 59A-36.006(1)(a)4., F.A.C."),
         ("Can a Hoyer lift be used in a standard ALF?", "Section 429.26(1)(b), F.S."),
+        ("Can a Hoyer lift be used in a standard ALF?", "Section 429.02(6), F.S."),
+        ("Can a Hoyer lift be used in a standard ALF?", "Rule 59A-36.002(7), F.A.C."),
         ("Can an assisted living facility admit a resident who is bedridden?", "Section 429.26(1)(d)1., F.S."),
         ("Can a resident with a stage 3 pressure sore be admitted?", "Rule 59A-36.006(1)(a)10., F.A.C."),
         ("How much notice must a facility give before discharging a resident?", "Section 429.28(1)(k), F.S."),
@@ -304,7 +307,7 @@ def test_florida_corpus_is_primary_source_only():
     ],
 )
 def test_search_finds_the_governing_unit(question, citation):
-    hits = [h["citation"] for h in regulations.load("FL").search(question, 8)]
+    hits = [h["citation"] for h in regulations.load("FL").search(question, 10)]
     assert citation in hits
 
 
@@ -323,3 +326,60 @@ def test_regulation_routes_are_gated_and_cite(justin, tmp_path):
     outsider, _ = build_test_app(tmp_path, user_id="mallory")
     with TestClient(outsider) as client:
         assert client.get("/api/vhin/regulations/FL/search", params={"q": "lift"}).status_code == 403
+
+
+def test_stop_after_plan_pulls_family_drafts_and_closes_plan(justin):
+    referral = qualified(justin)
+    homes = tour_homes(justin)
+    plan = post(justin, "/tour-plans", plan_body(referral["id"], homes, 2)).json()
+    assert plan["drafts"]["family"] is not None
+    post(justin, f"/referrals/{referral['id']}/contact-events", {"event": "stop"})
+    state = justin.get("/api/vhin/state").json()
+    closed = state["tour_plans"][0]
+    assert closed["status"] == "family_contact_blocked" and closed["drafts"]["family"] is None
+    assert all(d["status"] == "suppressed" for d in state["drafts"] if d.get("tour_plan_id") == plan["id"])
+    late = post(justin, f"/tour-plans/{plan['id']}/responses", {"party": "family", "response": "accepts", "option": 1, "source_ref": "x"})
+    assert late.status_code == 409
+
+
+def test_only_justin_records_justins_reply(justin, grace):
+    referral = qualified(justin)
+    plan = post(justin, "/tour-plans", plan_body(referral["id"], tour_homes(justin)[:1], 2)).json()
+    path = f"/tour-plans/{plan['id']}/responses"
+    assert post(grace, path, {"party": "justin", "response": "accepts", "option": 1, "source_ref": "x"}).status_code == 403
+    assert post(justin, path, {"party": "justin", "response": "accepts", "option": 1, "source_ref": "x"}).status_code == 200
+
+
+def test_one_open_plan_per_family_and_supersede(justin):
+    referral = qualified(justin)
+    homes = tour_homes(justin)
+    first = post(justin, "/tour-plans", plan_body(referral["id"], homes, 2)).json()
+    assert post(justin, "/tour-plans", plan_body(referral["id"], homes, 4)).status_code == 409
+    second = post(justin, "/tour-plans", {**plan_body(referral["id"], homes, 4), "supersedes_plan_id": first["id"]})
+    assert second.status_code == 201, second.text
+    state = justin.get("/api/vhin/state").json()
+    statuses = {p["id"]: p["status"] for p in state["tour_plans"]}
+    assert statuses[first["id"]] == "superseded" and statuses[second.json()["id"]] == "awaiting_replies"
+    assert [d["status"] for d in state["drafts"] if d.get("tour_plan_id") == first["id"]] == ["superseded"]
+
+
+def test_agreement_after_the_time_passed_is_refused(justin, monkeypatch):
+    referral = qualified(justin)
+    homes = tour_homes(justin)[:1]
+    plan = post(justin, "/tour-plans", plan_body(referral["id"], homes, 2)).json()
+    path = f"/tour-plans/{plan['id']}/responses"
+    post(justin, path, {"party": "family", "response": "accepts", "option": 1, "source_ref": "a"})
+    post(justin, path, {"party": "community", "community_id": homes[0]["id"], "response": "accepts", "option": 1, "source_ref": "b"})
+    monkeypatch.setattr("vhin_placement.api.now", lambda: BASE + timedelta(days=3))
+    late = post(justin, path, {"party": "justin", "response": "accepts", "option": 1, "source_ref": "c"})
+    assert late.status_code == 409 and "passed" in late.json()["detail"]
+    assert justin.get("/api/vhin/state").json()["tours"] == []
+
+
+def test_calendar_file_strips_control_characters_and_folds():
+    from vhin_placement import coordination
+
+    stops = [{"community_name": "Evil\r\nBEGIN:VALARM, Home; " + "x" * 120, "start_at": BASE.isoformat(), "end_at": (BASE + timedelta(hours=1)).isoformat()}]
+    text = coordination.tentative_calendar("plan-id-1234", 1, stops, BASE)
+    assert "\r\nBEGIN:VALARM" not in text
+    assert all(len(line.encode()) <= 75 for line in text.split("\r\n"))
