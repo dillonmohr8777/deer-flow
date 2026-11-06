@@ -597,6 +597,24 @@ async def test_weekly_report_published_exactly_once_and_survives_reopen(org_worl
         assert (await reopened.get(path, headers=alpha)).status_code == 403
 
 
+async def test_message_authors_read_as_client_for_staff_and_you_for_the_client(org_world):  # noqa: F811
+    await _seed(org_world)
+    staff, alpha = (auth_headers(user, ORG_S) for user in (USER_A, USER_B))
+    async with _http(_app(org_world)) as client:
+        created = await _compose(client, alpha)
+        path = f"{BASE}/{created['id']}"
+        draft = (await client.post(path + "/draft", headers=staff, json={"expected_revision": 0, "body": "Synthetic reply"})).json()
+        authors = lambda headers: [m["author"] for m in client_json[headers]["messages"]]  # noqa: E731
+        client_json = {"staff": (await client.get(path, headers=staff)).json(), "client": (await client.get(path, headers=alpha)).json()}
+        assert authors("staff") == ["Client", "Internal draft"]
+        assert authors("client") == ["You"]
+        published = await client.post(path + "/publish", headers=staff, json={"approval_id": draft["approval_id"], "expected_revision": 1})
+        assert published.status_code == 200, published.text
+        client_json = {"staff": (await client.get(path, headers=staff)).json(), "client": (await client.get(path, headers=alpha)).json()}
+        assert authors("staff") == ["Client", "Internal draft", "MomoBot (published reply)"]
+        assert authors("client") == ["You", "MomoBot"]
+
+
 async def test_duplicate_deliverable_names_rejected_before_draft_revision_changes(org_world):  # noqa: F811
     await _seed(org_world)
     async with _http(_app(org_world)) as client:
