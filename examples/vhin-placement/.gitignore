@@ -1,0 +1,4 @@
+# Built regulation corpora and their page mirrors are bulk data: build them with
+# scripts/build_regulations.py into a deployment data mount, never commit them.
+vhin_placement/regulations_data/*/corpus.json
+regulations-mirror/
