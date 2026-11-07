@@ -13,6 +13,8 @@ services:
       - /opt/momobot/data/regulations/mirror:/app/frontend/public/regulations:ro
   gateway:
     environment:
+      # Explicit origins only, for TLS proxies whose upstream scheme is HTTP.
+      - GATEWAY_CORS_ORIGINS=${GATEWAY_CORS_ORIGINS:-}
       - MOMO_ADMISSION_DIR=/var/momo-admission
       - MOMO_LOBBY_NOTES_DIR=/var/momo-lobby-notes
       # Per-person onboarding profiles (<email>.md), built outside Git. Empty folder = no pre-fill.

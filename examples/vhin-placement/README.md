@@ -8,6 +8,10 @@ create accounts, memberships, calendar connections, message senders, or charges.
 The host admits only the extension's reviewed read and manual-record paths for
 client accounts. An enabled plugin still checks the exact active organization,
 configured user allowlist, session authentication, CSRF and owner authority.
+If a trusted TLS proxy loses its original scheme, set `GATEWAY_CORS_ORIGINS` in
+the operator environment to the exact public HTTPS origin before release. The
+production overlay passes it through; an empty value adds no origins and `*`
+does not authorize browser auth. Never use a wildcard to repair login.
 
 The implementation is deliberately manual and draft-only. Intake can be recorded
 and reconciled, community availability can be human-verified, and tours can be

@@ -121,3 +121,23 @@ def test_coordinator_cannot_assert_owner_authority_through_host(host):
 )
 def test_placement_unknown_and_external_side_effect_routes_stay_closed(method, path):
     assert not is_client_allowed_route(method, path)
+
+
+def test_operator_public_origin_is_explicit_and_not_a_wildcard(monkeypatch):
+    import yaml
+    from starlette.requests import Request
+
+    from app.gateway.csrf_middleware import is_allowed_auth_origin
+
+    root = Path(__file__).resolve().parents[2]
+    overlay = yaml.safe_load((root / "deploy/momentum/ec2/compose.ec2.yaml").read_text())
+    assert "GATEWAY_CORS_ORIGINS=${GATEWAY_CORS_ORIGINS:-}" in overlay["services"]["gateway"]["environment"]
+
+    def auth_request(origin):
+        return Request({"type": "http", "method": "POST", "scheme": "http", "path": "/api/v1/auth/login/local", "query_string": b"", "server": ("gateway", 8001), "headers": [(b"host", b"gateway:8001"), (b"origin", origin.encode())]})
+
+    monkeypatch.setenv("GATEWAY_CORS_ORIGINS", "https://public.example.test")
+    assert is_allowed_auth_origin(auth_request("https://public.example.test"))
+    assert not is_allowed_auth_origin(auth_request("https://foreign.example.test"))
+    monkeypatch.setenv("GATEWAY_CORS_ORIGINS", "*")
+    assert not is_allowed_auth_origin(auth_request("https://public.example.test"))
