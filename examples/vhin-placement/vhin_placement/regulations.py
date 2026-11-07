@@ -147,12 +147,17 @@ def load(state: str) -> Corpus | None:
     state = state.upper()
     if not re.fullmatch(r"[A-Z]{2}", state):
         return None
-    return _load(str(data_dir() / state / "corpus.json"))
+    file = data_dir() / state / "corpus.json"
+    if not file.is_file():
+        return None  # missing corpora are not cached; they can be built later
+    try:
+        info = file.stat()
+    except OSError:
+        return None
+    return _load(str(file), info.st_mtime_ns, info.st_size)
 
 
 @cache
-def _load(path: str) -> Corpus | None:
-    file = Path(path)
-    if not file.is_file():
-        return None
-    return Corpus(json.loads(file.read_text(encoding="utf-8")))
+def _load(path: str, _mtime_ns: int, _size: int) -> Corpus:
+    return Corpus(json.loads(Path(path).read_text(encoding="utf-8")))
+

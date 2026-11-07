@@ -300,7 +300,9 @@ def build(state: str, out: Path = DATA, mirror: Path = MIRROR) -> dict:
     }
     target = out / state / "corpus.json"
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(corpus, indent=1, ensure_ascii=False) + "\n")
+    temporary = target.with_name(target.name + ".tmp")
+    temporary.write_text(json.dumps(corpus, indent=1, ensure_ascii=False) + "\n")
+    temporary.replace(target)  # atomic: readers never see a half-written corpus
     write_mirror(corpus, mirror)
     return corpus
 
@@ -339,7 +341,7 @@ def write_mirror(corpus: dict, mirror: Path = MIRROR) -> None:
         for key, group in top.items():
             first = group[0]
             name = slug(first["citation"]) if key != "intro" else f"{section}_intro"
-            lines.append(f"- {first['citation'] if key != 'intro' else section + ' (opening text)'}: {first['text'][:90]} -> s/{name}.md")
+            lines.append(f"- {first['citation'] if key != 'intro' else section + ' (opening text)'}: {first['text'][:90]} -> {name}.md")
             body = [
                 f"# {first['citation'] if key != 'intro' else section + ' opening text'}",
                 f"Section: {section} {first['section_title']}",
@@ -356,7 +358,12 @@ def write_paged(folder: Path, name: str, lines: list[str]) -> None:
     pages, current = [], []
     for line in lines:
         while len(line) > PAGE_LIMIT:
+            if current:
+                pages.append(current)
+                current = []
             cut = line.rfind(" ", 0, PAGE_LIMIT - 200)
+            if cut <= 0:
+                cut = PAGE_LIMIT - 200
             current.append(line[:cut])
             pages.append(current)
             current, line = [], "(continued) " + line[cut + 1 :]
