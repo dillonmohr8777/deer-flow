@@ -184,12 +184,17 @@ ACTIVE_PLAN = ("awaiting_replies", "needs_new_times")
 
 
 def block_family_in_plans(connection, referral_id):
-    """A stop or decline removes family drafts from open tour plans and closes them."""
+    """A stop or decline removes family drafts from every plan and closes open ones."""
     for plan in records(connection, "tour_plan"):
-        if plan["referral_id"] == referral_id and plan["status"] in ACTIVE_PLAN:
-            plan["drafts"]["family"] = None
+        if plan["referral_id"] != referral_id:
+            continue
+        changed = plan["drafts"]["family"] is not None
+        plan["drafts"]["family"] = None
+        if plan["status"] in ACTIVE_PLAN:
             plan["parties"]["family"] = {"status": "blocked"}
             plan["status"] = "family_contact_blocked"
+            changed = True
+        if changed:
             put(connection, "tour_plan", plan)
 
 

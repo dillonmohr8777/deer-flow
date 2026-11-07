@@ -17,8 +17,8 @@
       "publisher": "The Florida Legislature, leg.state.fl.us",
       "parser": "fl_statute_section_html",
       "edition": "2026 Florida Statutes",
-      "index_url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0429/0429PartIContentsIndex.html",
-      "section_url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0429/Sections/{file}.html"
+      "index_url": "https://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0429/0429PartIContentsIndex.html",
+      "section_url": "https://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0429/Sections/{file}.html"
     }
   ],
   "lay_terms": {
