@@ -8,6 +8,10 @@ DeerFlow is a LangGraph-based AI super agent with sandbox execution, persistent 
 
 ## Architecture
 
+Customer reference downloads can be enabled for exact existing account,
+workspace, project and immutable document hashes without opening staff project
+permissions. See [scoped reference reads](docs/CLIENT_REFERENCE_READS.md).
+
 ```
                         ┌──────────────────────────────────────┐
                         │          Nginx (Port 2026)           │

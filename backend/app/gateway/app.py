@@ -1419,6 +1419,9 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(projects.router)
     # Project document shelf API is mounted at /api/projects/{id}/documents
     app.include_router(project_documents.router)
+    from app.gateway.routers import client_references
+
+    app.include_router(client_references.router)
     # Project conversation-files view is mounted at /api/projects/{id}/thread-files
     app.include_router(project_thread_files.router)
     # Trash API is mounted at /api/trash
