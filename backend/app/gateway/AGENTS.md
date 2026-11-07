@@ -88,6 +88,13 @@ is stripped from client writes.
 
 Client runtime, roster and project-link policy: [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md).
 
+`client_references.py` is a separate, default-off reference projection. Explicit
+operator bindings require session actor plus active organization, exact project
+and document IDs and SHA-256s. Preserve original project RBAC, scoped repositories,
+hash-verified original attachment bytes, bounded off-loop reads, no-store/nosniff,
+and no writes, internal project fields, histories or chats. Private bindings never
+enter Git. See [reference policy](../../docs/CLIENT_REFERENCE_READS.md).
+
 Localhost persistence deliberately reads the direct request `Host` and ignores `Forwarded` / `X-Forwarded-Host`. Scheme and auth-origin reconstruction still consume forwarding headers. The bundled nginx sets `X-Forwarded-Proto`, but preserves an upstream HTTPS value and does not overwrite every forwarded header, so the outer trusted proxy must replace or strip client-supplied forwarding headers before traffic reaches DeerFlow.
 
 Standalone LangGraph Studio auth (the `StudioUser` principal, assistant owner filters, and startup persistence repair) is in [LangGraph Studio auth](../../docs/LANGGRAPH_STUDIO.md).

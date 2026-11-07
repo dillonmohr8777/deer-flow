@@ -48,6 +48,12 @@ _RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
         # ``check`` is a management probe and stays closed.
         (_GET, r"^/api/agents$"),
         (_GET, rf"^/api/agents/(?!check$){_ID}$"),
+        # Explicit, operator-approved reference projections. Each router read
+        # rechecks actor/org/project/document hashes; staff project RBAC stays.
+        (_GET, r"^/api/client-references/projects$"),
+        (_GET, rf"^/api/client-references/projects/{_ID}$"),
+        (_GET, rf"^/api/client-references/projects/{_ID}/documents$"),
+        (_GET, rf"^/api/client-references/projects/{_ID}/documents/{_ID}/content$"),
         # Chat: threads, runs, files, follow-ups, feedback. Deliberately absent:
         # run events and workspace-changes (tool and subagent internals, file
         # paths) and token-usage (model names, per-caller breakdown).
