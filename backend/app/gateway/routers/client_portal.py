@@ -325,10 +325,21 @@ async def invite_customer_workspace(body: CustomerWorkspaceInvitation, request: 
     return {"workspace_id": target.id, "client_id": body.client_id, **created.model_dump()}
 
 
-def _message(message):
+# compose() stores staff-created requests as author_kind="client", so client-authored is not established.
+_STAFF_AUTHORS = {"client": "Client request", "momo": "Internal draft"}
+
+
+def _message(message, staff=False):
+    # Clients read their own messages as "You"; staff get neutral labels plus publication state.
+    if not staff:
+        author = "MomoBot" if message.author_kind == "owner" else "You"
+    elif message.author_kind == "owner":
+        author = "MomoBot (published reply)" if message.visibility == "published" else "MomoBot (internal)"
+    else:
+        author = _STAFF_AUTHORS.get(message.author_kind, message.author_kind)
     return {
         "id": message.id,
-        "author": "MomoBot" if message.author_kind == "owner" else "You",
+        "author": author,
         "body": message.body,
         "created_at": message.created_at.isoformat(),
         "attachments": [{"name": a["name"], "sha256": a["sha256"]} for a in message.attachments or []],
@@ -421,7 +432,7 @@ async def detail(thread_id: ThreadId, request: Request):
             stmt = stmt.where(BoardMessageRow.visibility == "published")
         messages = (await session.execute(stmt.order_by(BoardMessageRow.created_at, BoardMessageRow.id))).scalars().all()
     out = await _summary(thread, portal, not external, request)
-    out.update(messages=[_message(m) for m in messages], can_review=admin, can_draft=not external)
+    out.update(messages=[_message(m, not external) for m in messages], can_review=admin, can_draft=not external)
     if not external:
         draft = next((m for m in messages if m.id == portal.draft_id), None)
         out["draft"] = {"body": draft.body, "attachments": draft.attachments or []} if draft else None

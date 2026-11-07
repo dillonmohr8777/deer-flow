@@ -307,6 +307,13 @@ function InboxSession({
   };
   const current = detail.data;
   const busy = action.isPending;
+  const conversationRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    // Below the lg breakpoint the conversation stacks under the request list; bring it into view.
+    if (selected && window.matchMedia("(max-width: 1023px)").matches) {
+      conversationRef.current?.scrollIntoView({ block: "start" });
+    }
+  }, [selected]);
   return (
     <WorkspaceContainer>
       <WorkspaceHeader />
@@ -460,24 +467,8 @@ function InboxSession({
               )}
             </aside>
             <div className="min-w-0 space-y-5">
-              {roster?.can_draft && !composing && contextClientId && (
-                <ClientContextPanel
-                  data={selected ? context.data : clientRequests.data}
-                  loading={
-                    selected ? context.isFetching : clientRequests.isFetching
-                  }
-                  error={selected ? context.error : clientRequests.error}
-                  busy={busy}
-                  onSelect={(id) => {
-                    setSelected(id);
-                    setError(null);
-                  }}
-                  workChatId={detail.data?.work_chat_id}
-                  workRunId={detail.data?.work_run_id}
-                  approvalId={detail.data?.approval_id}
-                />
-              )}
               <section
+                ref={conversationRef}
                 className="min-w-0 rounded border p-4"
                 aria-label="Conversation"
               >
@@ -644,23 +635,6 @@ function InboxSession({
                           </li>
                         ))}
                       </ol>
-                      {current.can_draft && workspace && userId && (
-                        <InternalWorkPlan
-                          userId={userId}
-                          workspace={workspace}
-                          clientId={current.client_id}
-                          requestId={current.id}
-                          requests={
-                            context.data?.client.id === current.client_id &&
-                            context.data.current_request?.id === current.id
-                              ? context.data.requests.items
-                              : []
-                          }
-                          requestsLoading={context.isFetching}
-                          requestsError={context.error?.message}
-                          hasMoreRequests={context.data?.requests.has_more}
-                        />
-                      )}
                       {current.can_draft && !current.publish_receipt && (
                         <div className="mt-6 space-y-3 border-t pt-4">
                           <h3 className="font-medium">Internal reply draft</h3>
@@ -790,6 +764,23 @@ function InboxSession({
                           )}
                         </div>
                       )}
+                      {current.can_draft && workspace && userId && (
+                        <InternalWorkPlan
+                          userId={userId}
+                          workspace={workspace}
+                          clientId={current.client_id}
+                          requestId={current.id}
+                          requests={
+                            context.data?.client.id === current.client_id &&
+                            context.data.current_request?.id === current.id
+                              ? context.data.requests.items
+                              : []
+                          }
+                          requestsLoading={context.isFetching}
+                          requestsError={context.error?.message}
+                          hasMoreRequests={context.data?.requests.has_more}
+                        />
+                      )}
                       {current.publish_receipt && (
                         <p className="text-muted-foreground mt-5 text-xs break-all">
                           Published in this portal · Receipt{" "}
@@ -800,6 +791,23 @@ function InboxSession({
                   )
                 )}
               </section>
+              {roster?.can_draft && !composing && contextClientId && (
+                <ClientContextPanel
+                  data={selected ? context.data : clientRequests.data}
+                  loading={
+                    selected ? context.isFetching : clientRequests.isFetching
+                  }
+                  error={selected ? context.error : clientRequests.error}
+                  busy={busy}
+                  onSelect={(id) => {
+                    setSelected(id);
+                    setError(null);
+                  }}
+                  workChatId={detail.data?.work_chat_id}
+                  workRunId={detail.data?.work_run_id}
+                  approvalId={detail.data?.approval_id}
+                />
+              )}
             </div>
           </div>
         </main>

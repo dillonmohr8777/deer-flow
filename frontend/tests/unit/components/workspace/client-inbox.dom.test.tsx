@@ -364,6 +364,23 @@ describe("ClientInbox scoped client context", () => {
     );
   });
 
+  it("puts the reply draft before the work plan and the client context", async () => {
+    mount();
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: /Alpha report/ }));
+    const save = await screen.findByRole("button", {
+      name: "Save draft for review",
+    });
+    const panel = await screen.findByLabelText("Client context");
+    const follows = (later: Element) =>
+      Boolean(
+        save.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    expect(follows(panel)).toBe(true);
+    const plan = screen.queryByRole("button", { name: "Save work plan" });
+    if (plan) expect(follows(plan)).toBe(true);
+  });
+
   it("reads staff context for the selected request with the workspace fence and renders timeline as text", async () => {
     mount();
     await ready();
