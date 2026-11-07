@@ -202,6 +202,15 @@ def overlaps(start, end, existing_start, existing_end):
     return start < datetime.fromisoformat(existing_end) and end > datetime.fromisoformat(existing_start)
 
 
+def itinerary_span(stops):
+    """The whole occupied block: from the first stop through the last, including internal travel."""
+    return datetime.fromisoformat(stops[0]["start_at"]), datetime.fromisoformat(stops[-1]["end_at"])
+
+
+def reserved_end(tour):
+    return tour.get("reserved_end_at") or tour["end_at"]
+
+
 def duplicate_ids(connection, candidate, exclude=None):
     values = contacts(candidate)
     return [
@@ -416,7 +425,7 @@ def build_router(service):
             if payload.start_at <= now():
                 raise HTTPException(422, "Propose a future tour")
             for existing in records(connection, "tour"):
-                if overlaps(payload.start_at, payload.end_at, existing["start_at"], existing["end_at"]):
+                if overlaps(payload.start_at, payload.end_at, existing["start_at"], reserved_end(existing)):
                     raise HTTPException(409, {"message": "Conflicts with an existing tour proposal", "tour_id": existing["id"]})
             data = {
                 **payload.model_dump(mode="json"),
@@ -551,12 +560,8 @@ def build_router(service):
             options = []
             for start in sorted(payload.options):
                 stops = coordination.itinerary(start, communities, payload.tour_minutes, payload.travel_minutes)
-                conflicts = [
-                    t["id"]
-                    for stop in stops
-                    for t in existing
-                    if overlaps(datetime.fromisoformat(stop["start_at"]), datetime.fromisoformat(stop["end_at"]), t["start_at"], t["end_at"])
-                ]
+                span_start, span_end = itinerary_span(stops)
+                conflicts = [t["id"] for t in existing if overlaps(span_start, span_end, t["start_at"], reserved_end(t))]
                 options.append({"stops": stops, "conflicts_with_tours": conflicts})
             if all(o["conflicts_with_tours"] for o in options):
                 raise HTTPException(409, "Every candidate time overlaps an existing proposed tour")
@@ -640,12 +645,13 @@ def build_router(service):
                 if datetime.fromisoformat(chosen["stops"][0]["start_at"]) <= now():
                     raise HTTPException(409, "The agreed time has passed; prepare a new plan with supersedes_plan_id")
                 tours = records(connection, "tour")
-                for stop in chosen["stops"]:
-                    start, end = datetime.fromisoformat(stop["start_at"]), datetime.fromisoformat(stop["end_at"])
-                    clash = next((t for t in tours if overlaps(start, end, t["start_at"], t["end_at"])), None)
-                    if clash:
-                        raise HTTPException(409, {"message": "The agreed time now overlaps another proposed tour", "tour_id": clash["id"]})
-                for stop in chosen["stops"]:
+                span_start, span_end = itinerary_span(chosen["stops"])
+                clash = next((t for t in tours if overlaps(span_start, span_end, t["start_at"], reserved_end(t))), None)
+                if clash:
+                    raise HTTPException(409, {"message": "The agreed time now overlaps another proposed tour", "tour_id": clash["id"]})
+                for index, stop in enumerate(chosen["stops"]):
+                    # Reserve the drive after each stop so later proposals cannot book the owner in it.
+                    next_start = chosen["stops"][index + 1]["start_at"] if index + 1 < len(chosen["stops"]) else stop["end_at"]
                     put(
                         connection,
                         "tour",
@@ -655,6 +661,7 @@ def build_router(service):
                                 "community_id": stop["community_id"],
                                 "start_at": stop["start_at"],
                                 "end_at": stop["end_at"],
+                                "reserved_end_at": next_start,
                                 "status": "proposed",
                                 "parties_confirmed": True,
                                 "calendar_connected": False,
