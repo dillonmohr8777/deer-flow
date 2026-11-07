@@ -27,6 +27,9 @@
 - Tests use synthetic data and the existing backend environment. Verify the
   affected HTTP flows, restart persistence, and auth/CSRF gates after changes.
   Run Ruff check and format before handing the package to the parent reviewer.
+- Dashboard recommendation results are a snapshot. Clear them at the start of
+  every record refresh, and discard older in-flight lookup responses. Exercise
+  refresh success, failure, and response races with the offline Node tests.
 - `build_test_app` is a test fixture only, never a deployable authentication route.
   Installing/activating this extension and granting actual user membership are
   separate deployment actions; this package does not provision them.

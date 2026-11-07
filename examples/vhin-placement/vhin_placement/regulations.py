@@ -160,4 +160,3 @@ def load(state: str) -> Corpus | None:
 @cache
 def _load(path: str, _mtime_ns: int, _size: int) -> Corpus:
     return Corpus(json.loads(Path(path).read_text(encoding="utf-8")))
-

@@ -12,6 +12,10 @@ proposed. Invoice and payment receipts can be recorded after their actual extern
 events. No endpoint sends messages, books a calendar, issues an invoice, charges a
 card, or calls a model/provider.
 
+Refreshing records, including after a saved change, clears the Top 3 results.
+Run Top 3 again to use current availability, contract status, and owner ratings.
+Responses from a lookup started before the refresh cannot restore old results.
+
 ## Install in the existing Gateway
 
 Use the existing extension manager from the DeerFlow checkout, after reviewing

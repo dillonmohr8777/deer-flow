@@ -6,6 +6,7 @@ const fact = (label, value) => `<div class="fact"><dt>${escapeHTML(label)}</dt><
 const humanLabel = (text) => String(text).replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const localTime = (value) => value ? new Date(value).toLocaleString("en-US",{timeZone:"America/New_York",dateStyle:"medium",timeStyle:"short"}) + " ET" : "Not recorded";
 let state, selected, busy = false;
+let recommendationRevision = 0;
 const pendingWrites = new Map();
 
 async function api(path, body, method = "POST") {
@@ -31,6 +32,8 @@ function view(name) {
   document.querySelectorAll("[data-view]").forEach((node) => { node.toggleAttribute("aria-current", node.dataset.view === name); if (node.hasAttribute("aria-current")) node.setAttribute("aria-current", "page"); });
 }
 async function refresh() {
+  recommendationRevision++;
+  $("recommend-results").innerHTML = '<p class="muted">Run Top 3 again to use current availability and ratings.</p>';
   state = await api("/state");
   render();
   $("notice").textContent = `Records read from your workspace at ${localTime(new Date().toISOString())}.`;
@@ -163,6 +166,7 @@ async function lookup(form) {
   $("failure").hidden = true;
   const data = compact(formData(form));
   const target = form.id === "rules-form" ? "rules-results" : "recommend-results";
+  const revision = target === "recommend-results" ? ++recommendationRevision : null;
   $(target).innerHTML = '<p class="muted">Searching...</p>';
   try {
     if (form.id === "rules-form") {
@@ -170,8 +174,9 @@ async function lookup(form) {
       $(target).innerHTML = found.results.map(ruleCard).join("") || "<p>No matching rule text. Try plainer words, or check with the state licensing agency.</p>";
     } else {
       const found = await api(`/recommendations?${new URLSearchParams(data)}`);
+      if (revision !== recommendationRevision) return;
       $(target).innerHTML = found.recommendations.map(recommendationCard).join("") || "<p>No sourced community fits these criteria yet.</p>";
     }
-  } catch (error) { failure(error); $(target).innerHTML = ""; }
+  } catch (error) { if (revision !== null && revision !== recommendationRevision) return; failure(error); $(target).innerHTML = ""; }
 }
 action(async () => {});
