@@ -32,6 +32,12 @@ async def test_exact_actor_workspace_and_document_grant_preserves_global_project
         foreign = await _create_project(client, auth_headers(USER_B), "Foreign project")
         doc = await _upload_document(client, project["id"], auth_headers(USER_A, ORG_S), "reference.txt", b"Approved public facts")
         hidden_doc = await _upload_document(client, project["id"], auth_headers(USER_A, ORG_S), "staff-only.txt", b"Not approved")
+        from sqlalchemy import update
+
+        from deerflow.persistence.organizations.model import OrganizationMemberRow
+
+        async with org_world() as session, session.begin():
+            await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.user_id == USER_A, OrganizationMemberRow.organization_id == ORG_S).values(role="client"))
         config = SimpleNamespace(client_reference_reads={"enabled": True, "bindings": [{"user_id": USER_A, "organization_id": ORG_S, "project_id": project["id"], "documents": {doc["id"]: doc["sha256"]}}]})
         app.dependency_overrides[get_config] = lambda: config
         clients_with_project_denial(monkeypatch)
@@ -68,10 +74,6 @@ async def test_exact_actor_workspace_and_document_grant_preserves_global_project
             ("GET", "/api/client-references/config"),
         ]:
             assert (await client.request(method, path, headers=headers)).status_code == 403
-        from sqlalchemy import update
-
-        from deerflow.persistence.organizations.model import OrganizationMemberRow
-
         async with org_world() as session, session.begin():
             await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.user_id == USER_A, OrganizationMemberRow.organization_id == ORG_S).values(status="inactive"))
         assert (await client.get("/api/client-references/projects", headers=headers)).status_code == 403
