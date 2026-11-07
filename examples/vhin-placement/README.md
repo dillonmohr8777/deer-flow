@@ -5,6 +5,9 @@ dashboard, and durable SQLite records. A coordinator and the owner can work on t
 placement cases within one explicitly configured MomoBot organization. Only the
 configured owner (confirmer) user ID can confirm a move-in. Installing source does not
 create accounts, memberships, calendar connections, message senders, or charges.
+The host admits only the extension's reviewed read and manual-record paths for
+client accounts. An enabled plugin still checks the exact active organization,
+configured user allowlist, session authentication, CSRF and owner authority.
 
 The implementation is deliberately manual and draft-only. Intake can be recorded
 and reconciled, community availability can be human-verified, and tours can be

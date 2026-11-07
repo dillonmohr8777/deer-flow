@@ -204,7 +204,12 @@ def test_a_client_can_reach_exactly_the_reviewed_registered_routes():
 
 
 def test_no_rule_is_dead_so_the_table_cannot_rot_unnoticed():
+    from test_vhin_client_boundary import extension_route_calls
+
     calls = [(method, _concrete(route.path)) for route, method in _registered_calls()]
+    # Optional contributed routes are absent from an unconfigured host. Exercise
+    # their actual router inventory as well, without activating a real plugin.
+    calls.extend(extension_route_calls())
     calls.append(("GET", "/api/agents/momobot-max"))
     for methods, pattern in _RULES:
         assert any(method in methods and pattern.match(path) for method, path in calls), pattern.pattern

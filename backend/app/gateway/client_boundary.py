@@ -54,6 +54,21 @@ _RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
         (_GET, rf"^/api/client-references/projects/{_ID}$"),
         (_GET, rf"^/api/client-references/projects/{_ID}/documents$"),
         (_GET, rf"^/api/client-references/projects/{_ID}/documents/{_ID}/content$"),
+        # Optional placement extension: manual records and read-only references.
+        # Its router independently requires session auth, exact organization,
+        # explicit existing-user allowlist and the configured owner for ratings.
+        # No wildcard subtree: future send/book/operator routes remain closed.
+        (_GET, r"^/api/vhin/(state|recommendations|regulations)$"),
+        (_GET, rf"^/api/vhin/referrals/{_ID}$"),
+        (_GET, rf"^/api/vhin/tour-plans/{_ID}/calendar\.ics$"),
+        (_GET, r"^/api/vhin/regulations/[A-Z]{2}/(search|unit)$"),
+        (_GET, r"^/api/vhin/dashboard(/(index\.html|app\.js|style\.css))?$"),
+        (_POST, r"^/api/vhin/(referrals|communities|tours|placements|tour-plans)$"),
+        (frozenset({"PATCH"}), rf"^/api/vhin/referrals/{_ID}$"),
+        (_POST, rf"^/api/vhin/referrals/{_ID}/(transition|contact-events|drafts)$"),
+        (_POST, rf"^/api/vhin/communities/{_ID}/(availability|contract|rating)$"),
+        (_POST, rf"^/api/vhin/placements/{_ID}/ledger$"),
+        (_POST, rf"^/api/vhin/tour-plans/{_ID}/responses$"),
         # Chat: threads, runs, files, follow-ups, feedback. Deliberately absent:
         # run events and workspace-changes (tool and subagent internals, file
         # paths) and token-usage (model names, per-caller breakdown).

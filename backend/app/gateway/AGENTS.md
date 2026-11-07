@@ -95,6 +95,13 @@ hash-verified original attachment bytes, bounded off-loop reads, no-store/nosnif
 and no writes, internal project fields, histories or chats. Private bindings never
 enter Git. See [reference policy](../../docs/CLIENT_REFERENCE_READS.md).
 
+Optional placement routes have exact method/path client admission in
+`client_boundary.py`. The contributed router still enforces session identity,
+active organization, its explicit user allowlist and owner-only confirmation.
+Never admit the whole prefix or add send/booking/provider operations through the
+manual-record gate. `test_vhin_client_boundary.py` exercises the real host auth,
+principal resolver, CSRF and plugin router without starting runtime services.
+
 Localhost persistence deliberately reads the direct request `Host` and ignores `Forwarded` / `X-Forwarded-Host`. Scheme and auth-origin reconstruction still consume forwarding headers. The bundled nginx sets `X-Forwarded-Proto`, but preserves an upstream HTTPS value and does not overwrite every forwarded header, so the outer trusted proxy must replace or strip client-supplied forwarding headers before traffic reaches DeerFlow.
 
 Standalone LangGraph Studio auth (the `StudioUser` principal, assistant owner filters, and startup persistence repair) is in [LangGraph Studio auth](../../docs/LANGGRAPH_STUDIO.md).
