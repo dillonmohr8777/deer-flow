@@ -1,0 +1,62 @@
+{
+  "title": "Hand off work and pick it up again",
+  "slug": "work-02-momo-handoff",
+  "description": "Foundations lesson for everyone. A report brief with owner, sources, time range, files, approval and next action is handed to a second person, reopened on another surface, and resumed only where failed work is read from the record. No automatic retry of external side effects is promised.",
+  "chapters": [
+    {
+      "title": "Why handoffs break",
+      "narration": "A handoff is where most work quietly breaks. Someone leaves the chat, another person opens it three days later, and nobody knows which sheet was used or whether the draft ever checked out. MomoBot's saved chats and run records are meant to close that gap. In this lesson we'll take a report brief from one owner to a second person, on another surface, and resume it safely.",
+      "visual": "Two people icons with a saved chat between them and a question mark over the missing sheet reference."
+    },
+    {
+      "title": "The six fields",
+      "narration": "Start with the brief. Every handoff needs six fields: the owner, the sources, the time range, the files, the approval step, and the next action. The owner is the person accountable for the outcome. The sources are named, not described. The time range is explicit, like the last seven days ending Friday. If any field is blank, the next person has to guess, and guesses are how a client gets the wrong numbers.",
+      "visual": "Brief template with six labeled fields filled in for a weekly report, and one field marked blank to show the gap."
+    },
+    {
+      "title": "Save the work where the next person can find it",
+      "narration": "Next, save the work where the next person can find it. The chat keeps the brief, the replies, and the attached files together. I put the owner's name at the top of the first message so the thread has an obvious starting point. I also write one line that says what's done and what's still open. That line is the difference between a handoff and a pile of messages.",
+      "visual": "Top of a saved chat with the owner name in the first message and a status line reading done and open."
+    },
+    {
+      "title": "Reopen on another surface",
+      "narration": "Now the second person opens the saved chat on another surface, say a phone while they're in a meeting. They see the same brief, the same files, and the same run record. Nothing has to be retyped. I'd still ask them to confirm they're on the right client and the right week before they touch anything. A handoff works when the record is complete, not when the person is fast.",
+      "visual": "The same saved chat open on a desktop and a phone, with the client and week confirmation line at the top."
+    },
+    {
+      "title": "Inspect run status and artifacts",
+      "narration": "Before anyone resumes, read the run. Run status tells you whether the work finished, is still going, or stopped. Artifacts are the files it produced, like the draft and any checking notes. I look at each artifact against the brief. If the draft exists but the checking step never finished, I know the draft isn't ready, even though it looks finished on the screen.",
+      "visual": "Run detail listing the status for each step and the artifacts beside them, with the checking step marked unfinished."
+    },
+    {
+      "title": "Resume only what failed",
+      "narration": "Resume only what failed, after reading the record. If extraction failed, use the same sources and time range to request that missing step. Reopen the saved run when its controls allow, or write a new follow-up naming the failed step and the accepted work to keep. Do not assume every workflow has a one-click checkpoint. Before retrying any outside action, inspect its destination. A timeout does not prove that nothing happened. Reconcile it with the approver first.",
+      "visual": "Step list with succeeded steps locked and only the failed sheet pull marked for a rerun, plus a separate send step flagged for review."
+    },
+    {
+      "title": "The approval and the next action",
+      "narration": "People often skip the next action. Write it as one step with one owner: the account manager reviews this draft against the sheet by Tuesday. Put the approval step beside it, so the receiver knows who must say yes before release. Include the exact draft link. A handoff is not finished until the next action and approver are clear.",
+      "visual": "Next action line and approval line pinned together at the bottom of the handoff note, each with a named owner."
+    },
+    {
+      "title": "What a clean handoff looks like",
+      "narration": "Here's what a clean handoff looks like. The brief has six fields. The chat has one status line. The run shows the sheet pull finished and the draft was saved, but the checking step failed. The next person reruns only the check, reads the flagged lines, and returns the draft to the approver. Nothing was sent, so nothing needed a retry decision.",
+      "visual": "Completed handoff record with the sheet pull marked finished, the draft saved, the check marked failed, and the rerun of only the check."
+    },
+    {
+      "title": "Roles that pick up the work",
+      "narration": "Every Momentum role uses this record differently. An account manager reads the client and week. A sales lead checks ownership. A shoot coordinator reads access details. Editors, designers and developers open the brief and files. SEO, paid media and content specialists check the source dates. CRM, automation and admin teams inspect the next action. Share the saved record only with authorized teammates in the correct workspace. Naming a client in a message does not grant access.",
+      "visual": "Role list next to the handoff record, showing which field each role reads first."
+    },
+    {
+      "title": "Check your own handoff",
+      "narration": "Before you hand off your own report, run three checks. Is the brief complete with all six fields? Does the chat's status line match the run status? Can the next person open the saved chat from another surface and see the same files? If any answer is no, fix that before you pass the work along. A handoff is only as good as the record it leaves behind.",
+      "visual": "Three-item checklist beside the handoff record with each check marked yes or no."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Try this in Momo. Input: one report brief you already use, with its six fields filled in and the sheet attached, plus a saved chat where a run has produced a draft. Open the chat on a second surface, read the run status and artifacts, and resume only a failed non-sending step if one exists. External acceptance check: the second person confirms in writing that the draft matches the brief and the sheet, without asking the first person anything.",
+      "visual": "Handoff input card with the saved chat, the run record, and a written confirmation box for the second person."
+    }
+  ]
+}

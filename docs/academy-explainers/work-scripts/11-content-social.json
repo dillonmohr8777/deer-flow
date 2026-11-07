@@ -1,0 +1,57 @@
+{
+  "title": "Content, social media, email and outreach",
+  "slug": "work-11-content-social",
+  "description": "Synthetic brand brief to channel drafts with factual and rights checks, accessible alt text, exact-recipient email and Slack drafts, and a publishing request that waits for human approval.",
+  "chapters": [
+    {
+      "title": "One brief, several channels",
+      "narration": "Content gets messy when every channel tells its own version of the story. Here I start from one approved synthetic brief for Sample Dental Group, a spring open house announcement. The brief is the source of truth. Every claim in every channel has to trace back to it. Momo drafts the channel versions. I judge tone, check facts and decide what is ready for approval.",
+      "visual": "Brief document with the open house facts, approved claims and the booking link highlighted as the source of truth."
+    },
+    {
+      "title": "Write for each channel",
+      "narration": "A social post, a web article and an email each need different length and structure. The social post gets one hook, one detail and one call to action. The article gets a headline, three short sections and a link to the booking page named in the brief, and the Content and SEO specialist checks the headline against the keywords in the brief. The email goes to one exact recipient from the client record, never a list I guess at. Momo writes all three from the brief, each labeled by channel.",
+      "visual": "Three side-by-side drafts labeled social post, web article and email, each with its channel and length noted."
+    },
+    {
+      "title": "Run the factual check",
+      "narration": "This is the step I never skip. I take every sentence with a fact in it, a date, a time, a service or a price, and I find it in the brief. If the brief does not say it, the sentence comes out. Momo lists the facts in each draft and marks the matches. I still read each draft myself, since a match in a list does not prove the sentence reads well.",
+      "visual": "Two-column table with each factual sentence on the left and its matching brief line on the right, with unmatched rows flagged."
+    },
+    {
+      "title": "Check rights on every image",
+      "narration": "Images need the same discipline as copy. Each image in the post gets a row in the rights log with a status of owned, licensed or missing. For the example, the front desk photo is owned, and the toothbrush image is licensed with its file attached. If a status is missing, the image does not go out, and I swap in an approved one. Momo fills the log from the folder, and it cannot confirm a license that is not there.",
+      "visual": "Rights table listing each image with owned, licensed or missing status and a file link, with the missing image row marked for replacement."
+    },
+    {
+      "title": "Alt text and captions",
+      "narration": "Alt text is part of the draft, not a cleanup pass. Each image gets plain alt text that describes what is in it. The front desk alt text names the counter, the chairs and the open house sign. Captions match the spoken words in any video. Momo drafts the alt text and captions. I check each one against the image itself, because a machine-written description can miss what matters on screen.",
+      "visual": "Image preview beside its alt text field and caption file, with the alt text naming the counter, chairs and open house sign."
+    },
+    {
+      "title": "Email and Slack drafts",
+      "narration": "Email and Slack drafts name exact destinations. The email names one recipient from the client record and uses the sender's approved signature. The Slack note names the internal channel, post link and approval status. This exercise does not send either draft. After the required approval, use the team's authorized sending route, then read the result at its destination. Keep the recipient field separate from the message so the reviewer can check it. Neither message carries an AI footer.",
+      "visual": "Email draft with one recipient address from the client record and a Slack note addressed to the named internal channel, both without footers."
+    },
+    {
+      "title": "Review and the publishing request",
+      "narration": "Review comes first. I read the post as the audience would, check the link once more, and note any change in the review log. Then Momo writes the publishing request, which lists the channel, the scheduled slot if one is set, the approver and the rights status for each image. The request is a request. Publication needs the appropriate human approval, and I do not treat a finished draft as permission.",
+      "visual": "Publishing request form showing channel, optional scheduled slot, approver and image rights status, with a pending human approval label."
+    },
+    {
+      "title": "Outreach with a contact log",
+      "narration": "Outreach is where people get careless, so I keep it simple. The account manager owns the approved contact list. The outreach specialist drafts one message per contact, using the brief and nothing the contact did not share publicly. Momo keeps a contact log with the handle, the draft date and the status. A draft stays a draft until a person approves it. Sending is a separate human action, and nothing in this lesson authorizes a real send.",
+      "visual": "Contact log with handle, draft date and status columns, all rows showing draft until a person approves."
+    },
+    {
+      "title": "Acceptance check for content",
+      "narration": "Here is my acceptance test for each channel. Every fact traces to the brief. Every image has an owned or licensed status and a file. Alt text describes what is on screen. The voice fits the brand. The email has one exact recipient, the approved signature, and no AI footer. The publishing request names an approver. If one check fails, return the draft with that line named.",
+      "visual": "Checklist of channel acceptance items with the failed line flagged and returned to the draft."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Take the synthetic open house brief from this lesson and ask Momo for a social post, an article draft, an email to one exact recipient from a synthetic record and a Slack note. Check each fact against the brief, then do your own voice read. The external acceptance check is human: an approver reviews the publishing request and the email, and a person decides whether anything is sent or published. Until that approval exists, every draft stays a draft.",
+      "visual": "Synthetic open house brief input beside the four generated drafts and the publishing request, each marked draft."
+    }
+  ]
+}

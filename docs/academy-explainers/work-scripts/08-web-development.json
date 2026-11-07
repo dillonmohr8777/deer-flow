@@ -1,0 +1,62 @@
+{
+  "title": "Web development, UI and UX",
+  "slug": "work-08-web-development",
+  "description": "Synthetic staging form and landing page request for Sample Dental Group, from scoped branch and reproduction through 390, 768 and 1440 QA, form destination check, review and approved release.",
+  "chapters": [
+    {
+      "title": "Who this is for",
+      "narration": "This lesson is for full stack web developers, web developers, UI/UX developers and web designers who build pages and forms for clients. Our synthetic example is Sample Dental Group, with a landing page and booking form request on staging. The request lives in a MomoBot chat, and the work runs as a run with its files attached. Each role below owns a specific piece, so read for your role.",
+      "visual": "Chat thread holding the synthetic staging request, with the attached brief and the run header showing the lesson label that the data is synthetic."
+    },
+    {
+      "title": "Scope the branch",
+      "narration": "Start by scoping the branch. The connected repository tool must be verified and limited to the client's staging branch before MomoBot reads or edits anything. If that connection is missing, or it points at production, the run stops and says missing. Web developers, confirm the feature branch named for the request, then state the scope in the first message so the approver can see it. Checking that first saves rework later.",
+      "visual": "Run header showing the branch name, the repository connection status as verified or missing, and the scope note as the first message in the run."
+    },
+    {
+      "title": "Reproduce first",
+      "narration": "Next, reproduce the problem before touching code. Say the request reports that the booking button does nothing on a phone. Load the staging page at 390 pixels wide through a verified browser tool, submit the synthetic test entry, and save what you observe. If no such tool is connected, the run says missing. If nothing reproduces, the run records that and invents no fix. Reproduction turns a vague complaint into a step you can point to.",
+      "visual": "Run log listing each reproduction step, one screenshot at 390 pixels, and a missing-tool line in place of any step that could not run."
+    },
+    {
+      "title": "Make the small fix",
+      "narration": "Now make the smallest fix that solves the reproduced problem. Here the button sits under a fixed footer on narrow screens, so the tap target is covered. Web developers and UI/UX developers, decide together whether the fix is spacing, stacking order or a layout change. MomoBot proposes the change on the scoped branch, and you read the diff line by line. A small diff is easier to review and easier to roll back.",
+      "visual": "Diff view of a short change on the scoped branch, with the footer and button lines highlighted and nothing outside the request touched."
+    },
+    {
+      "title": "Check assets and logo",
+      "narration": "Next, check the assets. Any photo or illustration needs a real licensed image record, with source, license type and usage scope saved next to the file. Web designers, you own that record. The logo must be the approved transparent file, used at exact proportions and never redrawn from a screenshot. If a license record is missing, the run marks that image missing and keeps the placeholder.",
+      "visual": "Assets panel listing the approved logo file and the licensed image file beside their license records, with a placeholder row marked missing where no record exists."
+    },
+    {
+      "title": "QA at three widths",
+      "narration": "Now run QA at 390, 768 and 1440 pixels. At 390, check tap targets, the sticky footer and whether fields stay readable without zooming. At 768, check that the two-column layout collapses cleanly. At 1440, check hero image and logo alignment. UI/UX developers, judge spacing and hierarchy at each width. Compare the three screenshots, saved to the files panel, side by side before you accept anything.",
+      "visual": "Three staging screenshots at 390, 768 and 1440 pixels placed side by side in the files panel, with the form and hero area visible in each."
+    },
+    {
+      "title": "Check the form destination",
+      "narration": "Next, check where the form goes. Send one synthetic test entry with the test name and test address from the request, never a real patient or client contact. Confirm it lands in the destination named in the scope, such as the test inbox or CRM sandbox. Full stack developers, verify the field mapping, required fields and confirmation message. If the entry does not arrive, the run records the failed hop and does not mark the form ready.",
+      "visual": "Test destination list showing one synthetic entry with the test name, the mapped fields and the confirmation message, next to the form's field list."
+    },
+    {
+      "title": "Review",
+      "narration": "A second person then reads the diff, the screenshots and the destination result. Web developers and UI/UX developers, check the change fits the design system and leaves other pages alone. Full stack developers, check the handler and validation. Web designers, confirm the logo and image records are attached. Reviewers can send the run back with notes, and earlier attempts stay in the run record.",
+      "visual": "Review thread on the run with a reviewer note attached to the diff, and the earlier attempt still listed in the run history."
+    },
+    {
+      "title": "Approved release",
+      "narration": "Release is a separate decision. The run can prepare a release request, but publishing needs a human approval, which appears in the approvals queue. Name the approver in the request. Web developers, attach the final diff and the three width screenshots so the approver sees the evidence. Nothing goes live from this lesson, and watching the walkthrough never authorizes a real release.",
+      "visual": "Approvals queue entry for the pending release request, showing the approver field, the attached diff and the three screenshots."
+    },
+    {
+      "title": "Read the run record",
+      "narration": "Finally, read the run record. It should show the scope, the reproduction notes, the diff, the three width screenshots, the destination result and the pending approval. If any item is missing, the run says missing rather than filling it in. Once the approver clears the request, the run is ready for release, and the record shows who cleared it.",
+      "visual": "Run record summary listing scope, reproduction notes, diff, screenshots, destination result and pending approval, with a missing item shown as missing."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Try this in Momo. Your input is one synthetic staging request for a landing page with a booking form, plus three screenshots of the page at 390, 768 and 1440 pixels. Your external acceptance check is simple. A reviewer who did not build the page opens the staging URL on a phone and submits the test entry, and the entry arrives in the test destination named in the scope.",
+      "visual": "Run record and approvals queue for the synthetic staging request, with the external check note written beside the pending release item."
+    }
+  ]
+}

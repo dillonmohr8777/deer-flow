@@ -1,0 +1,62 @@
+{
+  "title": "Make your work stack better week by week",
+  "slug": "work-14-week-by-week",
+  "description": "Growth lesson for everyone, Weeks 1 to 4. Baseline one repeatable job, add reusable brief and working context, add one read-only source after a connection check, then pause a scheduled workflow with outside review. Proof each week and one exercise per week. No unattended sending.",
+  "chapters": [
+    {
+      "title": "Improvement in small weeks",
+      "narration": "Improvement works best in small weeks. This plan runs four weeks, and each week adds one habit to your work stack. Every week ends with proof you can show someone else. Nothing here sends anything unattended. You stay the one who approves outside work, and every week has one exercise to finish before you move on.",
+      "visual": "Four-week plan strip with one habit and one proof item listed under each week."
+    },
+    {
+      "title": "Week one: the baseline",
+      "narration": "Week one is a baseline. Pick one repeatable job you already do, like a weekly report, a client follow-up summary, or a monthly reconciliation check. Write down the sources it uses, where each one lives, and how long the job takes now. Don't change anything yet. You need to know what the job looks like today before you can tell whether anything improved. Sources are the first thing to capture, because every later week depends on them.",
+      "visual": "Baseline note template with job name, source list with locations, and a time field filled in as measured."
+    },
+    {
+      "title": "Week one exercise and proof",
+      "narration": "This week's exercise: run the job in Momo as a draft using the sources you listed. Keep a saved chat, its run record, and a baseline note with the time you measured. Ask an experienced account manager, operations lead, or specialist in that job to compare it with the sources. If a figure is wrong, record the correction before week two. Measured mistakes give you a useful starting point.",
+      "visual": "Week one proof bundle showing the saved chat, the run record, and the baseline note together."
+    },
+    {
+      "title": "Week two: reusable brief and working context",
+      "narration": "Week two turns the baseline into a reusable brief and working context. Write the brief once with the owner, sources, time range, files, approval step, and next action, the same six fields as a handoff. Save the standing context in the chat, and attach only the files the job needs. Now the job can start the same way every time, and you can compare runs side by side.",
+      "visual": "Reusable brief template with the six fields and a standing context block saved at the top of the chat."
+    },
+    {
+      "title": "Week two exercise and proof",
+      "narration": "This week's exercise: rerun the job twice using the same brief, then compare the two drafts. A team lead in sales or client services would judge it by one check: did the second run need fewer corrections than the first? Proof is both run records and a short correction note. If corrections went up, the brief is missing something, so I tighten it before adding anything new.",
+      "visual": "Two run records side by side with a short correction note listing the fixes needed in each draft."
+    },
+    {
+      "title": "Week three: one read-only source",
+      "narration": "Week three adds one read-only source. First, confirm the connection works and that its scope is read only. Check that the client scope covers this job and nothing else. Only then attach the source. If the connection check fails, stop there and record the failure. A model can read only what a verified connected tool gives it, so a broken connection means no data, not a guess.",
+      "visual": "Connection check record showing the source, read-only scope, client scope match, and a pass or fail result."
+    },
+    {
+      "title": "Week three exercise and proof",
+      "narration": "This week's exercise: run the job with the one read-only source and compare the draft with the same job from week two. A compliance-minded reviewer or a developer checks one thing: does every figure from the new source show its source row? Proof is the connection check record, both run records, and a note of which figures changed. Nothing gets sent. The draft goes to the approver, same as before.",
+      "visual": "Week three comparison view with the week two and week three drafts and a changed-figures note with source rows."
+    },
+    {
+      "title": "Week four: the paused workflow",
+      "narration": "Week four adds a schedule. Create the repeatable task paused, then ask a reviewer to check its last three drafts. Keep delivery outside this exercise. Inspect the task's instructions, connected tools and approval step yourself; scheduling alone does not block a send, post, or spend. Enable only the draft preparation that your team has cleared. If a source or check fails, pause it and record the next action.",
+      "visual": "Scheduled task card marked paused, with an approver sign-off field and the outputs routed to the run record."
+    },
+    {
+      "title": "Week four exercise and outside check",
+      "narration": "This week's exercise: have someone outside your team review the paused workflow's last three drafts against the sources. A client-facing lead, a finance reviewer, or a developer does the check, not you. Proof is their written review, the three run records, and your decision log. If the review fails, the workflow stays paused, and you record why. Retiring a workflow that fails is a good result.",
+      "visual": "Outside review form with the three draft references, the written verdict, and the decision log entry beneath."
+    },
+    {
+      "title": "Each role's part",
+      "narration": "Each role gets a practical result. Leadership gets a measured baseline. Team leads get a reusable brief. Account, sales and operations teams get clearer handoffs. Editing, web, SEO, paid media and content specialists get source lists they can check. CRM, automation and admin teams get run records they can diagnose. Everyone keeps the same rule: the draft is not the decision, and the approver owns what goes out.",
+      "visual": "Role table with the item each role receives from weeks one through four and the approver marked as the final owner."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Try this in Momo. Input: the job you chose in week one, with its source list, baseline note, and the four week records you saved. Ask MomoBot to draft a one-page summary of what changed, then check every claim in that summary against your records. External acceptance check: a team lead outside this chat confirms the summary matches the records and approves it before anyone uses it.",
+      "visual": "Input bundle with the source list, baseline, and week records, next to a summary draft with a claim checklist."
+    }
+  ]
+}
