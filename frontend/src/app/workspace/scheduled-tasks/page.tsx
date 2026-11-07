@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { ClientScheduleList } from "@/components/workspace/client-workspace-references";
 import {
   EmptyState,
   ErrorState,
@@ -44,6 +45,7 @@ import {
 } from "@/components/workspace/workspace-container";
 import { listAgents } from "@/core/agents/api";
 import { useAgentsApiEnabled } from "@/core/agents/hooks";
+import { useIsClient, useIsRoleUnresolved } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 import { hasScheduleSpec } from "@/core/scheduled-tasks/cron";
 import {
@@ -123,6 +125,13 @@ function agentDisplayName(
 }
 
 export default function ScheduledTasksPage() {
+  const client = useIsClient();
+  const unresolved = useIsRoleUnresolved();
+  if (unresolved) return null;
+  return client ? <ClientScheduleList /> : <StaffScheduledTasksPage />;
+}
+
+function StaffScheduledTasksPage() {
   const { t, locale } = useI18n();
   const st = t.scheduledTasks;
   const searchParams = useSearchParams();

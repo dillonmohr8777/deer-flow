@@ -1,4 +1,4 @@
-"""The `client` role reaches chat and nothing else, whatever the authorization config says."""
+"""The client boundary admits chat and reviewed workspace reads, independent of RBAC."""
 
 from __future__ import annotations
 
@@ -34,6 +34,13 @@ CLIENT_REACHABLE_ROUTES = [
     "GET /api/agents",
     "GET /api/agents/{name}",
     "GET /api/features",
+    "GET /api/projects",
+    "GET /api/projects/config",
+    "GET /api/projects/{project_id}",
+    "GET /api/projects/{project_id}/documents",
+    "GET /api/projects/{project_id}/documents/{document_id}/content",
+    "GET /api/scheduled-tasks",
+    "GET /api/scheduled-tasks/{task_id}",
     "GET /api/models",
     "GET /api/models/{model_name}",
     "GET /api/momobot-brand/about",
@@ -114,13 +121,11 @@ INTERNAL_CALLS = [
     ("POST", "/api/approvals/x/approve"),
     ("GET", "/api/fleet/templates"),
     ("POST", "/api/fleet/work/claim"),
-    ("GET", "/api/projects"),
     ("POST", "/api/projects"),
     ("DELETE", "/api/projects/x"),
     ("GET", "/api/clients"),
     ("POST", "/api/clients"),
     ("POST", "/api/clients/import"),
-    ("GET", "/api/scheduled-tasks"),
     ("POST", "/api/scheduled-tasks"),
     ("GET", "/api/threads/x/scheduled-tasks"),
     ("POST", "/api/agents"),
@@ -272,7 +277,7 @@ def authenticated(monkeypatch):
 
 def test_the_middleware_answers_403_to_a_client_on_an_internal_route(authenticated):
     client, _ = authenticated
-    for path in ("/api/scheduled-tasks", "/api/team/channels"):
+    for path in ("/api/team/channels",):
         response = client.get(path)
         assert response.status_code == 403
         assert response.json() == {"detail": "This area is not available for your account"}

@@ -1,7 +1,7 @@
 """Default-deny route boundary for the ``client`` system role.
 
-A client is an external customer. All they get is chat with MomoBot Max, so
-instead of denying the internal surfaces one by one (Gateway permissions only
+A client is an external customer. They can chat and read their own workspace
+projects and schedules. Instead of denying the internal surfaces one by one (Gateway permissions only
 exist for some of them, and a new route would be open by default) this module
 lists the few routes a client may reach and ``AuthMiddleware`` answers 403 to
 everything else. It is the same shape as the PAT policy in ``auth/pat.py``.
@@ -34,6 +34,16 @@ _RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
         (_GET, rf"^/api/client-portal/threads/{_ID}$"),
         (_POST, rf"^/api/client-portal/threads/{_ID}/chat$"),
         (_GET, rf"^/api/client-portal/threads/{_ID}/messages/{_ID}/attachments/{_ID}$"),
+        # Read-only workspace references. Routers retain RBAC and scoped storage;
+        # project chats/thread files and every management operation stay closed.
+        (_GET, r"^/api/projects$"),
+        (_GET, rf"^/api/projects/{_ID}$"),
+        (_GET, rf"^/api/projects/{_ID}/documents$"),
+        (_GET, rf"^/api/projects/{_ID}/documents/{_ID}/content$"),
+        # Task reads retain threads:read and storage-principal/organization checks.
+        # Creation, execution, changes and run history are deliberately absent.
+        (_GET, r"^/api/scheduled-tasks$"),
+        (_GET, rf"^/api/scheduled-tasks/{_ID}$"),
         # Identity, account security, preferences, feature flags, model list,
         # the MomoBot kit behind "About" and "MomoBot Agents".
         (_GET, r"^/api/v1/auth/me$"),

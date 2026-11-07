@@ -258,3 +258,5 @@ single-attempt and unclaimable until org owner/admin approval (`approval_state`)
 See [contract](../../docs/FLEET_PROJECT_JOBS.md) for routes and tests.
 
 Private brand projection and staff work-plan rules: [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md).
+
+Client workspace references: `client_boundary.py` admits GET project list/config/detail/document list/content and scheduled-task list/detail only. Existing router permissions and server-resolved organization/storage ownership remain required. Client writes, project thread inventories and scheduler run history remain denied even when RBAC is disabled. `test_client_workspace_read_access.py` drives the real middleware, routers and SQLite repositories across private/shared/foreign workspaces.

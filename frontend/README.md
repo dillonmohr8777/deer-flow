@@ -204,3 +204,7 @@ MIT License. See [LICENSE](../LICENSE) for details.
 Channel setup in a shared workspace opens the user's private workspace, where personal Slack connections are managed. Workspace switches clear the previous workspace view.
 
 Account managers can open Easy / Medium / Hard directly from Settings and more. The entry opens the existing Experience preferences on mobile and desktop.
+
+### Customer workspace references
+
+Signed-in customer accounts can open Projects to download documents shared in their active workspace and Scheduled tasks to view existing task status. These views preserve the workspace membership and role permissions already configured on the Gateway. They do not expose project conversation inventories, task run history, create/edit controls or execution actions. Task status is a stored record, not proof that the scheduler is running. Staff retain their existing management pages.
