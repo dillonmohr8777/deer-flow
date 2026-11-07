@@ -21,6 +21,7 @@ def _runtime():
             "user_id": "user-1",
             "user_role": "member",
             "channel_name": "telegram",
+            "no_phi": True,
             "__knowledge_scope_execution": {
                 "version": 1,
                 "mode": "selected",
@@ -89,6 +90,8 @@ async def test_batch_task_is_explicit_idempotent_submission(monkeypatch) -> None
     # so batch_service can withhold the owner-private Agent Room tools from
     # a channel-dispatched batch item (see test_subagent_batch_service.py).
     assert request.execution_spec["channel_name"] == "telegram"
+    # Health-client guard: a durable batch item keeps the workspace flag for its own prompt.
+    assert request.execution_spec["no_phi"] is True
     assert request.user_id == "user-1"
     assert [item["key"] for item in request.items] == ["record-1", "record-2"]
     assert request.max_live_items == 20

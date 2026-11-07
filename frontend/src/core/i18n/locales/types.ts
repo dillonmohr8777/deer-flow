@@ -844,6 +844,8 @@ export interface Translations {
     modelLoadFailed: string;
     modelLoadRetry: string;
     modelLoadRetrying: string;
+    noPhiBanner: string;
+    noPhiBannerDetail: string;
   };
 
   // Conversation

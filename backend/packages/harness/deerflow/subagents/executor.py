@@ -800,6 +800,7 @@ class SubagentExecutor:
         run_id: str | None = None,
         channel_user_id: str | None = None,
         channel_name: str | None = None,
+        no_phi: bool = False,
         is_internal: bool = False,
         authz_attributes: Mapping[str, Any] | None = None,
         deerflow_trace_id: str | None = None,
@@ -903,6 +904,8 @@ class SubagentExecutor:
         # must export the dispatching turn's id, not none at all.
         self.channel_user_id = channel_user_id
         self.channel_name = channel_name
+        # Health-client workspace (server-set on the run): the guard goes into this subagent's own prompt.
+        self.no_phi = no_phi is True
         # Authorization identity propagated from the parent runtime context.
         # is_internal is written unconditionally (including False) so the
         # subagent's GuardrailMiddleware sees the same provenance as the lead.
@@ -1309,6 +1312,10 @@ class SubagentExecutor:
         verification_cfg = getattr(resolved_app_config, "verification", None)
         receipts_enabled = getattr(verification_cfg, "receipts_enabled", True)
         system_parts.append(build_report_contract_section(receipts_enabled=receipts_enabled))
+        if self.no_phi:
+            from deerflow.agents.lead_agent.prompt import NO_PHI_GUARD
+
+            system_parts.append(NO_PHI_GUARD)
         # Acceptance criteria are model-supplied (ultimately user-influenceable)
         # data with the same provenance as the delegated prompt, so criterion
         # values travel in the task HumanMessage — the channel

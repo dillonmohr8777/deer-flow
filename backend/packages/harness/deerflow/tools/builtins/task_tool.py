@@ -858,6 +858,8 @@ async def task_tool(
     # IM-channel sender identity: group chats share one thread across senders,
     # so delegated bash commands need the dispatching turn's channel_user_id.
     channel_user_id = parent_context.get("channel_user_id")
+    # Health-client workspace flag, stamped by the Gateway; the subagent prompt carries the same guard.
+    no_phi = parent_context.get("no_phi") is True
     # Propagate authorization identity: is_internal (strict bool) and
     # authz_attributes (validated Mapping, copied). These follow the same
     # server-side provenance as user_role/oauth — see inject_authenticated_user_context.
@@ -951,6 +953,7 @@ async def task_tool(
         "run_id": run_id,
         "channel_user_id": channel_user_id,
         "channel_name": channel_name,
+        "no_phi": no_phi,
         "is_internal": is_internal,
         "authz_attributes": authz_attributes,
         "deerflow_trace_id": deerflow_trace_id,
