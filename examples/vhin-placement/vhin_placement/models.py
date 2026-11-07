@@ -9,6 +9,18 @@ Text = Annotated[str, Field(min_length=1, max_length=2000)]
 Money = Annotated[StrictInt, Field(ge=1, le=100_000_000)]
 
 
+def check_email(value):
+    if value is not None and (value.count("@") != 1 or not all(value.split("@")) or any(c.isspace() for c in value)):
+        raise ValueError("email must contain one @ and no whitespace")
+    return value
+
+
+def check_phone(value):
+    if value is not None and (not 7 <= len("".join(filter(str.isdigit, value))) <= 15 or any(c not in "+()- .0123456789" for c in value)):
+        raise ValueError("phone must contain 7 to 15 digits")
+    return value
+
+
 class Input(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -29,16 +41,12 @@ class Referral(Input):
     @field_validator("email")
     @classmethod
     def valid_email(cls, value):
-        if value is not None and (value.count("@") != 1 or not all(value.split("@")) or any(c.isspace() for c in value)):
-            raise ValueError("email must contain one @ and no whitespace")
-        return value
+        return check_email(value)
 
     @field_validator("phone")
     @classmethod
     def valid_phone(cls, value):
-        if value is not None and (not 7 <= len("".join(filter(str.isdigit, value))) <= 15 or any(c not in "+()- .0123456789" for c in value)):
-            raise ValueError("phone must contain 7 to 15 digits")
-        return value
+        return check_phone(value)
 
 
 class ReferralPatch(Input):
@@ -71,13 +79,91 @@ class Draft(Input):
     body: Text
 
 
+Name = Annotated[str, Field(min_length=1, max_length=200)]
+ContractStatus = Literal["not_contracted", "in_progress", "contracted"]
+
+
 class Community(Input):
-    name: Annotated[str, Field(min_length=1, max_length=200)]
+    name: Name
     city: Text
     services: Annotated[list[Annotated[str, Field(min_length=1, max_length=100)]], Field(max_length=50)] = []
     licensed_beds: Annotated[StrictInt, Field(ge=0, le=10000)] | None = None
     source_url: HttpUrl
     observed_at: AwareDatetime
+    category: Annotated[str, Field(min_length=1, max_length=100)] | None = None
+    miles_from_office: Annotated[float, Field(ge=0, le=500)] | None = None
+    contact_name: Name | None = None
+    contact_email: Annotated[str, Field(max_length=254)] | None = None
+    contact_phone: Annotated[str, Field(max_length=40)] | None = None
+
+    @field_validator("contact_email")
+    @classmethod
+    def valid_contact_email(cls, value):
+        return check_email(value)
+
+    @field_validator("contact_phone")
+    @classmethod
+    def valid_contact_phone(cls, value):
+        return check_phone(value)
+
+
+class ContractUpdate(Input):
+    """Justin records where a community relationship stands; the agreement itself stays external."""
+
+    status: ContractStatus
+    agreement_ref: Text | None = None
+    human_confirmed: Literal[True]
+
+    @model_validator(mode="after")
+    def contracted_needs_reference(self):
+        if self.status == "contracted" and not self.agreement_ref:
+            raise ValueError("a contracted community needs the signed agreement reference")
+        return self
+
+
+class Rating(Input):
+    """Justin's own 1 to 3 star rating, only for communities he has contracted."""
+
+    stars: Annotated[StrictInt, Field(ge=1, le=3)]
+    note: Annotated[str, Field(max_length=500)] = ""
+
+
+class TourPlan(Input):
+    """One family, up to three communities, back to back; up to three candidate start times."""
+
+    referral_id: Text
+    community_ids: Annotated[list[Text], Field(min_length=1, max_length=3)]
+    options: Annotated[list[AwareDatetime], Field(min_length=1, max_length=3)]
+    tour_minutes: Annotated[StrictInt, Field(ge=15, le=180)] = 45
+    supersedes_plan_id: Text | None = None
+    travel_minutes: Annotated[StrictInt, Field(ge=0, le=120)] = 30
+
+    @model_validator(mode="after")
+    def distinct(self):
+        if len(set(self.community_ids)) != len(self.community_ids):
+            raise ValueError("each community can appear once in a tour plan")
+        if len(set(self.options)) != len(self.options):
+            raise ValueError("candidate start times must differ")
+        return self
+
+
+class TourResponse(Input):
+    """An operator records a reply that actually arrived from one party."""
+
+    party: Literal["family", "justin", "community"]
+    community_id: Text | None = None
+    response: Literal["accepts", "declines"]
+    option: Annotated[StrictInt, Field(ge=1, le=3)] | None = None
+    source_ref: Text
+    note: Annotated[str, Field(max_length=1000)] = ""
+
+    @model_validator(mode="after")
+    def consistent(self):
+        if (self.party == "community") != (self.community_id is not None):
+            raise ValueError("community_id is required for a community reply and only for one")
+        if self.response == "accepts" and self.option is None:
+            raise ValueError("an acceptance names the option number it accepts")
+        return self
 
 
 class Availability(Input):

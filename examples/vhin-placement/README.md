@@ -103,6 +103,22 @@ No case details enter persona memory, a global client registry, or an agency que
 No deletion endpoint is exposed. The state response shows the latest 100 audit
 events; the underlying journal and retry receipts retain earlier events.
 
+- Justin's stars: once he contracts a community he rates it 1, 2 or 3. Stars never decide
+  whether a fitting community appears; they break ties between equal fits and show on
+  every pick. Only the configured confirmer can record a contract or a rating.
+- Tour plans coordinate three parties (family, each community, Justin) for up to three
+  communities. Drafts are stored unsent; community drafts never include the family's name,
+  care needs or budget. A stop or decline closes open plans and removes family drafts.
+  Replies are operator attestations (`source_ref`), not provider readbacks.
+- Regulations: `vhin_placement/regulations_data/<STATE>/corpus.json` holds verbatim
+  primary-source text split into citable units, built by `scripts/build_regulations.py`
+  from `sources.json` (official publishers only, SHA-256 per document). Florida covers
+  Rule Chapter 59A-36, F.A.C. (flrules.org) and Part I of Chapter 429, F.S.
+  (leg.state.fl.us). Add a state by adding its `sources.json` and, for a new publisher
+  format, one parser. `regulations-mirror/<STATE>/` holds the same text in pages under
+  3,400 characters for chat agents whose fetch tool keeps 4,096 characters. Rebuild both
+  when the publisher amends a rule; the corpus records its retrieval time.
+
 ## HTTP contract
 
 All writes require `Idempotency-Key` (1–200 characters). Retrying the same key,
@@ -122,6 +138,15 @@ retry to see later edits, pauses, suppression, or expiry. Responses are `no-stor
 | `POST /communities` | `name`, `city`, `services`, optional `licensed_beds`, `source_url`, `observed_at` |
 | `POST /communities/{id}/availability` | `vacancies`, `verified_at`, `expires_at`, `source_ref`, `human_confirmed: true` |
 | `POST /tours` | `referral_id`, `community_id`, `start_at`, `end_at` |
+| `POST /communities/{id}/contract` | Justin only: `status: not_contracted\|in_progress\|contracted`, `agreement_ref` (required when contracted), `human_confirmed: true` |
+| `POST /communities/{id}/rating` | Justin only, contracted communities only: `stars: 1\|2\|3`, optional `note`; ending the contract clears the stars |
+| `GET /recommendations` | Query `city`, `services` (comma-separated), `category`, `max_miles`, `limit` (1-3). Fit filters first; then confirmed openings, distance, and Justin's stars as a tiebreak. Each pick shows `justin_rating` and `checks_needed` |
+| `POST /tour-plans` | `referral_id`, `community_ids` (1-3, visiting order), `options` (1-3 start times), optional `tour_minutes`, `travel_minutes`, `supersedes_plan_id`. Builds back-to-back stops and unsent drafts for the family, each community and Justin; one open plan per family |
+| `POST /tour-plans/{id}/responses` | `party: family\|justin\|community`, `community_id` for a community, `response: accepts\|declines`, `option`, `source_ref`. Only Justin records Justin's reply. All parties accepting one option creates proposed tours marked `parties_confirmed`, still not booked |
+| `GET /tour-plans/{id}/calendar.ics?option=N` | Tentative calendar file for Justin to import; community names and times only |
+| `GET /regulations` | Loaded states, sources, retrieval time and unit counts |
+| `GET /regulations/{state}/search?q=` | Ranked primary-source units with exact citation, parent context, official URL and effective date |
+| `GET /regulations/{state}/unit?citation=` | One unit and its children by exact citation, for example `Rule 59A-36.006(1)(a)4., F.A.C.` |
 | `POST /placements` | `referral_id`, `community_id`, `move_in_date`, `agreement_ref`, `agreement_signed_on`, `fee_cents`, `terms: 50_50_day30_day60`, `refund_terms` |
 | `POST /placements/{id}/ledger` | `kind: invoiced\|collected`, `day: 30\|60`, `amount_cents`, `event_date`, `receipt_ref` |
 

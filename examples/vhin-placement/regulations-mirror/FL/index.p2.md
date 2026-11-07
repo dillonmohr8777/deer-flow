@@ -1,0 +1,31 @@
+- 429.20 Certain solicitation prohibited; third-party supplementation -> s/429.20.md
+- 429.22 Receivership proceedings -> s/429.22.md
+- 429.23 Internal risk management and quality assurance program; adverse incidents and reporting requirements -> s/429.23.md
+- 429.24 Contracts -> s/429.24.md
+- 429.255 Use of personnel; emergency care -> s/429.255.md
+- 429.256 Assistance with self-administration of medication and with other tasks -> s/429.256.md
+- 429.26 Appropriateness of placements; examinations of residents -> s/429.26.md
+- 429.27 Property and personal affairs of residents -> s/429.27.md
+- 429.275 Business practice; personnel records; liability insurance -> s/429.275.md
+- 429.28 Resident bill of rights -> s/429.28.md
+- 429.29 Civil actions to enforce rights -> s/429.29.md
+- 429.293 Presuit notice; investigation; notification of violation of residents’ rights or alleged negligence; claims evaluation procedure; informal discovery; review; settlement offer; mediation -> s/429.293.md
+- 429.294 Availability of facility records for investigation of resident’s rights violations and defenses; penalty -> s/429.294.md
+- 429.295 Certain provisions not applicable to actions under this part -> s/429.295.md
+- 429.296 Statute of limitations -> s/429.296.md
+- 429.297 Punitive damages; pleading; burden of proof -> s/429.297.md
+- 429.298 Punitive damages; limitation -> s/429.298.md
+- 429.31 Closing of facility; notice; penalty -> s/429.31.md
+- 429.34 Right of entry and inspection -> s/429.34.md
+- 429.35 Maintenance of records; reports -> s/429.35.md
+- 429.41 Rules establishing standards -> s/429.41.md
+- 429.42 Pharmacy and dietary services -> s/429.42.md
+- 429.435 Uniform firesafety standards -> s/429.435.md
+- 429.44 Construction and renovation; requirements -> s/429.44.md
+- 429.445 Compliance with local zoning requirements -> s/429.445.md
+- 429.47 Prohibited acts; penalties for violation -> s/429.47.md
+- 429.49 Resident records; penalties for alteration -> s/429.49.md
+- 429.52 Staff training and educational requirements -> s/429.52.md
+- 429.53 Consultation by the agency -> s/429.53.md
+- 429.54 Collection of information; local subsidy -> s/429.54.md
+- 429.55 Consumer information -> s/429.55.md
