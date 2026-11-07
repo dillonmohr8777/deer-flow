@@ -97,14 +97,14 @@ async def _document(request, project_id, document_id, scope):
     return row
 
 
-def _verified_bytes(paths, storage_id, row):
+def _verified_bytes(storage_id, row):
     """Resolve and read original bytes once off-loop, verifying the approved hash."""
     name = row.get("name")
     size = row.get("size_bytes")
     if not isinstance(name, str) or name in {"", ".", ".."} or "/" in name or "\\" in name or type(size) is not int or not 0 <= size <= MAX_DOCUMENT_BYTES:
         return None
     try:
-        original, _ = resolve_document_paths(paths, user_id=storage_id, relpath=row["stored_relpath"], name=name)
+        original, _ = resolve_document_paths(get_paths(), user_id=storage_id, relpath=row["stored_relpath"], name=name)
         with original.open("rb") as source:
             data = source.read(MAX_DOCUMENT_BYTES + 1)
     except (OSError, ValueError):
@@ -142,7 +142,7 @@ async def list_reference_documents(project_id: Identifier, request: Request, sco
             if error.status_code != 404:
                 raise
             continue
-        data = await run_file_io(_verified_bytes, get_paths(), scope[0], row)
+        data = await run_file_io(_verified_bytes, scope[0], row)
         documents.append({**{key: row[key] for key in ("id", "name", "sha256", "size_bytes")}, "content_missing": data is None})
     return {"documents": documents, "total": len(documents), "limit": 100, "offset": 0}
 
@@ -150,7 +150,7 @@ async def list_reference_documents(project_id: Identifier, request: Request, sco
 @router.get("/projects/{project_id}/documents/{document_id}/content")
 async def get_reference_content(project_id: Identifier, document_id: Identifier, request: Request, scope=Depends(reference_scope)):
     row = await _document(request, project_id, document_id, scope)
-    data = await run_file_io(_verified_bytes, get_paths(), scope[0], row)
+    data = await run_file_io(_verified_bytes, scope[0], row)
     if data is None:
         raise HTTPException(409, "Reference content is unavailable")
     return Response(
