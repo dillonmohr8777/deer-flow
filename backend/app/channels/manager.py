@@ -1200,6 +1200,16 @@ async def _ingest_inbound_files(thread_id: str, msg: InboundMessage, *, user_id:
     return created
 
 
+def _public_news_route(config: dict[str, Any] | None) -> tuple[str, str] | None:
+    """``(channel_id, team_id)`` from ``channels.slack.public_news``; None unless both are non-empty strings."""
+    if not isinstance(config, dict):
+        return None
+    channel_id, team_id = config.get("channel_id"), config.get("team_id")
+    if isinstance(channel_id, str) and channel_id.strip() and isinstance(team_id, str) and team_id.strip():
+        return channel_id.strip(), team_id.strip()
+    return None
+
+
 class ChannelManager:
     """Core dispatcher that bridges IM channels to the DeerFlow agent.
 
@@ -1224,6 +1234,7 @@ class ChannelManager:
         require_bound_identity: bool = False,
         inbound_dedupe_store: InboundDedupeStore | None = None,
         get_stream_bridge: Callable[[], StreamBridge | None] | None = None,
+        public_news: dict[str, Any] | None = None,
     ) -> None:
         if isinstance(max_concurrency, bool) or not isinstance(max_concurrency, int) or max_concurrency <= 0:
             raise ValueError("max_concurrency must be a positive integer")
@@ -1248,6 +1259,9 @@ class ChannelManager:
         # tests) — follow-up buffering still works, but no watcher is
         # spawned to auto-drain it (see _maybe_spawn_followup_watcher).
         self._get_stream_bridge = get_stream_bridge
+        # The one Slack channel (id + team id, from ``channels.slack.public_news``) whose
+        # messages are routed to the public news agent. Unset means no such route.
+        self._public_news_route = _public_news_route(public_news)
         self._client = None  # lazy init — langgraph_sdk async client
         self._channel_metadata_synced: set[str] = set()
         # Explicit /agent selections are pinned to the newly-created thread.
@@ -1742,7 +1756,7 @@ class ChannelManager:
                 run_config["recursion_limit"] = max(run_config.get("recursion_limit", 100), policy.default_recursion_limit)
 
         # Public news routing cannot be widened by user preferences or /agent state.
-        public_news = msg.channel_name == "slack" and msg.chat_id == "C04HXSVN2CS" and msg_metadata.get("team_id") == "T066HGS7N"
+        public_news = self._public_news_route is not None and msg.channel_name == "slack" and (msg.chat_id, msg_metadata.get("team_id")) == self._public_news_route
         run_context["public_news_channel"] = public_news
         if public_news:
             assistant_id = "lead_agent"

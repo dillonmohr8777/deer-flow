@@ -28,7 +28,7 @@ EC2 adds three things:
 
 ### Operator extensions
 
-The placement extension (`examples/vhin-placement`) is not in the image yet, so compose bind-mounts it
+The placement extension (`examples/northwind-placement`) is not in the image yet, so compose bind-mounts it
 read-only from a detached worktree pinned to the image's SHA. Pinning keeps image rollback and
 extension code independent of the `/opt/momobot/src` checkout. Update it on purpose, under
 `/run/momobot-release.lock`:
@@ -38,11 +38,18 @@ sudo git -C /opt/momobot/src worktree add --detach /opt/momobot/extensions/place
 # later: sudo git -C /opt/momobot/extensions/placement checkout --detach <new-sha>
 ```
 
-It stays inert until `/opt/momobot/config.yaml` has a `plugins:` entry with `use: vhin_placement:install`,
+Rename note (Oct 30, 2026): this example was renamed from its client-specific name to `northwind-placement`
+(module `northwind_placement`, route prefix `/api/northwind`, entry point `northwind`). A host whose pinned
+worktree and `config.yaml` still use the old names keeps working until it is updated on purpose: move the worktree
+to a SHA that has the new directory first, then change the compose mount paths and the `plugins:` `use:` entry
+together, in one release under the lock. Applying this compose file before the worktree moves fails the start
+(the mount source is missing).
+
+It stays inert until `/opt/momobot/config.yaml` has a `plugins:` entry with `use: northwind_placement:install`,
 `required: false`, no `package:`, and every config key in that example's README. Put `data_dir` inside the
 gateway volume (`/app/backend/.deer-flow/extensions/<name>`) so the nightly gateway snapshot backs it up
 and `gateway-data.tgz` restores it. Readback after a restart: `docker logs momobot-prod-gateway | grep
-extension`, then an authenticated `GET /api/vhin/state`. Its SQLite file uses rollback-journal mode: if a
+extension`, then an authenticated `GET /api/northwind/state`. Its SQLite file uses rollback-journal mode: if a
 gateway crash leaves a hot journal, the nightly backup fails on that file (health.sh flags the stale
 stamp). One authenticated desk request rolls the journal back; then rerun the backup.
 

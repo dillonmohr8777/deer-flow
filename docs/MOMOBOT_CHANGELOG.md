@@ -351,7 +351,7 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 ### Changed
 
 - Patch production dependencies, Oct 21 (#204)
-- VHIN placement desk and mobile readiness, Oct 21 (#202)
+- Northwind placement desk and mobile readiness, Oct 21 (#202)
 - Budget memory extraction, Oct 21 (#203)
 
 ## [momobot-prod-20261021-3056b389] - 2026-10-21
