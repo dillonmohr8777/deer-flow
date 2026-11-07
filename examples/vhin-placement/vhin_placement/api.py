@@ -1,4 +1,8 @@
-"""Authenticated operations only: no sends, calendar writes, models, or billing."""
+"""Authenticated operations only: no sends, calendar writes, models, or billing.
+
+Tour plans prepare unsent drafts and a tentative calendar file; regulation search is
+read-only over bundled primary-source text.
+"""
 
 import hashlib
 from datetime import date, datetime, timedelta
@@ -7,20 +11,25 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from deerflow_extension_api import resolve_principal
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from pydantic import ValidationError
 
+from vhin_placement import coordination, regulations
 from vhin_placement.models import (
     Availability,
     Community,
     ContactEvent,
+    ContractUpdate,
     Draft,
     LedgerEntry,
     Placement,
+    Rating,
     Referral,
     ReferralPatch,
     Tour,
+    TourPlan,
+    TourResponse,
     Transition,
     before_now,
     contacts,
@@ -48,6 +57,9 @@ class Service:
             raise ValueError("Placement confirmers must be explicitly allowed user IDs")
         self.allowed_user_ids = frozenset(allowed)
         self.confirmers = frozenset(confirmers)
+        # Names used in unsent tour drafts; kept in deployment config, never in source.
+        self.advisor_name = str(config.get("advisor_name") or "[your name]")
+        self.business_line = str(config.get("business_line") or "[business connection line to approve]")
         self.ready = False
 
     async def start(self, deps):
@@ -105,7 +117,103 @@ def community_view(community):
     else:
         fresh = datetime.fromisoformat(verification["expires_at"]) > now()
         availability = {**verification, "status": "verified" if fresh else "expired", "vacancies": verification["vacancies"] if fresh else None}
-    return {**community, "availability": availability}
+    rating = community.get("rating")
+    return {
+        **community,
+        "availability": availability,
+        "contract_status": community.get("contract_status", "not_contracted"),
+        "owner_rating": {**rating, "label": f"{rating['stars']} of 3 stars"} if rating else {"stars": None, "label": "Not yet rated by the owner"},
+    }
+
+
+def availability_rank(view):
+    status, vacancies = view["availability"]["status"], view["availability"]["vacancies"]
+    if status == "verified":
+        return 0 if vacancies else 2
+    return 1
+
+
+def recommend(communities, city=None, services=(), category=None, max_miles=None, limit=3):
+    """Fit decides who appears. Order: confirmed openings, distance, then the owner's stars as a tiebreak."""
+    wanted = [s.casefold() for s in services]
+    fits, excluded_unknown_distance = [], 0
+    for community in communities:
+        view = community_view(community)
+        offered = [s.casefold() for s in view.get("services") or []]
+        if city and view["city"].casefold() != city.casefold():
+            continue
+        if category and (view.get("category") or "").casefold() != category.casefold():
+            continue
+        if any(not any(w in o for o in offered) for w in wanted):
+            continue
+        if max_miles is not None:
+            if view.get("miles_from_office") is None:
+                excluded_unknown_distance += 1
+                continue
+            if view["miles_from_office"] > max_miles:
+                continue
+        fits.append(view)
+    fits.sort(
+        key=lambda v: (
+            availability_rank(v),
+            v.get("miles_from_office") if v.get("miles_from_office") is not None else float("inf"),
+            -(v["owner_rating"]["stars"] or 0),
+            v["name"].casefold(),
+        )
+    )
+    picks = []
+    for view in fits[:limit]:
+        why = [f"in {view['city']}"] if city else []
+        why += [f"offers {s}" for s in services]
+        if category:
+            why.append(view["category"])
+        if view.get("miles_from_office") is not None:
+            why.append(f"{view['miles_from_office']:g} miles from the office (straight line)")
+        checks = [
+            "current vacancy" if view["availability"]["status"] != "verified" else None,
+            "price",
+            "care capability for this resident",
+            "payer acceptance",
+            "tour availability",
+        ]
+        picks.append({**view, "why": why, "checks_needed": [c for c in checks if c]})
+    return {"recommendations": picks, "fit_count": len(fits), "excluded_unknown_distance": excluded_unknown_distance}
+
+
+ACTIVE_PLAN = ("awaiting_replies", "needs_new_times")
+
+
+def block_family_in_plans(connection, referral_id):
+    """A stop or decline removes family drafts from every plan and closes open ones."""
+    for plan in records(connection, "tour_plan"):
+        if plan["referral_id"] != referral_id:
+            continue
+        changed = plan["drafts"]["family"] is not None
+        plan["drafts"]["family"] = None
+        if plan["status"] in ACTIVE_PLAN:
+            plan["parties"]["family"] = {"status": "blocked"}
+            plan["status"] = "family_contact_blocked"
+            changed = True
+        if changed:
+            put(connection, "tour_plan", plan)
+
+
+def require_confirmer(service, store, what):
+    if store.user_id not in service.confirmers:
+        raise HTTPException(403, f"Only the configured placement owner account can {what}")
+
+
+def overlaps(start, end, existing_start, existing_end):
+    return start < datetime.fromisoformat(existing_end) and end > datetime.fromisoformat(existing_start)
+
+
+def itinerary_span(stops):
+    """The whole occupied block: from the first stop through the last, including internal travel."""
+    return datetime.fromisoformat(stops[0]["start_at"]), datetime.fromisoformat(stops[-1]["end_at"])
+
+
+def reserved_end(tour):
+    return tour.get("reserved_end_at") or tour["end_at"]
 
 
 def duplicate_ids(connection, candidate, exclude=None):
@@ -143,8 +251,17 @@ def build_router(service):
                 "placements": placements,
                 "ledger": ledger,
                 "drafts": records(connection, "draft"),
+                "tour_plans": records(connection, "tour_plan"),
+                "regulation_states": regulations.available_states(),
                 "audit": [dict(row) for row in connection.execute("SELECT * FROM audit ORDER BY seq DESC LIMIT 100")],
-                "connections": {"intake": "manual", "calendar": "unconnected", "sender": "unconnected", "billing": "unconnected", "handoff": "unconnected"},
+                "connections": {
+                    "intake": "manual",
+                    "calendar": "unconnected",
+                    "sender": "unconnected",
+                    "billing": "unconnected",
+                    "handoff": "unconnected",
+                    "regulations": "loaded: " + ", ".join(regulations.available_states()) if regulations.available_states() else "none loaded",
+                },
                 "can_confirm_placement": store.user_id in service.confirmers,
                 "briefing": {
                     "new_referrals": sum(r["status"] == "New" for r in referrals),
@@ -152,6 +269,8 @@ def build_router(service):
                     "qualified_referrals": sum(r["status"] == "Qualified" for r in referrals),
                     "proposed_tours": len(tours),
                     "confirmed_tours": 0,
+                    "tour_plans_awaiting_replies": sum(p["status"] == "awaiting_replies" for p in records(connection, "tour_plan")),
+                    "tour_plans_ready_to_book": sum(p["status"] == "ready_to_book" for p in records(connection, "tour_plan")),
                     "placements": len(placements),
                     "availability_needs_verification": sum(c["availability"]["status"] != "verified" for c in communities),
                     "human_callback_needed": sum(r["attention"] != "routine" for r in referrals),
@@ -221,6 +340,7 @@ def build_router(service):
                 for draft in records(connection, "draft"):
                     if draft["referral_id"] == referral_id:
                         put(connection, "draft", {**draft, "status": "suppressed"})
+                block_family_in_plans(connection, referral_id)
             return referral_view(connection, put(connection, "referral", updated))
 
         return store.mutate(key, f"referral.update:{referral_id}", data, operation)
@@ -249,6 +369,8 @@ def build_router(service):
                 for kind, value in contacts(referral).items():
                     connection.execute("INSERT OR IGNORE INTO suppressed VALUES (?,?)", (kind, value))
             put(connection, "contact_event", create_record({**payload.model_dump(mode="json"), "referral_id": referral_id}))
+            if stopped or payload.event == "decline":
+                block_family_in_plans(connection, referral_id)
             for draft in records(connection, "draft"):
                 if draft["referral_id"] == referral_id:
                     draft["status"] = "suppressed" if stopped else "paused"
@@ -275,7 +397,12 @@ def build_router(service):
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
         data = payload.model_dump(mode="json")
-        return store.mutate(key, "community.create", data, lambda connection: community_view(put(connection, "community", create_record(data))))
+        return store.mutate(
+            key,
+            "community.create",
+            data,
+            lambda connection: community_view(put(connection, "community", create_record({**data, "contract_status": "not_contracted"}))),
+        )
 
     @router.post("/communities/{community_id}/availability")
     def verify_availability(community_id: str, payload: Availability, store: Store = account, key: str = retry):
@@ -303,7 +430,7 @@ def build_router(service):
             if payload.start_at <= now():
                 raise HTTPException(422, "Propose a future tour")
             for existing in records(connection, "tour"):
-                if payload.start_at < datetime.fromisoformat(existing["end_at"]) and payload.end_at > datetime.fromisoformat(existing["start_at"]):
+                if overlaps(payload.start_at, payload.end_at, existing["start_at"], reserved_end(existing)):
                     raise HTTPException(409, {"message": "Conflicts with an existing tour proposal", "tour_id": existing["id"]})
             data = {
                 **payload.model_dump(mode="json"),
@@ -317,8 +444,7 @@ def build_router(service):
 
     @router.post("/placements", status_code=201)
     def confirm_placement(payload: Placement, store: Store = account, key: str = retry):
-        if store.user_id not in service.confirmers:
-            raise HTTPException(403, "Only the configured Justin account can confirm a placement")
+        require_confirmer(service, store, "confirm a placement")
 
         def operation(connection):
             referral = get(connection, "referral", payload.referral_id)
@@ -370,6 +496,251 @@ def build_router(service):
             )
 
         return store.mutate(key, f"placement.ledger:{placement_id}", payload.model_dump(mode="json"), operation)
+
+    @router.post("/communities/{community_id}/contract")
+    def update_contract(community_id: str, payload: ContractUpdate, store: Store = account, key: str = retry):
+        require_confirmer(service, store, "record a community contract")
+
+        def operation(connection):
+            community = get(connection, "community", community_id)
+            community["contract_status"] = payload.status
+            community["contract"] = {**payload.model_dump(mode="json"), "recorded_by": store.user_id, "recorded_at": now().isoformat()}
+            if payload.status != "contracted" and community.get("rating"):
+                community["rating"] = None  # stars apply only while contracted; history stays in the audit log
+            return community_view(put(connection, "community", community))
+
+        return store.mutate(key, f"community.contract:{community_id}", payload.model_dump(mode="json"), operation)
+
+    @router.post("/communities/{community_id}/rating")
+    def rate_community(community_id: str, payload: Rating, store: Store = account, key: str = retry):
+        require_confirmer(service, store, "rate a community")
+
+        def operation(connection):
+            community = get(connection, "community", community_id)
+            if community.get("contract_status") != "contracted":
+                raise HTTPException(409, "Stars are for communities the owner has contracted; record the contract first")
+            community["rating"] = {"stars": payload.stars, "note": payload.note, "rated_by": store.user_id, "rated_on": business_date().isoformat()}
+            return community_view(put(connection, "community", community))
+
+        return store.mutate(key, f"community.rating:{community_id}", payload.model_dump(mode="json"), operation)
+
+    @router.get("/recommendations")
+    def recommendations(
+        store: Store = account,
+        city: str | None = Query(None, max_length=200),
+        services: str | None = Query(None, max_length=1000, description="Comma-separated services the family needs"),
+        category: str | None = Query(None, max_length=100),
+        max_miles: float | None = Query(None, ge=0, le=500),
+        limit: int = Query(3, ge=1, le=3),
+    ):
+        wanted = [s.strip() for s in (services or "").split(",") if s.strip()]
+        with store.transaction() as connection:
+            result = recommend(records(connection, "community"), city=city, services=wanted, category=category, max_miles=max_miles, limit=limit)
+        result["criteria"] = {"city": city, "services": wanted, "category": category, "max_miles": max_miles}
+        result["note"] = "Fit decides which communities appear. Contract status and fees never outrank fit. Licensed capacity is not vacancy."
+        return result
+
+    @router.post("/tour-plans", status_code=201)
+    def create_tour_plan(payload: TourPlan, store: Store = account, key: str = retry):
+        def operation(connection):
+            referral = get(connection, "referral", payload.referral_id)
+            if referral["status"] not in ("Qualified", "Touring"):
+                raise HTTPException(409, "A human-qualified referral is required")
+            communities = [get(connection, "community", community_id) for community_id in payload.community_ids]
+            if any(option <= now() for option in payload.options):
+                raise HTTPException(422, "Every candidate start time must be in the future")
+            plans = [p for p in records(connection, "tour_plan") if p["referral_id"] == referral["id"] and p["status"] in ACTIVE_PLAN]
+            if any(p["id"] != payload.supersedes_plan_id for p in plans):
+                raise HTTPException(
+                    409, {"message": "This family already has an open tour plan; pass supersedes_plan_id to replace it", "plan_ids": [p["id"] for p in plans]}
+                )
+            if payload.supersedes_plan_id and not plans:
+                raise HTTPException(409, "The plan to supersede is not open for this family")
+            for old in plans:
+                put(connection, "tour_plan", {**old, "status": "superseded"})
+                for draft in records(connection, "draft"):
+                    if draft.get("tour_plan_id") == old["id"] and draft["status"] == "draft":
+                        put(connection, "draft", {**draft, "status": "superseded"})
+            existing = records(connection, "tour")
+            options = []
+            for start in sorted(payload.options):
+                stops = coordination.itinerary(start, communities, payload.tour_minutes, payload.travel_minutes)
+                span_start, span_end = itinerary_span(stops)
+                conflicts = [t["id"] for t in existing if overlaps(span_start, span_end, t["start_at"], reserved_end(t))]
+                options.append({"stops": stops, "conflicts_with_tours": conflicts})
+            if all(o["conflicts_with_tours"] for o in options):
+                raise HTTPException(409, "Every candidate time overlaps an existing proposed tour")
+            usable = [o for o in options if not o["conflicts_with_tours"]]
+            plan_id = str(uuid4())
+            # A paused reply may still supersede its own plan; the operator is continuing that conversation.
+            blocked = (
+                is_suppressed(connection, referral)
+                or referral["contact_preference"] == "none"
+                or (referral["contact_status"] == "paused" and not payload.supersedes_plan_id)
+            )
+            family = None if blocked else coordination.family_drafts(referral, usable, service.advisor_name, service.business_line)
+            if family:
+                channel = referral["contact_preference"]
+                body = family["family_email"] if channel == "email" else family["family_text"]
+                put(
+                    connection,
+                    "draft",
+                    create_record(
+                        {"referral_id": referral["id"], "reason": "tour_coordination", "body": body, "status": "draft", "sent": False, "tour_plan_id": plan_id}
+                    ),
+                )
+            plan = {
+                "id": plan_id,
+                **payload.model_dump(mode="json"),
+                "status": "family_contact_blocked" if blocked else "awaiting_replies",
+                "options": usable,
+                "dropped_conflicting_options": len(options) - len(usable),
+                "parties": {
+                    "family": {"status": "blocked" if blocked else "pending"},
+                    "owner": {"status": "pending"},
+                    "communities": {c["id"]: {"status": "pending"} for c in communities},
+                },
+                "drafts": {
+                    "family": family,
+                    "communities": {c["id"]: coordination.community_drafts(c, usable, service.advisor_name) for c in communities},
+                    "owner_summary": coordination.owner_summary(referral, usable, blocked),
+                },
+                "sent": False,
+                "calendar_connected": False,
+                "created_by": store.user_id,
+                "created_at": now().isoformat(),
+            }
+            return put(connection, "tour_plan", plan)
+
+        return store.mutate(key, "tour_plan.create", payload.model_dump(mode="json"), operation)
+
+    @router.post("/tour-plans/{plan_id}/responses")
+    def record_tour_response(plan_id: str, payload: TourResponse, store: Store = account, key: str = retry):
+        if payload.party == "owner":
+            require_confirmer(service, store, "record the owner's reply")
+
+        def operation(connection):
+            plan = get(connection, "tour_plan", plan_id)
+            referral = get(connection, "referral", plan["referral_id"])
+            if is_suppressed(connection, referral):
+                block_family_in_plans(connection, referral["id"])
+                raise HTTPException(409, "The family asked to stop contact; this tour plan is closed")
+            if plan["status"] not in ("awaiting_replies", "needs_new_times"):
+                raise HTTPException(409, f"This tour plan is {plan['status']}")
+            if payload.option is not None and payload.option > len(plan["options"]):
+                raise HTTPException(422, "That option number is not in this plan")
+            if payload.party == "community":
+                if payload.community_id not in plan["parties"]["communities"]:
+                    raise HTTPException(422, "That community is not in this plan")
+                slot = plan["parties"]["communities"][payload.community_id]
+            else:
+                slot = plan["parties"][payload.party]
+                if payload.party == "family" and slot["status"] == "blocked":
+                    raise HTTPException(409, "Family contact is stopped or paused; record the family's preference first")
+            if payload.party == "family":
+                # Share the reply pause with /contact-events: paused contact stops new follow-ups, the plan stays open.
+                referral.update(contact_status="paused", version=referral["version"] + 1)
+                put(connection, "referral", referral)
+                for draft in records(connection, "draft"):
+                    if draft["referral_id"] == referral["id"] and draft["status"] == "draft":
+                        put(connection, "draft", {**draft, "status": "paused"})
+            slot.update(
+                status=payload.response,
+                option=payload.option,
+                source_ref=payload.source_ref,
+                note=payload.note,
+                recorded_by=store.user_id,
+                at=now().isoformat(),
+            )
+            parties = [plan["parties"]["family"], plan["parties"]["owner"], *plan["parties"]["communities"].values()]
+            agreed = {p.get("option") for p in parties}
+            everyone_accepted = all(p["status"] == "accepts" for p in parties)
+            if everyone_accepted and len(agreed) == 1:
+                chosen = plan["options"][agreed.pop() - 1]
+                if referral["status"] not in ("Qualified", "Touring"):
+                    raise HTTPException(409, "The family's case is no longer qualified for tours")
+                if datetime.fromisoformat(chosen["stops"][0]["start_at"]) <= now():
+                    raise HTTPException(409, "The agreed time has passed; prepare a new plan with supersedes_plan_id")
+                tours = records(connection, "tour")
+                span_start, span_end = itinerary_span(chosen["stops"])
+                clash = next((t for t in tours if overlaps(span_start, span_end, t["start_at"], reserved_end(t))), None)
+                if clash:
+                    raise HTTPException(409, {"message": "The agreed time now overlaps another proposed tour", "tour_id": clash["id"]})
+                for index, stop in enumerate(chosen["stops"]):
+                    # Reserve the drive after each stop so later proposals cannot book the owner in it.
+                    next_start = chosen["stops"][index + 1]["start_at"] if index + 1 < len(chosen["stops"]) else stop["end_at"]
+                    put(
+                        connection,
+                        "tour",
+                        create_record(
+                            {
+                                "referral_id": plan["referral_id"],
+                                "community_id": stop["community_id"],
+                                "start_at": stop["start_at"],
+                                "end_at": stop["end_at"],
+                                "reserved_end_at": next_start,
+                                "status": "proposed",
+                                "parties_confirmed": True,
+                                "calendar_connected": False,
+                                "tour_plan_id": plan_id,
+                            }
+                        ),
+                    )
+                plan.update(status="ready_to_book", chosen_option=plan["options"].index(chosen) + 1)
+            elif everyone_accepted or any(p["status"] == "declines" for p in parties):
+                plan["status"] = "needs_new_times"  # a decline, or everyone said yes to different options
+            else:
+                plan["status"] = "awaiting_replies"
+            return put(connection, "tour_plan", plan)
+
+        return store.mutate(key, f"tour_plan.response:{plan_id}", payload.model_dump(mode="json"), operation)
+
+    @router.get("/tour-plans/{plan_id}/calendar.ics")
+    def tour_plan_calendar(plan_id: str, store: Store = account, option: int = Query(1, ge=1, le=3)):
+        with store.transaction() as connection:
+            plan = get(connection, "tour_plan", plan_id)
+        if option > len(plan["options"]):
+            raise HTTPException(404, "That option number is not in this plan")
+        body = coordination.tentative_calendar(plan_id, option, plan["options"][option - 1]["stops"], now())
+        return PlainTextResponse(
+            body,
+            media_type="text/calendar",
+            headers={"Cache-Control": "no-store", "Content-Disposition": f'attachment; filename="tour-{plan_id[:8]}-option-{option}.ics"'},
+        )
+
+    @router.get("/regulations")
+    def regulation_states(store: Store = account):
+        loaded = []
+        for state in regulations.available_states():
+            corpus = regulations.load(state)
+            loaded.append(
+                {
+                    "state": state,
+                    "name": corpus.name,
+                    "retrieved_at": corpus.retrieved_at,
+                    "sources": corpus.sources,
+                    "units": len(corpus.units),
+                    "documents": len(corpus.documents),
+                }
+            )
+        return {"states": loaded, "rule": "Answers come only from these primary sources and cite the exact rule or statute section."}
+
+    @router.get("/regulations/{state}/search")
+    def regulation_search(state: str, store: Store = account, q: str = Query(min_length=2, max_length=500), limit: int = Query(6, ge=1, le=20)):
+        corpus = regulations.load(state)
+        if corpus is None:
+            raise HTTPException(404, f"No primary-source regulation corpus is loaded for {state.upper()[:2]}")
+        return {"state": corpus.state, "query": q, "retrieved_at": corpus.retrieved_at, "results": corpus.search(q, limit)}
+
+    @router.get("/regulations/{state}/unit")
+    def regulation_unit(state: str, store: Store = account, citation: str = Query(min_length=3, max_length=200)):
+        corpus = regulations.load(state)
+        if corpus is None:
+            raise HTTPException(404, f"No primary-source regulation corpus is loaded for {state.upper()[:2]}")
+        unit = corpus.section(citation)
+        if unit is None:
+            raise HTTPException(404, "No unit with that exact citation, for example 'Rule 59A-36.006(1)(a)4., F.A.C.'")
+        return unit
 
     @router.get("/dashboard", include_in_schema=False)
     def dashboard_redirect(store: Store = account):
