@@ -77,6 +77,14 @@ pnpm start
 
 ## Configuration
 
+### Active chat recovery
+
+Reopened chats recover an active run with one owned reconnect lifecycle and at
+most two delayed retries. Completion during backoff cancels the queued retry;
+a delayed completion or error for an older run does not change a newer recovery
+owner. The hook owns the SDK and timer effects; the pure transition module owns
+the ready, joining, backoff, settled and exhausted phases.
+
 ### Environment Variables
 
 Key environment variables (see `.env.example` for full list):

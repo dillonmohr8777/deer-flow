@@ -1,4 +1,4 @@
-import LocalAuthentication
+import MomoMobileCore
 import SwiftUI
 
 @main
@@ -96,45 +96,5 @@ private struct LockView: View {
         .frame(maxWidth: 440)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(uiColor: .systemBackground))
-    }
-}
-
-@MainActor
-private final class DeviceAuthenticationController: ObservableObject {
-    @Published private(set) var isUnlocked = false
-    @Published private(set) var isAuthenticating = false
-    @Published private(set) var errorMessage: String?
-
-    func authenticateIfNeeded() async {
-        guard !isUnlocked, !isAuthenticating else { return }
-
-        let context = LAContext()
-        context.localizedCancelTitle = "Stay Locked"
-        var evaluationError: NSError?
-
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &evaluationError) else {
-            isUnlocked = false
-            errorMessage = "Set a device passcode, Face ID, or Touch ID before using MomoBot."
-            return
-        }
-
-        isAuthenticating = true
-        defer { isAuthenticating = false }
-
-        do {
-            isUnlocked = try await context.evaluatePolicy(
-                .deviceOwnerAuthentication,
-                localizedReason: "Unlock your private MomoBot workspace"
-            )
-            errorMessage = nil
-        } catch {
-            isUnlocked = false
-            errorMessage = "MomoBot stayed locked. Try again when you're ready."
-        }
-    }
-
-    func lock() {
-        isUnlocked = false
-        errorMessage = nil
     }
 }

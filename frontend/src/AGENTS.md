@@ -155,6 +155,11 @@ Array previews coalesce consecutive generated markers only at the end into one o
 
 ### Interaction Ownership
 
+Active-run recovery phases live in `core/threads/active-run-rejoin.ts`. The hook
+owns SDK/timer effects, fences them to the current recovery owner, and settles
+late backoff completion. Preserve the three-attempt budget, SDK-pointer ownership
+and optional-Run completion coverage in both `active-run-rejoin` suites.
+
 - `core/settings/local.ts::getResolvedMode` owns mode resolution for the main
   composer and Side Chat. Only the thinking-only mode requires
   `supports_thinking`; Pro planning and Ultra delegation remain selectable on

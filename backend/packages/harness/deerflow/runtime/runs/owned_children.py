@@ -4,8 +4,17 @@ import asyncio
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 OWNED_CHILDREN_CONTEXT_KEY = "__run_owned_children"
+
+
+class OwnedChildCompletion(StrEnum):
+    """Terminal proof captured only by the actual execution owner."""
+
+    NOT_EXECUTED = "not_executed"
+    CLEANUP_CONFIRMED = "cleanup_confirmed"
+    CLEANUP_UNCONFIRMED = "cleanup_unconfirmed"
 
 
 @dataclass
@@ -17,8 +26,12 @@ class OwnedChild:
     execution_entered: bool = False
     cleanup_reached: bool = False
     cleanup_failed: bool = False
-    confirmed: bool = False
+    completion: OwnedChildCompletion | None = None
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    @property
+    def confirmed(self) -> bool:
+        return self.completion in (OwnedChildCompletion.NOT_EXECUTED, OwnedChildCompletion.CLEANUP_CONFIRMED)
 
     def enter(self) -> bool:
         with self._lock:
@@ -30,12 +43,17 @@ class OwnedChild:
     def cancel_before_entry(self) -> None:
         with self._lock:
             if not self.entered:
-                self.confirmed = True
+                self.completion = OwnedChildCompletion.NOT_EXECUTED
                 self.completed.set()
 
     def finish(self) -> None:
         with self._lock:
-            self.confirmed = not self.execution_entered or (self.cleanup_reached and not self.cleanup_failed)
+            if not self.execution_entered:
+                self.completion = OwnedChildCompletion.NOT_EXECUTED
+            elif self.cleanup_reached and not self.cleanup_failed:
+                self.completion = OwnedChildCompletion.CLEANUP_CONFIRMED
+            else:
+                self.completion = OwnedChildCompletion.CLEANUP_UNCONFIRMED
             self.completed.set()
 
 

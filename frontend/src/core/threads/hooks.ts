@@ -37,6 +37,14 @@ import { promptInputFilePartToFile, uploadFiles } from "../uploads";
 import { uuid } from "../utils/uuid";
 
 import {
+  activeRunRejoinRetryDelay,
+  createActiveRunRejoinState,
+  matchesActiveRunRejoin,
+  transitionActiveRunRejoin,
+  type ActiveRunIdentity,
+  type ActiveRunRejoinState,
+} from "./active-run-rejoin";
+import {
   branchThreadFromTurn,
   fetchThreadTokenUsage,
   moveThreadToProject,
@@ -269,32 +277,6 @@ const EMPTY_RUN_MESSAGES: RunMessage[] = [];
 const EMPTY_MESSAGE_IDENTITIES: readonly string[] = [];
 const EMPTY_MESSAGE_IDENTITIES_SET: ReadonlySet<string> = new Set<string>();
 const ACTIVE_RUN_STATUSES = new Set(["pending", "running"]);
-const ACTIVE_RUN_REJOIN_RETRY_DELAYS_MS = [1_000, 2_000] as const;
-const MAX_ACTIVE_RUN_REJOIN_ATTEMPTS =
-  ACTIVE_RUN_REJOIN_RETRY_DELAYS_MS.length + 1;
-
-type ActiveRunRejoinState = {
-  attempts: number;
-  inFlight: boolean;
-  retryTimer: ReturnType<typeof setTimeout> | null;
-  runId: string | null;
-  settled: boolean;
-  threadId: string | null;
-};
-
-function createActiveRunRejoinState(
-  threadId: string | null = null,
-  runId: string | null = null,
-): ActiveRunRejoinState {
-  return {
-    attempts: 0,
-    inFlight: false,
-    retryTimer: null,
-    runId,
-    settled: false,
-    threadId,
-  };
-}
 
 function readReconnectRun(threadId: string): string | null {
   try {
@@ -1851,6 +1833,9 @@ export function useThreadStream({
   const activeRunRejoinRef = useRef<ActiveRunRejoinState>(
     createActiveRunRejoinState(),
   );
+  const activeRunRejoinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [activeRunRejoinRetry, setActiveRunRejoinRetry] = useState(0);
   // Runs reads can lag behind SDK completion, including the initial read.
   // Keep completed IDs across recovery-state resets so stale "running" data
@@ -1909,35 +1894,41 @@ export function useThreadStream({
   const { tasksRef, setTasks } = useSubtaskContext();
   const updateSubtask = useUpdateSubtask();
 
-  const scheduleActiveRunRejoinRetry = useCallback(() => {
-    const rejoin = activeRunRejoinRef.current;
-    if (!rejoin.inFlight || !rejoin.threadId || !rejoin.runId) {
-      return;
-    }
+  const scheduleActiveRunRejoinRetry = useCallback(
+    (run?: ActiveRunIdentity) => {
+      const rejoin = activeRunRejoinRef.current;
+      if (rejoin.phase !== "joining" || !matchesActiveRunRejoin(rejoin, run))
+        return;
+      const waiting = transitionActiveRunRejoin(rejoin, "failed");
+      activeRunRejoinRef.current = waiting;
+      clearReconnectRun(rejoin.threadId, rejoin.runId);
+      const retryDelay = activeRunRejoinRetryDelay(waiting);
+      if (retryDelay === null) return;
+      activeRunRejoinTimerRef.current = setTimeout(() => {
+        if (activeRunRejoinRef.current !== waiting) return;
+        activeRunRejoinTimerRef.current = null;
+        activeRunRejoinRef.current = transitionActiveRunRejoin(
+          waiting,
+          "retry",
+        );
+        setActiveRunRejoinRetry((current) => current + 1);
+      }, retryDelay);
+    },
+    [],
+  );
 
-    rejoin.inFlight = false;
+  const settleActiveRunRejoin = useCallback((run?: ActiveRunIdentity) => {
+    const rejoin = activeRunRejoinRef.current;
+    if (rejoin.phase === "unavailable") return;
+    if (!matchesActiveRunRejoin(rejoin, run)) return;
+    const settled = transitionActiveRunRejoin(rejoin, "finished");
+    if (settled === rejoin) return;
+    activeRunRejoinRef.current = settled;
+    completedRunIdsRef.current.add(rejoin.runId);
     clearReconnectRun(rejoin.threadId, rejoin.runId);
-    const retryDelay = ACTIVE_RUN_REJOIN_RETRY_DELAYS_MS[rejoin.attempts - 1];
-    if (retryDelay === undefined) {
-      return;
-    }
-
-    rejoin.retryTimer = setTimeout(() => {
-      rejoin.retryTimer = null;
-      setActiveRunRejoinRetry((current) => current + 1);
-    }, retryDelay);
-  }, []);
-
-  const settleActiveRunRejoin = useCallback(() => {
-    const rejoin = activeRunRejoinRef.current;
-    if (!rejoin.inFlight) {
-      return;
-    }
-    rejoin.inFlight = false;
-    rejoin.settled = true;
-    if (rejoin.retryTimer !== null) {
-      clearTimeout(rejoin.retryTimer);
-      rejoin.retryTimer = null;
+    if (activeRunRejoinTimerRef.current !== null) {
+      clearTimeout(activeRunRejoinTimerRef.current);
+      activeRunRejoinTimerRef.current = null;
     }
   }, []);
 
@@ -2115,8 +2106,8 @@ export function useThreadStream({
         }
       }
     },
-    onError(error) {
-      scheduleActiveRunRejoinRetry();
+    onError(error, run) {
+      scheduleActiveRunRejoinRetry(run);
       setOptimisticMessages([]);
       setOptimisticThreadId(null);
       setLiveMessagesThreadId(null);
@@ -2142,7 +2133,7 @@ export function useThreadStream({
       if (run) {
         completedRunIdsRef.current.add(run.run_id);
       }
-      settleActiveRunRejoin();
+      settleActiveRunRejoin(run);
       listeners.current.onFinish?.(state.values);
       pendingPreparedReplayRef.current = null;
       pendingUsageBaselineMessageIdsRef.current = new Set(
@@ -2167,8 +2158,9 @@ export function useThreadStream({
       rejoin.threadId !== resolvedThreadId ||
       rejoin.runId !== resolvedRunId
     ) {
-      if (rejoin.retryTimer !== null) {
-        clearTimeout(rejoin.retryTimer);
+      if (activeRunRejoinTimerRef.current !== null) {
+        clearTimeout(activeRunRejoinTimerRef.current);
+        activeRunRejoinTimerRef.current = null;
       }
       if (rejoin.attempts > 0 && rejoin.threadId && rejoin.runId) {
         clearReconnectRun(rejoin.threadId, rejoin.runId);
@@ -2181,10 +2173,7 @@ export function useThreadStream({
       !resolvedThreadId ||
       !resolvedRunId ||
       completedRunIdsRef.current.has(resolvedRunId) ||
-      rejoin.inFlight ||
-      rejoin.retryTimer !== null ||
-      rejoin.settled ||
-      rejoin.attempts >= MAX_ACTIVE_RUN_REJOIN_ATTEMPTS ||
+      rejoin.phase !== "ready" ||
       isThreadLoading
     ) {
       return;
@@ -2196,8 +2185,9 @@ export function useThreadStream({
       return;
     }
 
-    rejoin.attempts += 1;
-    rejoin.inFlight = true;
+    const joining = transitionActiveRunRejoin(rejoin, "start");
+    if (joining.phase !== "joining") return;
+    activeRunRejoinRef.current = joining;
     rememberReconnectRun(resolvedThreadId, resolvedRunId);
     void joinStream(resolvedRunId);
   }, [
@@ -2214,8 +2204,9 @@ export function useThreadStream({
       if (rejoin.threadId !== (onStreamThreadId ?? null)) {
         return;
       }
-      if (rejoin.retryTimer !== null) {
-        clearTimeout(rejoin.retryTimer);
+      if (activeRunRejoinTimerRef.current !== null) {
+        clearTimeout(activeRunRejoinTimerRef.current);
+        activeRunRejoinTimerRef.current = null;
       }
       if (rejoin.attempts > 0 && rejoin.threadId && rejoin.runId) {
         clearReconnectRun(rejoin.threadId, rejoin.runId);
