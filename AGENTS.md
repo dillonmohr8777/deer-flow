@@ -247,6 +247,14 @@ These apply repo-wide; module guides own the module-specific detail.
 
 ## MomoBot app surfaces
 
+The native iOS authentication controller lives in `mobile/ios/MomoMobileCore`
+so the actual locked/authenticating/unlocked transitions can be tested with a
+controlled system-authentication dependency. Only the current attempt may
+settle; `lock()` retires its ownership before invalidating its context. Keep
+late success/error and newer-attempt coverage in the Swift package tests.
+The App target imports the same controller; package tests do not establish
+physical-device or signed iOS application acceptance.
+
 Opt-in OpenAI and Browserbase adapters belong in Gateway, not the harness.
 Private SQLite receipts track ownership/admission, not a client registry.
 Keep credentials server-side and paid operations idempotent. PWA offline caches

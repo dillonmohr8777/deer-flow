@@ -5,6 +5,13 @@ adds device-owner authentication, native browser controls, and a strict
 navigation boundary. It contains no API keys, cookies, passwords, Tailnet
 hostnames, or other embedded credentials.
 The app fails closed unless the device has a passcode, Face ID, or Touch ID.
+Its authentication controller lives in `MomoMobileCore` and has one current
+locked, authenticating, or unlocked state. Background locking retires and
+invalidates the current attempt before any late system callback can apply.
+A new foreground attempt can start immediately; an earlier success or failure
+cannot settle it. The core tests cover these callback orders without invoking
+device authentication. Real device/background acceptance remains a separate
+check from the native-core suite.
 
 ## Requirements
 

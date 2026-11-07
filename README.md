@@ -64,6 +64,9 @@ Phone navigation remains expanded even when the desktop sidebar was collapsed.
 The drawer closes after page or query navigation and when moving to a desktop
 layout, while a starting chat assigning its thread URL keeps the drawer open.
 Installation prompts stay off sign-in, setup and invitation pages.
+The native iOS shell invalidates its active device-authentication attempt when
+it locks. A late success or failure from that attempt cannot unlock the app or
+replace a newer attempt; the same controller is covered by native-core tests.
 Settings deep links include `?settings=invite`; links to sections unavailable to
 the current role, including an unresolved role, focus the allowed Appearance fallback.
 Agent lists show loading during initial feature discovery and hide cached agents
