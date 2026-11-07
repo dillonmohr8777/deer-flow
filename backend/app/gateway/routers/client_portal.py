@@ -325,12 +325,18 @@ async def invite_customer_workspace(body: CustomerWorkspaceInvitation, request: 
     return {"workspace_id": target.id, "client_id": body.client_id, **created.model_dump()}
 
 
-_STAFF_AUTHORS = {"client": "Client", "momo": "Internal draft", "owner": "MomoBot (published reply)"}
+# compose() stores staff-created requests as author_kind="client", so client-authored is not established.
+_STAFF_AUTHORS = {"client": "Client request", "momo": "Internal draft"}
 
 
 def _message(message, staff=False):
-    # Clients read their own messages as "You"; staff need to see who actually wrote each one.
-    author = _STAFF_AUTHORS.get(message.author_kind, message.author_kind) if staff else ("MomoBot" if message.author_kind == "owner" else "You")
+    # Clients read their own messages as "You"; staff get neutral labels plus publication state.
+    if not staff:
+        author = "MomoBot" if message.author_kind == "owner" else "You"
+    elif message.author_kind == "owner":
+        author = "MomoBot (published reply)" if message.visibility == "published" else "MomoBot (internal)"
+    else:
+        author = _STAFF_AUTHORS.get(message.author_kind, message.author_kind)
     return {
         "id": message.id,
         "author": author,

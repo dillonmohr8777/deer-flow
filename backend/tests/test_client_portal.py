@@ -597,21 +597,26 @@ async def test_weekly_report_published_exactly_once_and_survives_reopen(org_worl
         assert (await reopened.get(path, headers=alpha)).status_code == 403
 
 
-async def test_message_authors_read_as_client_for_staff_and_you_for_the_client(org_world):  # noqa: F811
+async def test_message_authors_are_neutral_for_staff_and_you_for_the_client(org_world):  # noqa: F811
     await _seed(org_world)
     staff, alpha = (auth_headers(user, ORG_S) for user in (USER_A, USER_B))
     async with _http(_app(org_world)) as client:
         created = await _compose(client, alpha)
+        staff_request = await _compose(client, staff)
         path = f"{BASE}/{created['id']}"
         draft = (await client.post(path + "/draft", headers=staff, json={"expected_revision": 0, "body": "Synthetic reply"})).json()
+        async with org_world() as session, session.begin():
+            session.add(BoardMessageRow(id="internal-owner-note", thread_id=created["id"], author_kind="owner", visibility="internal", body="Synthetic internal owner note", created_at=datetime.now(UTC)))
         authors = lambda headers: [m["author"] for m in client_json[headers]["messages"]]  # noqa: E731
         client_json = {"staff": (await client.get(path, headers=staff)).json(), "client": (await client.get(path, headers=alpha)).json()}
-        assert authors("staff") == ["Client", "Internal draft"]
+        staff_created = (await client.get(f"{BASE}/{staff_request['id']}", headers=staff)).json()
+        assert [m["author"] for m in staff_created["messages"]] == ["Client request"]
+        assert authors("staff") == ["Client request", "Internal draft", "MomoBot (internal)"]
         assert authors("client") == ["You"]
         published = await client.post(path + "/publish", headers=staff, json={"approval_id": draft["approval_id"], "expected_revision": 1})
         assert published.status_code == 200, published.text
         client_json = {"staff": (await client.get(path, headers=staff)).json(), "client": (await client.get(path, headers=alpha)).json()}
-        assert authors("staff") == ["Client", "Internal draft", "MomoBot (published reply)"]
+        assert authors("staff") == ["Client request", "Internal draft", "MomoBot (internal)", "MomoBot (published reply)"]
         assert authors("client") == ["You", "MomoBot"]
 
 
