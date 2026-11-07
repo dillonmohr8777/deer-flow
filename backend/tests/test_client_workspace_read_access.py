@@ -18,7 +18,7 @@ def _client_role(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_client_reads_own_project_and_document_but_cannot_probe_foreign_workspace(org_world, monkeypatch):  # noqa: F811
+async def test_client_staff_project_routes_stay_closed_even_with_broad_test_permissions(org_world, monkeypatch):  # noqa: F811
     app = _build_app(org_world)
     async with _client(app) as client:
         own = await _create_project(client, auth_headers(USER_A), "Customer reference")
@@ -26,18 +26,15 @@ async def test_client_reads_own_project_and_document_but_cannot_probe_foreign_wo
         doc = await _upload_document(client, own["id"], auth_headers(USER_A), "reference.txt", b"Synthetic reference")
         _client_role(monkeypatch)
         listing = await client.get("/api/projects", headers=auth_headers(USER_A))
-        assert listing.status_code == 200
-        assert [p["id"] for p in listing.json()["projects"]] == [own["id"]]
-        assert (await client.get(f"/api/projects/{own['id']}", headers=auth_headers(USER_A))).status_code == 200
+        assert listing.status_code == 403
+        assert (await client.get(f"/api/projects/{own['id']}", headers=auth_headers(USER_A))).status_code == 403
         documents = await client.get(f"/api/projects/{own['id']}/documents", headers=auth_headers(USER_A))
-        assert documents.status_code == 200
-        assert documents.json()["documents"][0]["id"] == doc["id"]
+        assert documents.status_code == 403
         content = await client.get(f"/api/projects/{own['id']}/documents/{doc['id']}/content", headers=auth_headers(USER_A))
-        assert content.status_code == 200
-        assert content.content == b"Synthetic reference"
+        assert content.status_code == 403
         for suffix in ("", "/documents", f"/documents/{doc['id']}/content"):
-            assert (await client.get(f"/api/projects/{foreign['id']}{suffix}", headers=auth_headers(USER_A))).status_code == 404
-        assert (await client.get(f"/api/projects/{own['id']}/documents/not-owned/content", headers=auth_headers(USER_A))).status_code == 404
+            assert (await client.get(f"/api/projects/{foreign['id']}{suffix}", headers=auth_headers(USER_A))).status_code == 403
+        assert (await client.get(f"/api/projects/{own['id']}/documents/not-owned/content", headers=auth_headers(USER_A))).status_code == 403
         assert (await client.get("/api/projects", headers=auth_headers(USER_B, ORG_S))).status_code == 403
         assert (await client.get("/api/projects")).status_code == 401
         assert (await client.post("/api/projects", json={"name": "Forbidden"}, headers=auth_headers(USER_A))).status_code == 403
@@ -102,17 +99,17 @@ async def test_existing_shared_client_membership_keeps_workspace_and_permission_
         await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.user_id == USER_A, OrganizationMemberRow.organization_id == ORG_S).values(role="client"))
     _client_role(monkeypatch)
     headers = auth_headers(USER_A, ORG_S)
-    assert (await world.client.get(f"/api/projects/{project['id']}", headers=headers)).status_code == 200
+    assert (await world.client.get(f"/api/projects/{project['id']}", headers=headers)).status_code == 403
     assert (await world.client.get(f"/api/scheduled-tasks/{task['id']}", headers=headers)).status_code == 200
     # The same shared data is invisible after selecting the caller's private workspace.
-    assert (await world.client.get(f"/api/projects/{project['id']}", headers=auth_headers(USER_A))).status_code == 404
+    assert (await world.client.get(f"/api/projects/{project['id']}", headers=auth_headers(USER_A))).status_code == 403
     assert (await world.client.get(f"/api/scheduled-tasks/{task['id']}", headers=auth_headers(USER_A))).status_code == 404
 
     async def no_permissions(*args, **kwargs):
         return []
 
     monkeypatch.setattr("app.gateway.auth_middleware.resolve_route_permissions", no_permissions)
-    for path in ("/api/projects", "/api/scheduled-tasks"):
+    for path in ("/api/scheduled-tasks",):
         response = await world.client.get(path, headers=headers)
         assert response.status_code == 403
         assert "Permission denied" in response.json()["detail"]

@@ -42,11 +42,11 @@ rs.mock("@tanstack/react-query", () => ({
     };
   },
 }));
-rs.mock("@/core/projects/api", () => ({
-  listProjects: rs.fn(),
-  listProjectDocuments: rs.fn(),
-  urlOfProjectDocumentContent: () =>
-    "/api/projects/own-project/documents/document1/content?download=true",
+rs.mock("@/core/client-references/api", () => ({
+  listClientReferenceProjects: rs.fn(),
+  listClientReferenceDocuments: rs.fn(),
+  urlOfClientReferenceContent: () =>
+    "/api/client-references/projects/own-project/documents/document1/content?download=true",
 }));
 rs.mock("@/core/scheduled-tasks/api", () => ({
   fetchScheduledTaskStatuses: rs.fn(),
@@ -72,7 +72,7 @@ describe("client workspace references", () => {
     );
     expect(
       screen.getByRole("link", { name: "Homes.txt" }).getAttribute("href"),
-    ).toContain("/own-project/documents/");
+    ).toContain("/api/client-references/projects/own-project/documents/");
     expect(container.querySelector("button,input,textarea,form")).toBeNull();
     expect(state.keys).toEqual(["client-reference-documents/own-project"]);
   });

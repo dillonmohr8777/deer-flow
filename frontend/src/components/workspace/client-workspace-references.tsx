@@ -5,10 +5,10 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import {
-  listProjectDocuments,
-  listProjects,
-  urlOfProjectDocumentContent,
-} from "@/core/projects/api";
+  listClientReferenceDocuments,
+  listClientReferenceProjects,
+  urlOfClientReferenceContent,
+} from "@/core/client-references/api";
 import { fetchScheduledTaskStatuses } from "@/core/scheduled-tasks/api";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
 
@@ -42,7 +42,7 @@ export function ClientReferenceNavigation() {
 export function ClientProjectList() {
   const query = useQuery({
     queryKey: ["client-reference-projects"],
-    queryFn: () => listProjects("active"),
+    queryFn: listClientReferenceProjects,
     retry: false,
     enabled: !isStaticWebsiteOnly(),
   });
@@ -76,7 +76,7 @@ export function ClientProjectList() {
 export function ClientProjectReference({ projectId }: { projectId: string }) {
   const query = useQuery({
     queryKey: ["client-reference-documents", projectId],
-    queryFn: () => listProjectDocuments(projectId),
+    queryFn: () => listClientReferenceDocuments(projectId),
     retry: false,
     enabled: !isStaticWebsiteOnly(),
   });
@@ -99,9 +99,7 @@ export function ClientProjectReference({ projectId }: { projectId: string }) {
                 ) : (
                   <a
                     className="underline"
-                    href={urlOfProjectDocumentContent(projectId, document.id, {
-                      download: true,
-                    })}
+                    href={urlOfClientReferenceContent(projectId, document.id)}
                   >
                     {document.name}
                   </a>
