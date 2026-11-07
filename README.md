@@ -52,10 +52,6 @@ The landing-page case studies open as allowlisted, read-only showcases without r
 
 ### MomoBot workspace recovery and mobile navigation
 
-Reopened chats recover an active run with one owned reconnect lifecycle and at
-most two delayed retries. Completion during backoff cancels the queued retry;
-a delayed completion for an older run does not settle a newer recovery owner.
-
 Temporary connection failures keep the last confirmed sign-in visible. An expired
 session returns both REST and chat requests to sign-in with the current page and
 query preserved. Logout and identity changes discard stale refresh responses;
@@ -68,9 +64,6 @@ Phone navigation remains expanded even when the desktop sidebar was collapsed.
 The drawer closes after page or query navigation and when moving to a desktop
 layout, while a starting chat assigning its thread URL keeps the drawer open.
 Installation prompts stay off sign-in, setup and invitation pages.
-The native iOS shell invalidates its active device-authentication attempt when
-it locks. A late success or failure from that attempt cannot unlock the app or
-replace a newer attempt; the same controller is covered by native-core tests.
 Settings deep links include `?settings=invite`; links to sections unavailable to
 the current role, including an unresolved role, focus the allowed Appearance fallback.
 Agent lists show loading during initial feature discovery and hide cached agents
