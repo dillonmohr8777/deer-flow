@@ -9,7 +9,7 @@ import {
   listProjects,
   urlOfProjectDocumentContent,
 } from "@/core/projects/api";
-import { fetchScheduledTasks } from "@/core/scheduled-tasks/api";
+import { fetchScheduledTaskStatuses } from "@/core/scheduled-tasks/api";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
 
 function ReferencePage({
@@ -127,7 +127,7 @@ export function ClientProjectReference({ projectId }: { projectId: string }) {
 export function ClientScheduleList() {
   const query = useQuery({
     queryKey: ["client-reference-schedules"],
-    queryFn: fetchScheduledTasks,
+    queryFn: fetchScheduledTaskStatuses,
     retry: false,
     enabled: !isStaticWebsiteOnly(),
   });

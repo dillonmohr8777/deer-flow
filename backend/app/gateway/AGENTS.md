@@ -259,4 +259,6 @@ See [contract](../../docs/FLEET_PROJECT_JOBS.md) for routes and tests.
 
 Private brand projection and staff work-plan rules: [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md).
 
-Client workspace references: `client_boundary.py` admits GET project list/config/detail/document list/content and scheduled-task list/detail only. Existing router permissions and server-resolved organization/storage ownership remain required. Client writes, project thread inventories and scheduler run history remain denied even when RBAC is disabled. `test_client_workspace_read_access.py` drives the real middleware, routers and SQLite repositories across private/shared/foreign workspaces.
+Client workspace references: `client_boundary.py` admits GET project list/detail/document list/content and scheduled-task list/detail only. Existing router permissions and server-resolved organization/storage ownership remain required. Client writes, project thread inventories and scheduler run history remain denied even when RBAC is disabled. `test_client_workspace_read_access.py` drives the real middleware, routers and SQLite repositories across private/shared/foreign workspaces.
+
+Customer scheduled-task list/detail responses are projected on the server to id, title, status, next_run_at, last_run_at and timezone only. Prompts, assistant/thread/run IDs, schedule specifications, ownership fields and internal errors stay out of the customer API response; staff responses retain their existing management fields. Project operator configuration remains staff-only.

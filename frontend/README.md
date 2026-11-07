@@ -208,3 +208,5 @@ Account managers can open Easy / Medium / Hard directly from Settings and more. 
 ### Customer workspace references
 
 Signed-in customer accounts can open Projects to download documents shared in their active workspace and Scheduled tasks to view existing task status. These views preserve the workspace membership and role permissions already configured on the Gateway. They do not expose project conversation inventories, task run history, create/edit controls or execution actions. Task status is a stored record, not proof that the scheduler is running. Staff retain their existing management pages.
+
+Customer scheduled-task list/detail responses are projected on the server to id, title, status, next_run_at, last_run_at and timezone only. Prompts, assistant/thread/run IDs, schedule specifications, ownership fields and internal errors stay out of the customer API response; staff responses retain their existing management fields. Project operator configuration remains staff-only.

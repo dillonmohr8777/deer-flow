@@ -55,7 +55,20 @@ async def test_client_reads_only_own_schedule_without_execution_or_history(sched
     listing = await world.client.get("/api/scheduled-tasks", headers=auth_headers(USER_A))
     assert listing.status_code == 200
     assert [task["id"] for task in listing.json()] == [own["id"]]
-    assert (await world.client.get(f"/api/scheduled-tasks/{own['id']}", headers=auth_headers(USER_A))).status_code == 200
+    status_fields = {"id", "title", "status", "next_run_at", "last_run_at", "timezone"}
+    assert set(listing.json()[0]) == status_fields
+    detail = await world.client.get(f"/api/scheduled-tasks/{own['id']}", headers=auth_headers(USER_A))
+    assert detail.status_code == 200
+    assert set(detail.json()) == status_fields
+    assert detail.json() == listing.json()[0]
+    # Staff retain complete records for their existing management interface.
+    staff_list = await world.client.get("/api/scheduled-tasks", headers=auth_headers(USER_B))
+    staff_detail = await world.client.get(f"/api/scheduled-tasks/{foreign['id']}", headers=auth_headers(USER_B))
+    assert staff_list.status_code == staff_detail.status_code == 200
+    assert staff_list.json()[0]["prompt"] == foreign["prompt"]
+    for field in ("prompt", "assistant_id", "thread_id", "schedule_spec", "last_run_id", "last_thread_id", "last_error"):
+        assert field in staff_detail.json()
+
     assert (await world.client.get(f"/api/scheduled-tasks/{foreign['id']}", headers=auth_headers(USER_A))).status_code == 404
     assert (await world.client.get("/api/scheduled-tasks", headers=auth_headers(USER_B, ORG_S))).status_code == 403
     assert (await world.client.get("/api/scheduled-tasks")).status_code == 401
@@ -103,3 +116,9 @@ async def test_existing_shared_client_membership_keeps_workspace_and_permission_
         response = await world.client.get(path, headers=headers)
         assert response.status_code == 403
         assert "Permission denied" in response.json()["detail"]
+
+
+def test_project_operator_configuration_remains_closed_to_clients():
+    from app.gateway.client_boundary import is_client_allowed_route
+
+    assert not is_client_allowed_route("GET", "/api/projects/config")

@@ -48,7 +48,9 @@ rs.mock("@/core/projects/api", () => ({
   urlOfProjectDocumentContent: () =>
     "/api/projects/own-project/documents/document1/content?download=true",
 }));
-rs.mock("@/core/scheduled-tasks/api", () => ({ fetchScheduledTasks: rs.fn() }));
+rs.mock("@/core/scheduled-tasks/api", () => ({
+  fetchScheduledTaskStatuses: rs.fn(),
+}));
 afterEach(() => {
   cleanup();
   state.kind = "projects";

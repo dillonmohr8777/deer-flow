@@ -37,7 +37,7 @@ _RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
         # Read-only workspace references. Routers retain RBAC and scoped storage;
         # project chats/thread files and every management operation stay closed.
         (_GET, r"^/api/projects$"),
-        (_GET, rf"^/api/projects/{_ID}$"),
+        (_GET, rf"^/api/projects/(?!config$){_ID}$"),
         (_GET, rf"^/api/projects/{_ID}/documents$"),
         (_GET, rf"^/api/projects/{_ID}/documents/{_ID}/content$"),
         # Task reads retain threads:read and storage-principal/organization checks.

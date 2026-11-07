@@ -47,3 +47,5 @@ OpenAI crew link shows for nobody until `/api/features` reports
 `openai_agents.configured`.
 
 Client project and schedule pages render dedicated reference-only components. They never mount staff mutation/history hooks. The Gateway admits only project metadata/document reads and schedule list/detail reads; routers retain RBAC and workspace storage isolation. No client project chats, scheduler history, task mutations or membership changes are enabled.
+
+Customer scheduled-task list/detail responses are projected on the server to id, title, status, next_run_at, last_run_at and timezone only. Prompts, assistant/thread/run IDs, schedule specifications, ownership fields and internal errors stay out of the customer API response; staff responses retain their existing management fields. Project operator configuration remains staff-only.
