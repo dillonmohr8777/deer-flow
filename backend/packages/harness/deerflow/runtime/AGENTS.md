@@ -1,6 +1,13 @@
 Read [upload](../../../../docs/UPLOAD_OWNERSHIP.md).
 Read [lead limits](../../../../docs/LEAD_RUN_LIMITS.md) for admission clocks, execution deadlines and cleanup holds.
 
+Ordinary owned-child completion has three explicit proof outcomes in
+`runs/owned_children.py`: no execution entered, actual cleanup confirmed, or
+cleanup unconfirmed. A missing outcome is still in flight or lacks proof even
+if a completion event was set. `confirmed` is derived from the captured outcome;
+keep the cross-loop event and existing admission hold on unconfirmed cleanup.
+This does not authorize lease recovery or release after a cancelled Future.
+
 ### Stream Bridge Heartbeats
 
 Memory/Redis bridges keep instance default `stream_bridge.heartbeat_interval_seconds` (startup-only); explicit `subscribe(..., heartbeat_interval=...)` overrides it per subscription. Provider context managers own cache/bridge backends through exit; drain `aclose()`/`close()` across caller cancellation before propagating it.
