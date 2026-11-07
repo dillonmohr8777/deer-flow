@@ -1,0 +1,8 @@
+[Unit]
+Description=MomoBot backup at 3:30 AM ET and 3:30 PM ET
+[Timer]
+OnCalendar=*-*-* 03:30:00 America/New_York
+OnCalendar=*-*-* 15:30:00 America/New_York
+Persistent=true
+[Install]
+WantedBy=timers.target

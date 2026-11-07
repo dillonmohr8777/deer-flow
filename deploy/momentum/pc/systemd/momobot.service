@@ -1,0 +1,15 @@
+[Unit]
+Description=MomoBot prod (PC WSL host, off AWS since Oct 29 2026)
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/momobot/pc-up.sh up
+ExecStop=/opt/momobot/pc-up.sh stop
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
