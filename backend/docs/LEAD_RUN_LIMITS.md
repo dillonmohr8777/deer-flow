@@ -109,6 +109,11 @@ Ordinary `task` children register server-created handles before their first
 await. Completion is a cross-loop event set after actual execution, sandbox
 release and task-stop cleanup, independently of `Future.cancel()` or a terminal
 result object. Cancellation before entry is separately fenced as proven no-work.
+`OwnedChildCompletion` names the captured proof: `not_executed`,
+`cleanup_confirmed`, or `cleanup_unconfirmed`. Before completion the outcome is
+absent. The existing `confirmed` read is derived from that outcome; even a set
+completion event without proof cannot release the owner's admission. These
+states do not authorize lease repair of an unconfirmed cleanup hold.
 The private host tracker is rejected from caller context/configurable and is
 never checkpoint data. Durable/independent batch jobs retain their separate
 ownership and success semantics; they do not use this ordinary-child tracker.

@@ -229,6 +229,28 @@ test("cancels a pending retry when the recovered stream unmounts", async () => {
   expect(window.sessionStorage.getItem("lg:stream:thread-1")).toBeNull();
 });
 
+test("settles a recovered run that finishes while a retry is waiting", async () => {
+  const { unmount } = renderThread();
+  await flushFrames();
+  expect(streamMockState.joinStream).toHaveBeenCalledTimes(1);
+
+  act(() => streamMockState.options?.onError?.(new Error("disconnected")));
+  // The SDK can finish without a Run argument. The recovery owner already
+  // knows which run is settling, even after its in-flight flag was cleared.
+  act(() =>
+    streamMockState.options?.onFinish?.({
+      values: { artifacts: [], messages: [], title: "Done" },
+    }),
+  );
+  await act(async () => {
+    await rs.advanceTimersByTimeAsync(10_000);
+  });
+
+  expect(streamMockState.joinStream).toHaveBeenCalledTimes(1);
+  expect(window.sessionStorage.getItem("lg:stream:thread-1")).toBeNull();
+  unmount();
+});
+
 test("clears the old retry when the active run changes", async () => {
   const { queryClient, unmount } = renderThread();
   await flushFrames();
@@ -249,6 +271,32 @@ test("clears the old retry when the active run changes", async () => {
   expect(streamMockState.joinStream).toHaveBeenCalledTimes(2);
   expect(streamMockState.joinStream).toHaveBeenLastCalledWith("run-next");
   expect(window.sessionStorage.getItem("lg:stream:thread-1")).toBe("run-next");
+  unmount();
+});
+
+test("an older run completion cannot settle the next recovery owner", async () => {
+  const { queryClient, unmount } = renderThread();
+  await flushFrames();
+  const nextRun = { ...ACTIVE_RUN, run_id: "run-next" };
+  apiMockState.listRuns.mockResolvedValue([nextRun]);
+  act(() => {
+    queryClient.setQueryData(["thread", "thread-1"], [nextRun]);
+  });
+  await flushFrames();
+  expect(streamMockState.joinStream).toHaveBeenCalledTimes(2);
+
+  act(() =>
+    streamMockState.options?.onFinish?.(
+      { values: { artifacts: [], messages: [], title: "Earlier run done" } },
+      { thread_id: "thread-1", run_id: "run-active" },
+    ),
+  );
+  act(() => streamMockState.options?.onError?.(new Error("next disconnected")));
+  await act(async () => {
+    await rs.advanceTimersByTimeAsync(1_000);
+  });
+  expect(streamMockState.joinStream).toHaveBeenCalledTimes(3);
+  expect(streamMockState.joinStream).toHaveBeenLastCalledWith("run-next");
   unmount();
 });
 

@@ -52,6 +52,10 @@ The landing-page case studies open as allowlisted, read-only showcases without r
 
 ### MomoBot workspace recovery and mobile navigation
 
+Reopened chats recover an active run with one owned reconnect lifecycle and at
+most two delayed retries. Completion during backoff cancels the queued retry;
+a delayed completion for an older run does not settle a newer recovery owner.
+
 Temporary connection failures keep the last confirmed sign-in visible. An expired
 session returns both REST and chat requests to sign-in with the current page and
 query preserved. Logout and identity changes discard stale refresh responses;
