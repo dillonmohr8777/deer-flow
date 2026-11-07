@@ -39,7 +39,9 @@ import { uuid } from "../utils/uuid";
 import {
   activeRunRejoinRetryDelay,
   createActiveRunRejoinState,
+  matchesActiveRunRejoin,
   transitionActiveRunRejoin,
+  type ActiveRunIdentity,
   type ActiveRunRejoinState,
 } from "./active-run-rejoin";
 import {
@@ -1892,43 +1894,43 @@ export function useThreadStream({
   const { tasksRef, setTasks } = useSubtaskContext();
   const updateSubtask = useUpdateSubtask();
 
-  const scheduleActiveRunRejoinRetry = useCallback(() => {
-    const rejoin = activeRunRejoinRef.current;
-    if (rejoin.phase !== "joining") return;
-    const waiting = transitionActiveRunRejoin(rejoin, "failed");
-    activeRunRejoinRef.current = waiting;
-    clearReconnectRun(rejoin.threadId, rejoin.runId);
-    const retryDelay = activeRunRejoinRetryDelay(waiting);
-    if (retryDelay === null) return;
-    activeRunRejoinTimerRef.current = setTimeout(() => {
-      if (activeRunRejoinRef.current !== waiting) return;
-      activeRunRejoinTimerRef.current = null;
-      activeRunRejoinRef.current = transitionActiveRunRejoin(waiting, "retry");
-      setActiveRunRejoinRetry((current) => current + 1);
-    }, retryDelay);
-  }, []);
-
-  const settleActiveRunRejoin = useCallback(
-    (run?: { thread_id: string; run_id: string }) => {
+  const scheduleActiveRunRejoinRetry = useCallback(
+    (run?: ActiveRunIdentity) => {
       const rejoin = activeRunRejoinRef.current;
-      if (rejoin.phase === "unavailable") return;
-      if (
-        run &&
-        (run.thread_id !== rejoin.threadId || run.run_id !== rejoin.runId)
-      )
+      if (rejoin.phase !== "joining" || !matchesActiveRunRejoin(rejoin, run))
         return;
-      const settled = transitionActiveRunRejoin(rejoin, "finished");
-      if (settled === rejoin) return;
-      activeRunRejoinRef.current = settled;
-      completedRunIdsRef.current.add(rejoin.runId);
+      const waiting = transitionActiveRunRejoin(rejoin, "failed");
+      activeRunRejoinRef.current = waiting;
       clearReconnectRun(rejoin.threadId, rejoin.runId);
-      if (activeRunRejoinTimerRef.current !== null) {
-        clearTimeout(activeRunRejoinTimerRef.current);
+      const retryDelay = activeRunRejoinRetryDelay(waiting);
+      if (retryDelay === null) return;
+      activeRunRejoinTimerRef.current = setTimeout(() => {
+        if (activeRunRejoinRef.current !== waiting) return;
         activeRunRejoinTimerRef.current = null;
-      }
+        activeRunRejoinRef.current = transitionActiveRunRejoin(
+          waiting,
+          "retry",
+        );
+        setActiveRunRejoinRetry((current) => current + 1);
+      }, retryDelay);
     },
     [],
   );
+
+  const settleActiveRunRejoin = useCallback((run?: ActiveRunIdentity) => {
+    const rejoin = activeRunRejoinRef.current;
+    if (rejoin.phase === "unavailable") return;
+    if (!matchesActiveRunRejoin(rejoin, run)) return;
+    const settled = transitionActiveRunRejoin(rejoin, "finished");
+    if (settled === rejoin) return;
+    activeRunRejoinRef.current = settled;
+    completedRunIdsRef.current.add(rejoin.runId);
+    clearReconnectRun(rejoin.threadId, rejoin.runId);
+    if (activeRunRejoinTimerRef.current !== null) {
+      clearTimeout(activeRunRejoinTimerRef.current);
+      activeRunRejoinTimerRef.current = null;
+    }
+  }, []);
 
   const clearPreparedReplayMasks = useCallback(
     (replay: PendingPreparedReplayMask | null) => {
@@ -2104,8 +2106,8 @@ export function useThreadStream({
         }
       }
     },
-    onError(error) {
-      scheduleActiveRunRejoinRetry();
+    onError(error, run) {
+      scheduleActiveRunRejoinRetry(run);
       setOptimisticMessages([]);
       setOptimisticThreadId(null);
       setLiveMessagesThreadId(null);

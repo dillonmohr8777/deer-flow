@@ -1,6 +1,11 @@
 const RETRY_DELAYS_MS = [1_000, 2_000] as const;
 const MAX_ATTEMPTS = RETRY_DELAYS_MS.length + 1;
 
+export type ActiveRunIdentity = Readonly<{
+  thread_id: string;
+  run_id: string;
+}>;
+
 export type ActiveRunRejoinState = Readonly<
   | {
       phase: "unavailable";
@@ -59,4 +64,14 @@ export function activeRunRejoinRetryDelay(
   return state.phase === "backoff"
     ? (RETRY_DELAYS_MS[state.attempts - 1] ?? null)
     : null;
+}
+
+export function matchesActiveRunRejoin(
+  state: ActiveRunRejoinState,
+  run?: ActiveRunIdentity,
+): boolean {
+  return (
+    state.phase !== "unavailable" &&
+    (!run || (run.thread_id === state.threadId && run.run_id === state.runId))
+  );
 }

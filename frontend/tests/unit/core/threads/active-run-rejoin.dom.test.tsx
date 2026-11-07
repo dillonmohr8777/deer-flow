@@ -10,7 +10,10 @@ import { DEFAULT_LOCAL_SETTINGS } from "@/core/settings/local";
 import { useThreadStream } from "@/core/threads/hooks";
 
 type StreamOptions = {
-  onError?: (error: unknown) => void;
+  onError?: (
+    error: unknown,
+    run?: { thread_id: string; run_id: string },
+  ) => void;
   onFinish?: (
     state: {
       values: { artifacts: never[]; messages: never[]; title: string };
@@ -297,6 +300,29 @@ test("an older run completion cannot settle the next recovery owner", async () =
   });
   expect(streamMockState.joinStream).toHaveBeenCalledTimes(3);
   expect(streamMockState.joinStream).toHaveBeenLastCalledWith("run-next");
+  unmount();
+});
+
+test("an older run error cannot consume the next recovery budget", async () => {
+  const { queryClient, unmount } = renderThread();
+  await flushFrames();
+  const nextRun = { ...ACTIVE_RUN, run_id: "run-next" };
+  apiMockState.listRuns.mockResolvedValue([nextRun]);
+  act(() => {
+    queryClient.setQueryData(["thread", "thread-1"], [nextRun]);
+  });
+  await flushFrames();
+  act(() =>
+    streamMockState.options?.onError?.(new Error("earlier disconnected"), {
+      thread_id: "thread-1",
+      run_id: "run-active",
+    }),
+  );
+  await act(async () => {
+    await rs.advanceTimersByTimeAsync(10_000);
+  });
+  expect(streamMockState.joinStream).toHaveBeenCalledTimes(2);
+  expect(window.sessionStorage.getItem("lg:stream:thread-1")).toBe("run-next");
   unmount();
 });
 
