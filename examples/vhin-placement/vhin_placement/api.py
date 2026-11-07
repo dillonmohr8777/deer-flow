@@ -572,7 +572,12 @@ def build_router(service):
                 raise HTTPException(409, "Every candidate time overlaps an existing proposed tour")
             usable = [o for o in options if not o["conflicts_with_tours"]]
             plan_id = str(uuid4())
-            blocked = is_suppressed(connection, referral) or referral["contact_status"] != "active" or referral["contact_preference"] == "none"
+            # A paused reply may still supersede its own plan; the operator is continuing that conversation.
+            blocked = (
+                is_suppressed(connection, referral)
+                or referral["contact_preference"] == "none"
+                or (referral["contact_status"] == "paused" and not payload.supersedes_plan_id)
+            )
             family = None if blocked else coordination.family_drafts(referral, usable, service.advisor_name, service.business_line)
             if family:
                 channel = referral["contact_preference"]
@@ -632,6 +637,13 @@ def build_router(service):
                 slot = plan["parties"][payload.party]
                 if payload.party == "family" and slot["status"] == "blocked":
                     raise HTTPException(409, "Family contact is stopped or paused; record the family's preference first")
+            if payload.party == "family":
+                # Share the reply pause with /contact-events: paused contact stops new follow-ups, the plan stays open.
+                referral.update(contact_status="paused", version=referral["version"] + 1)
+                put(connection, "referral", referral)
+                for draft in records(connection, "draft"):
+                    if draft["referral_id"] == referral["id"] and draft["status"] == "draft":
+                        put(connection, "draft", {**draft, "status": "paused"})
             slot.update(
                 status=payload.response,
                 option=payload.option,

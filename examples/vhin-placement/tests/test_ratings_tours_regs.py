@@ -228,6 +228,23 @@ def test_tour_plan_decline_or_split_answers_need_new_times(owner):
     assert declined.json()["status"] == "needs_new_times"
 
 
+def test_family_tour_reply_pauses_followups_and_keeps_plan_open(owner):
+    referral = qualified(owner)
+    home = tour_homes(owner)[:1]
+    assert post(owner, f"/referrals/{referral['id']}/drafts", {"reason": "no_booking", "body": "Synthetic stale follow-up"}).status_code == 201
+    plan = post(owner, "/tour-plans", plan_body(referral["id"], home, 2)).json()
+    path = f"/tour-plans/{plan['id']}/responses"
+    assert post(owner, path, {"party": "family", "response": "accepts", "option": 1, "source_ref": "family text"}).json()["status"] == "awaiting_replies"
+    state = owner.get("/api/vhin/state").json()
+    assert next(r for r in state["referrals"] if r["id"] == referral["id"])["contact_status"] == "paused"
+    followup = next(d for d in state["drafts"] if d["referral_id"] == referral["id"] and d["reason"] == "no_booking")
+    assert followup["status"] == "paused"
+    assert post(owner, f"/referrals/{referral['id']}/drafts", {"reason": "planning", "body": "No longer timely"}).status_code == 409
+    # The pause must not close the plan; the remaining parties can still confirm.
+    confirmed = post(owner, path, {"party": "community", "community_id": home[0]["id"], "response": "accepts", "option": 1, "source_ref": "community call"})
+    assert confirmed.status_code == 200 and confirmed.json()["parties"]["family"]["status"] == "accepts"
+
+
 def test_tour_plan_respects_stop_and_drops_conflicting_options(owner):
     referral = qualified(owner)
     homes = tour_homes(owner)
