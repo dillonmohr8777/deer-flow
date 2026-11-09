@@ -98,6 +98,13 @@ def test_placement_host_denies_missing_membership_foreign_org_and_unlisted_actor
     assert client.get("/api/vhin/state").status_code == 401
 
 
+def test_client_regulation_routes_accept_either_state_case_through_host(host):
+    client, _ = host
+    for path in ("/api/vhin/regulations/FL/search?q=medication", "/api/vhin/regulations/fl/search?q=medication", "/api/vhin/regulations/fl/unit?citation=Rule%2059A-36.006"):
+        assert client.get(path).status_code not in (401, 403), path
+    assert client.get("/api/vhin/regulations/fl/config").status_code == 403
+
+
 def test_coordinator_cannot_assert_owner_authority_through_host(host):
     client, actor = host
     actor["id"] = "coordinator"
@@ -117,6 +124,8 @@ def test_coordinator_cannot_assert_owner_authority_through_host(host):
         ("GET", "/api/vhin/dashboard/secrets.json"),
         ("POST", "/api/vhin/tour-plans/x/book"),
         ("GET", "/api/vhin/regulations/FL/config"),
+        ("GET", "/api/vhin/regulations/fl/config"),
+        ("GET", "/api/vhin/regulations/fla/search"),
     ],
 )
 def test_placement_unknown_and_external_side_effect_routes_stay_closed(method, path):

@@ -61,7 +61,7 @@ _RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
         (_GET, r"^/api/vhin/(state|recommendations|regulations)$"),
         (_GET, rf"^/api/vhin/referrals/{_ID}$"),
         (_GET, rf"^/api/vhin/tour-plans/{_ID}/calendar\.ics$"),
-        (_GET, r"^/api/vhin/regulations/[A-Z]{2}/(search|unit)$"),
+        (_GET, r"^/api/vhin/regulations/[A-Za-z]{2}/(search|unit)$"),
         (_GET, r"^/api/vhin/dashboard(/(index\.html|app\.js|style\.css))?$"),
         (_POST, r"^/api/vhin/(referrals|communities|tours|placements|tour-plans)$"),
         (frozenset({"PATCH"}), rf"^/api/vhin/referrals/{_ID}$"),
