@@ -1,7 +1,6 @@
 """Codex subscription model with an automatic paid fallback (Nov 9 2026).
 
-Dillon: "what if I run out of codex usage ... use the OpenRouter key to have Haiku 5.5 Max as the fallback."
-Primary: CodexChatModel (gpt-6.1-terra on the dillonmohr311 Pro Lite sign-in).
+Primary: CodexChatModel (a Codex subscription sign-in).
 When the primary fails with a usage limit, rate limit, auth failure or outage, the same turn
 (messages plus bound tools) goes to `fallback_model`, built through the normal factory so the
 paid-route admission caps still apply. Any other error is raised unchanged.
