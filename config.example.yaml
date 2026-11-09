@@ -691,6 +691,36 @@ models:
   #   max_tokens: 8192
   #   temperature: 0.7
 
+  # Example: Codex subscription model with an automatic paid fallback
+  # CodexWithFallback runs the Codex subscription model first. On a usage limit,
+  # rate limit (429), auth failure or outage it replays the same turn, tools
+  # included, on `fallback_model` (a model `name` defined below, built through the
+  # normal factory so admission caps still apply). Any other error is raised unchanged.
+  # - name: codex-terra-subscription
+  #   display_name: Terra 6.1 (high)
+  #   use: deerflow.models.momo_fallback:CodexWithFallback
+  #   model: gpt-6.1-terra
+  #   fallback_model: openrouter-haiku-5-5-max
+  #   supports_thinking: true
+  #   supports_reasoning_effort: true
+  #   reasoning_effort: high  # codex-terra-xhigh is the same entry with xhigh
+  #   retry_max_attempts: 2
+  #   admission_route: local
+  # - name: openrouter-haiku-5-5-max
+  #   display_name: Haiku 5.5 max (OpenRouter fallback)
+  #   use: langchain_openai:ChatOpenAI
+  #   model: anthropic/claude-haiku-5.5
+  #   api_key: $OPENROUTER_API_KEY
+  #   base_url: https://openrouter.ai/api/v1
+  #   admission_route: openrouter
+  #   max_tokens: 16000
+  #   timeout: 600.0
+  #   max_retries: 2
+  #   supports_vision: true
+  #   extra_body:
+  #     reasoning:
+  #       effort: max
+
   # Example: Atlas Cloud (OpenAI-compatible)
   # Atlas Cloud exposes a single OpenAI-compatible endpoint in front of many open
   # models (DeepSeek, Qwen, Kimi, GLM, MiniMax, Llama, ...), so it uses the same
