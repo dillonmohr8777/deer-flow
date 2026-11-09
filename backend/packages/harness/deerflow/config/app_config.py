@@ -93,6 +93,15 @@ class PrivateWorkspaceConfig(BaseModel):
     )
 
 
+class ServiceTiersConfig(BaseModel):
+    """Per-workspace service tiers (software, AM-assisted, standard). Off until leadership aligns."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Turns on workspace service tiers, tier-aware approval routing and the seller onboarding flow. While false every workspace behaves exactly as before.",
+    )
+
+
 class MomentumInternalConfig(BaseModel):
     """Staff-only surfaces (Team channels, AI Academy) for the agency's own workspace."""
 
@@ -284,6 +293,7 @@ class AppConfig(BaseModel):
     )
     agents_api: AgentsApiConfig = Field(default_factory=AgentsApiConfig, description="Custom-agent management API configuration")
     private_workspace: PrivateWorkspaceConfig = Field(default_factory=PrivateWorkspaceConfig, description="Owner-only private workspace switches (the Desk home)")
+    service_tiers: ServiceTiersConfig = Field(default_factory=ServiceTiersConfig, description="Workspace service tiers and seller onboarding (off by default)")
     momentum_internal: MomentumInternalConfig = Field(default_factory=MomentumInternalConfig, description="Staff-only Team channels and AI Academy for the agency's own workspace")
     momobot_max: MomobotMaxConfig = Field(default_factory=MomobotMaxConfig, description="MomoBot Max, the built-in all-in-one agent for client accounts (off by default)")
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")

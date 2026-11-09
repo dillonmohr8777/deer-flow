@@ -20,6 +20,8 @@ export interface FeaturesResponse {
   };
   desk?: { enabled?: boolean };
   momentum_internal?: { enabled?: boolean };
+  /** Workspace service tiers (client approval, onboarding call). Off unless config turns it on. */
+  service_tiers?: { enabled?: boolean };
   openai_agents?: { configured?: boolean };
   /** True when the deployment serves an optional CRM at /crm/. */
   crm?: boolean;
@@ -93,6 +95,10 @@ export async function fetchKnowledgeBaseFeature(): Promise<{
 /** Owner-only Desk home. Anything but an explicit true reads as off. */
 export function isDeskEnabled(features: FeaturesResponse): boolean {
   return features.desk?.enabled === true;
+}
+
+export async function fetchServiceTiersEnabled(): Promise<boolean> {
+  return (await fetchFeatures()).service_tiers?.enabled === true;
 }
 
 export async function fetchDeskEnabled(): Promise<boolean> {

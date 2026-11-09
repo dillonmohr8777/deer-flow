@@ -33,6 +33,10 @@ _RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
         (frozenset({"GET", "POST"}), r"^/api/client-portal/threads$"),
         (_GET, rf"^/api/client-portal/threads/{_ID}$"),
         (_POST, rf"^/api/client-portal/threads/{_ID}/chat$"),
+        # Software service tier: the client approves a draft or asks for
+        # changes. The router 404s both unless tiers are on and the workspace
+        # is on the software tier.
+        (_POST, rf"^/api/client-portal/threads/{_ID}/(approve|request-changes)$"),
         (_GET, rf"^/api/client-portal/threads/{_ID}/messages/{_ID}/attachments/{_ID}$"),
         # Identity, account security, preferences, feature flags, model list,
         # the MomoBot kit behind "About" and "MomoBot Agents".

@@ -122,17 +122,22 @@ class ScheduledTaskRepository:
         timezone: str,
         next_run_at: datetime | None,
         delegation_owner_user_id: str | None = None,
+        status: str = "enabled",
     ) -> dict[str, Any]:
         """Create a task owned by the storage principal ``user_id``.
 
         The server-resolved organization wins and the thread (or the storage
         principal) must match it, else :class:`OrganizationMismatchError`. With
         ``delegation_owner_user_id`` (the acting member) the task is granted its
-        launch delegation, all or nothing.
+        launch delegation, all or nothing. ``status="paused"`` creates a task
+        that never dispatches until a person resumes it (seller onboarding).
         """
+        if status not in {"enabled", "paused"}:
+            raise ValueError("A new scheduled task is either enabled or paused")
         now = datetime.now(UTC)
         row = ScheduledTaskRow(
             id=task_id,
+            status=status,
             user_id=user_id,
             thread_id=thread_id,
             context_mode=context_mode,

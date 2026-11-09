@@ -17,7 +17,7 @@ from deerflow.persistence.bootstrap import _get_alembic_config, bootstrap_schema
 
 PREVIOUS = "0047_merge_agent_room_exec"
 REPAIR = "0048_repair_audit_events"
-HEAD = "0053_board_work_plan"  # later revisions chain after the repair; their table is outside this test
+HEAD = "0054_workspace_service_settings"  # later revisions chain after the repair; their table is outside this test
 INDEXES = {"ix_audit_events_occurred_at", "ix_audit_events_action", "ix_audit_events_organization_id", "ix_audit_events_actor_user_id"}
 
 
@@ -26,7 +26,7 @@ INDEXES = {"ix_audit_events_occurred_at", "ix_audit_events_action", "ix_audit_ev
 # under test must preserve everything else, so the snapshot leaves them out.
 LATER_COLUMNS = {"organizations": ("customer_client_id",), "threads_meta": ("client_actor_id",), "board_messages": ("visibility", "attachments"), "runs": ("run_limits_json",)}
 SKIP = "('audit_events','pending_actions','client_corrections','alembic_version')"
-LATER_OBJECTS = ("board_portal", "ix_threads_meta_client_actor_id", "ix_board_portal_organization_id")
+LATER_OBJECTS = ("board_portal", "ix_threads_meta_client_actor_id", "ix_board_portal_organization_id", "workspace_service_settings")
 
 
 def _without_later_columns(table, sql):

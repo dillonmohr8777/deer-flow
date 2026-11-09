@@ -39,8 +39,21 @@ type Conversation = {
   publish_receipt: string | null;
   work_chat_id?: string;
   work_run_id?: string;
+  /** Null when this client's service keeps Momo with the team. */
+  momo_href?: string | null;
+};
+/** Software tier only: the exact draft the client approves. */
+type ClientReviewDraft = {
+  approval_id: string;
+  revision: number;
+  message_id: string;
+  body: string;
+  attachments: { name: string; sha256: string }[];
 };
 type Detail = Conversation & {
+  service_tier?: string;
+  review_reason?: string | null;
+  review?: ClientReviewDraft | null;
   work_status?: string;
   messages: Message[];
   can_review: boolean;
@@ -55,6 +68,7 @@ type Roster = {
   clients: { id: string; name: string }[];
   can_review: boolean;
   can_draft: boolean;
+  service?: { tier: string; booking_url: string | null };
 };
 const STATES = {
   all: "All requests",
@@ -132,6 +146,9 @@ function InboxSession({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  // The server sends tier fields only while service tiers are on, and a
+  // booking link only for software-tier clients; flag off shows today's inbox.
+  const bookingUrl = roster?.service?.booking_url ?? null;
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [state, setState] = useState("all");
@@ -330,15 +347,28 @@ function InboxSession({
                 Requests, progress and approved replies in one place.
               </p>
             </div>
-            <Button
-              onClick={() => {
-                setComposing(true);
-                setSelected(null);
-              }}
-              disabled={busy || !roster?.clients.length}
-            >
-              New request
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {bookingUrl && (
+                <Button variant="outline" asChild>
+                  <a
+                    href={bookingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Book a call with your team
+                  </a>
+                </Button>
+              )}
+              <Button
+                onClick={() => {
+                  setComposing(true);
+                  setSelected(null);
+                }}
+                disabled={busy || !roster?.clients.length}
+              >
+                New request
+              </Button>
+            </div>
           </header>
           {(Boolean(error) ||
             Boolean(rosterError) ||
@@ -581,7 +611,7 @@ function InboxSession({
                           />
                         )}
                       <div className="mb-5 flex flex-wrap gap-2">
-                        {!current.can_draft && (
+                        {!current.can_draft && current.momo_href !== null && (
                           <Button
                             variant="outline"
                             disabled={busy}
@@ -635,6 +665,43 @@ function InboxSession({
                           </li>
                         ))}
                       </ol>
+                      {!current.can_draft &&
+                        current.review &&
+                        !current.publish_receipt &&
+                        selected && (
+                          <ClientReview
+                            key={`${current.id}:${current.review.revision}`}
+                            draft={current.review}
+                            busy={busy}
+                            onApprove={() =>
+                              action.mutate({
+                                path: `/threads/${selected}/approve`,
+                                payload: {
+                                  approval_id: current.review!.approval_id,
+                                  expected_revision: current.review!.revision,
+                                },
+                              })
+                            }
+                            onRequestChanges={async (note) => {
+                              await action.mutateAsync({
+                                path: `/threads/${selected}/request-changes`,
+                                payload: {
+                                  approval_id: current.review!.approval_id,
+                                  expected_revision: current.review!.revision,
+                                  note,
+                                },
+                              });
+                            }}
+                          />
+                        )}
+                      {!current.can_draft &&
+                        !current.review &&
+                        current.review_reason &&
+                        current.state === "needs_approval" && (
+                          <p className="text-muted-foreground mt-4 text-sm">
+                            {current.review_reason}
+                          </p>
+                        )}
                       {current.can_draft && !current.publish_receipt && (
                         <div className="mt-6 space-y-3 border-t pt-4">
                           <h3 className="font-medium">Internal reply draft</h3>
@@ -813,5 +880,96 @@ function InboxSession({
         </main>
       </WorkspaceBody>
     </WorkspaceContainer>
+  );
+}
+
+/** Software tier: the client reads the exact draft, then approves it or asks for changes. */
+function ClientReview({
+  draft,
+  busy,
+  onApprove,
+  onRequestChanges,
+}: {
+  draft: ClientReviewDraft;
+  busy: boolean;
+  onApprove: () => void;
+  onRequestChanges: (note: string) => Promise<void>;
+}) {
+  const [asking, setAsking] = useState(false);
+  const [note, setNote] = useState("");
+  return (
+    <section
+      aria-label="Reply waiting for your approval"
+      className="mt-6 space-y-3 rounded border p-4"
+    >
+      <h3 className="font-medium">Your reply is ready for you to check</h3>
+      <p className="text-muted-foreground text-sm">
+        Read it below. If it looks right, approve it and it is added to this
+        conversation. If not, tell your team what to change and they will
+        prepare a new version.
+      </p>
+      <p className="bg-muted/40 rounded p-3 [overflow-wrap:anywhere] break-words whitespace-pre-wrap">
+        {draft.body}
+      </p>
+      {draft.attachments.length > 0 && (
+        <p className="text-muted-foreground text-sm break-words">
+          Includes: {draft.attachments.map((item) => item.name).join(", ")}
+        </p>
+      )}
+      {asking ? (
+        <form
+          className="space-y-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const text = note.trim();
+            if (!text) return;
+            onRequestChanges(text)
+              .then(() => {
+                setAsking(false);
+                setNote("");
+              })
+              // The inbox shows the error; keep the note so nothing is lost.
+              .catch(() => undefined);
+          }}
+        >
+          <Textarea
+            aria-label="What should change?"
+            placeholder="What should change?"
+            value={note}
+            maxLength={2000}
+            onChange={(event) => setNote(event.target.value)}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={busy || !note.trim()}>
+              Send notes to my team
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                setAsking(false);
+                setNote("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={busy} onClick={onApprove}>
+            Approve
+          </Button>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => setAsking(true)}
+          >
+            Ask for changes
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }

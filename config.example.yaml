@@ -2410,6 +2410,15 @@ agents_api:
 private_workspace:
   enabled: false
 
+# Workspace service tiers: software (the client reviews and approves MomoBot's
+# drafts in their own portal), am_assisted (the assigned account manager
+# reviews and publishes) and standard (MomoBot stays internal). Also turns on
+# the seller onboarding flow (name the workspace, check connections, turn the
+# contract scope into a work plan of paused scheduled drafts). Off by default:
+# while false every workspace routes approvals exactly as before.
+service_tiers:
+  enabled: false
+
 # Momentum-internal surfaces: Team channels (/workspace/team) and the AI
 # Academy (/workspace/academy). Shown only to owners, admins and members of
 # the workspaces listed by slug here -- the agency's own workspace. Never list

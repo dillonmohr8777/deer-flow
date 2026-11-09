@@ -306,3 +306,61 @@ snapshot revisions offer retry and preserve fields as unconfirmed. Keep the
 existing record-revision query key for save/reload refresh. No profile reads,
 invented names, automatic link fetches or access grants. Synthetic browser QA in
 `client-inbox-work-plan.spec.ts` covers paging/retry, CAS and 390/768/1440 geometry.
+
+## Service tiers (draft, off by default)
+
+Mac Frederick's three-tier model, pending leadership alignment. Everything is behind
+`service_tiers.enabled` in `config.yaml` (default `false`, see `config.example.yaml`).
+While it is off, or a workspace has no tier, `service_tiers.workspace_tier()` returns
+`None` without a database read, the portal sends no `service`, `service_tier`,
+`review` or `review_reason` fields, `/api/workspaces/{id}/service` and
+`/api/onboarding/*` answer 404, and every workspace (for example VHIN Cares) keeps
+today's rule: only an active owner or admin approves publication. `GET /api/features`
+reports `service_tiers.enabled` for the frontend nav. Tier names only: no prices,
+setup fees or revenue splits exist in code or UI.
+
+| Tier | Who approves a draft | Client portal |
+| --- | --- | --- |
+| `software` | The client, in their own inbox. Staff cannot publish over them; only an owner/admin can withdraw a draft under client review | Sees the exact pending draft, Approve / Ask for changes, optional "Book a call" link |
+| `am_assisted` | The assigned account manager or a workspace owner/admin | Sees published replies only |
+| `standard` | Same as `am_assisted` | Published replies only; no client-facing Momo link, `/chat` returns 403 with a "your team is handling this" message |
+
+Client routes (software tier, original requesting client, CSRF as above):
+`POST /threads/{id}/approve` `{approval_id,expected_revision}` publishes the exact
+draft through the existing approval executor and DB-only `PortalPublishAdapter`
+(delivery `portal`, never email/Slack/SMS). `POST /threads/{id}/request-changes`
+`{approval_id,expected_revision,note}` (note 1-2000 chars) returns the request to the
+team. Both return the thread detail; stale revisions return 409. `GET /clients`
+includes `service:{tier,booking_url}`; `booking_url` is only sent for `software`.
+
+Staff routes:
+
+- `GET /api/workspaces/{id}/service`: any non-client member. Returns tier,
+  `booking_url`, `sold_by_user_id`, `check_in_task_id`, stored onboarding plan,
+  `version`, `can_edit`, `tiers`.
+- `PUT /api/workspaces/{id}/service`: owner/admin `{service_tier,booking_url,
+  sold_by_user_id,expected_version}` under compare-and-set (stale returns 412).
+  `service_tier: null` restores today's behavior.
+- `POST /api/onboarding/{id}/preview` `{contract_text}`: parses pasted scope into
+  plan items (title, kind, cadence). No writes.
+- `POST /api/onboarding/{id}/apply`: owner/admin, applies once. The active workspace
+  (selection cookie) must equal `{id}` or it returns 409; it lives outside
+  `/api/workspaces` because AuthMiddleware pins that prefix to the private
+  workspace. It renames the workspace if asked, stores the plan and creates one
+  scheduled task per recurring item with status `paused`. If the caller is the
+  recorded seller (or no seller is set), it also creates a paused monthly seller
+  check-in task. Tasks only draft for review; nothing runs, posts or sends until a
+  person resumes it in Scheduled tasks. A lost compare-and-set removes the tasks it
+  created.
+
+Frontend: `/workspace/service` (nav item "Service setup", shown only when the flag is
+on) holds the tier settings and the onboarding call steps. The connect-accounts step
+points to Settings connections; it does not show connected/missing state yet. The
+client inbox renders tier UI only from the server fields above, so with the flag off
+it is unchanged.
+
+Release: migration `0054_workspace_service_settings` adds the
+`workspace_service_settings` table (one row per workspace, created on first save).
+It changes no existing rows. Keep `service_tiers.enabled: false` until leadership
+signs off. Tests: `backend/tests/test_service_tiers.py`,
+`frontend/tests/unit/components/workspace/client-inbox-service-tiers.dom.test.tsx`.

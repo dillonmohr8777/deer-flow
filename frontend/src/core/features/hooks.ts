@@ -9,6 +9,7 @@ import {
   fetchMcpTasksEnabled,
   fetchMomentumInternalEnabled,
   fetchOpenAIAgentsConfigured,
+  fetchServiceTiersEnabled,
   fetchSubagentBatchesCapability,
 } from "./api";
 
@@ -91,6 +92,18 @@ export function useDeskEnabled() {
   const { data, isPending } = useQuery({
     queryKey: ["features", "desk"],
     queryFn: fetchDeskEnabled,
+    staleTime: 0,
+    refetchOnMount: true,
+    retry: false,
+  });
+  return { enabled: data ?? false, isLoading: isPending };
+}
+
+/** Service tiers: tier settings, client approval and the onboarding call. Off by default. */
+export function useServiceTiersEnabled() {
+  const { data, isPending } = useQuery({
+    queryKey: ["features", "service_tiers"],
+    queryFn: fetchServiceTiersEnabled,
     staleTime: 0,
     refetchOnMount: true,
     retry: false,
