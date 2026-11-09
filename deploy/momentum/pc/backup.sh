@@ -5,6 +5,13 @@
 set -euo pipefail
 DEPLOY=/opt/momobot; REPO=$DEPLOY/src; PROJECT=momobot-prod; OUT=$DEPLOY/backups; KEY=$DEPLOY/secrets/backup.key
 mkdir -p "$OUT"; umask 077
+# Same host lock as release.sh: a scheduled backup waits for a running release (and the other way round), so two
+# backups never write the same second-resolution archive name. release.sh holds the lock itself and sets
+# MOMOBOT_RELEASE_LOCK_HELD=1 for the backup it runs.
+if [[ "${MOMOBOT_RELEASE_LOCK_HELD:-}" != 1 ]]; then
+  exec 8>"$DEPLOY/release.lock"
+  flock -w 1800 8 || { echo "another release or backup holds $DEPLOY/release.lock" >&2; exit 1; }
+fi
 IMAGE="$("$REPO/deploy/momentum/vps/dotenv-get.sh" "$DEPLOY/.env" MOMENTUM_GATEWAY_IMAGE)"
 STAGE="$(mktemp -d "$DEPLOY/backup-stage.XXXXXX")"; SNAP="${PROJECT}_backup-snap-$$"
 cleanup() { docker volume rm -f "$SNAP" >/dev/null 2>&1 || true; rm -rf "$STAGE"; }; trap cleanup EXIT

@@ -7,13 +7,27 @@ identical). No AWS anywhere: no SSM, no S3, no Caddy on the host.
 
 ```
 browser -> GCE e2-micro "momobot-front" (static IP, Caddy TLS for the domain, front/Caddyfile)
-        -> Tailscale Funnel on the PC (:8443, unattended mode)
+        -> tailnet-only `tailscale serve` on the PC (:8443, unattended mode; the front VM is on the tailnet)
         -> nginx 127.0.0.1:2026 in WSL -> gateway / frontend / redis
 ```
 
 `front/Caddyfile` is a template: the live copy lives in the VM's `caddyfile` metadata with
-`MOMOBOT_ORIGIN` (Funnel host:port), `MOMOBOT_ORIGIN_SNI` (Funnel host) and `MOMOBOT_FRONT_SSLIP`
+`MOMOBOT_ORIGIN` (the PC's tailnet host:port), `MOMOBOT_ORIGIN_SNI` (the PC's tailnet host) and `MOMOBOT_FRONT_SSLIP`
 filled in. `front/startup.sh` installs Caddy and reloads it whenever that metadata changes.
+
+### Origin exposure (required for the X-Real-IP trust)
+
+`nginx-realip.conf` trusts `X-Real-IP` from the compose gateway, and every connection that tailscaled forwards to nginx arrives from
+that address. That is only safe if the front VM is the sole client of the origin; otherwise a direct caller can forge `X-Real-IP`
+and dodge the per-IP login limiter. So the origin must never be a public Funnel:
+
+- On the PC: `tailscale funnel reset`, then `tailscale serve --bg --https=8443 http://127.0.0.1:2026`. Check that
+  `tailscale funnel status` lists nothing and `tailscale serve status` shows the tailnet-only URL.
+- Join the front VM to the tailnet with a tag (for example `tag:momobot-front`) and put the PC on `tag:momobot-pc`.
+- Tailnet ACL: the only rule that reaches the PC is `{"action":"accept","src":["tag:momobot-front"],"dst":["tag:momobot-pc:8443"]}`.
+  Other tailnet members get no access to the PC.
+- Point `MOMOBOT_ORIGIN` / `MOMOBOT_ORIGIN_SNI` in the front's `caddyfile` metadata at the PC's tailnet name (`<pc>.<tailnet>.ts.net`).
+- If any of this cannot be kept true, delete the three directives in `nginx-realip.conf` before exposing the origin.
 
 ## Layout on the host (`/opt/momobot`)
 
@@ -45,7 +59,7 @@ Same as the EC2 box (see `../ec2/README.md`): `src` (checkout at the release SHA
 
 `momobot.service` is enabled (WSL runs systemd). Windows starts WSL at boot with no logon through an S4U
 scheduled task (`wsl.exe -d Ubuntu -u root -- systemctl start docker momobot`), and Tailscale runs unattended,
-so the Funnel answers before anyone signs in.
+so the tailnet origin answers before anyone signs in.
 
 ## Build and release
 
@@ -59,8 +73,10 @@ sudo /opt/momobot/ops/release.sh <sha>               # add --prune to drop older
 
 `release.sh` runs `backup.sh` first and stops if it fails, creates `MAINTENANCE` (the watchdog stands down), switches both
 image tags in `.env`, runs `pc-up.sh`, polls `/health/ready` for up to 3 minutes and, on any failure, puts the previous tags back,
-re-runs `pc-up.sh` and polls again (exit 1 = rolled back and healthy, exit 2 = rollback also failed). `MAINTENANCE` is always
-removed on exit. Releasing the tags that are already running is a no-op. Every release appends a line to
+re-runs `pc-up.sh` and polls again (exit 1 = rolled back and healthy, exit 2 = rollback also failed, exit 4 = released and ready but
+`--prune` could not list docker images). `release.sh` takes an exclusive lock (`/opt/momobot/release.lock`) before it reads the current
+tags and holds it through backup, deploy, rollback and cleanup; the scheduled `backup.sh` takes the same lock, so a release and a
+backup (or two releases) never overlap. `MAINTENANCE` is always removed on exit. Releasing the tags that are already running is a no-op. Every release appends a line to
 `/opt/momobot/release.log`. Tested by `backend/tests/test_momentum_pc_release.py` (happy path, failed backup, failed `pc-up`,
 readiness timeout, no-op, dry run, prune).
 
@@ -129,7 +145,7 @@ backup (2 threads, 2 runs), as expected. Repeat the rehearsal monthly and after 
 
 ## Holding page
 
-When the PC, the Funnel or the app is down, the front answers 503 with a small branded page (`front/Caddyfile`, `handle_errors`),
+When the PC, the tailnet origin or the app is down, the front answers 503 with a small branded page (`front/Caddyfile`, `handle_errors`),
 including when the PC itself answers 502, 503 or 504. The page reloads itself every 30 seconds. To change the live front, edit the
 `caddyfile` instance metadata, run `caddy validate` on the VM, copy it to `/etc/caddy/Caddyfile` and `systemctl reload caddy`
 (graceful, no dropped requests).

@@ -1,5 +1,5 @@
 #!/bin/bash
-# MomoBot front (GCE e2-micro): Caddy TLS for momobot.needmomentum.com, proxies to the PC's Tailscale Funnel.
+# MomoBot front (GCE e2-micro): Caddy TLS for momobot.needmomentum.com, proxies to the PC's tailnet-only origin (never a public Funnel, see ../README.md).
 set -e
 if ! command -v caddy >/dev/null; then
   apt-get update -q && apt-get install -y -q debian-keyring debian-archive-keyring apt-transport-https curl gpg

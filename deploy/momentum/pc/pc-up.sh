@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # MomoBot prod on the PC WSL host (Oct 29, 2026, after AWS paused the Sunlit Servers project).
 # Same layers as the Mac Funnel stack: base + dood + mac/compose.funnel.yaml. nginx listens on
-# 127.0.0.1:2026 only; Tailscale Funnel on Windows (:8443) terminates TLS. No Caddy, no AWS.
+# 127.0.0.1:2026 only; tailnet-only `tailscale serve` on Windows (:8443) terminates TLS (never a public Funnel). No Caddy, no AWS.
 #   pc-up.sh            start or restart (never builds), waits for /health
 #   pc-up.sh stop       stop the stack (volumes stay)
 #   pc-up.sh compose …  any docker compose command

@@ -8,6 +8,8 @@
 # Releasing the tags already running is a no-op (no backup, no restart). --dry-run prints the plan and changes nothing.
 # --prune removes older main-* images but always keeps the new tag and the previous one (the last 2 tags).
 # A rollback is the same command with the previous sha: the previous images are kept on purpose.
+# Exit codes: 0 released (or no-op), 1 refused/failed (1 after a rollback means rolled back and healthy), 2 rollback also failed,
+# 4 released and ready but --prune could not list docker images. Only one release or backup runs at a time ($DEPLOY/release.lock).
 set -euo pipefail
 DEPLOY=${MOMOBOT_DEPLOY:-/opt/momobot}
 ENV_FILE=$DEPLOY/.env
@@ -17,6 +19,7 @@ READY_URL=${MOMOBOT_READY_URL:-http://127.0.0.1:2026/health/ready}
 READY_TIMEOUT=${MOMOBOT_READY_TIMEOUT:-180}
 READY_INTERVAL=${MOMOBOT_READY_INTERVAL:-3}
 MAINT=$DEPLOY/MAINTENANCE
+LOCK=$DEPLOY/release.lock
 LOG=$DEPLOY/release.log
 DRY=0; PRUNE=0; SHA=""
 for a in "$@"; do
@@ -47,8 +50,26 @@ wait_ready() {
   done
   return 1
 }
+prune_old() { # an empty candidate list is success; a failing `docker images` is not
+  local repo list old
+  for repo in deer-flow-gateway deer-flow-frontend; do
+    list=$(docker images --format '{{.Repository}}:{{.Tag}}' "$repo") || return 1
+    while IFS= read -r old; do
+      [[ "$old" == *:main-* ]] || continue
+      case "$old" in "$NEW_G"|"$NEW_F"|"$OLD_G"|"$OLD_F") continue ;; esac
+      say "prune $old"; docker image rm "$old" >/dev/null 2>&1 || true
+    done <<< "$list"
+  done
+}
 apply_tags() { set_env MOMENTUM_GATEWAY_IMAGE "$1"; set_env MOMENTUM_FRONTEND_IMAGE "$2"; "$PC_UP" && wait_ready; }
 
+# Exclusive host lock, taken before reading the current tags and held (fd 9) until this process exits, so it covers
+# backup, deployment, rollback and cleanup. backup.sh takes the same lock when it runs on its own (timer), so a
+# scheduled backup can never overlap a release; the release's own backup is told the lock is already held.
+command -v flock >/dev/null || die "flock is required"
+exec 9>"$LOCK" || die "cannot open $LOCK"
+flock -n 9 || die "another release or backup holds $LOCK; wait for it to finish"
+export MOMOBOT_RELEASE_LOCK_HELD=1
 [[ -f "$ENV_FILE" ]] || die "$ENV_FILE not found"
 OLD_G=$(get_env MOMENTUM_GATEWAY_IMAGE); OLD_F=$(get_env MOMENTUM_FRONTEND_IMAGE)
 [[ -n "$OLD_G" && -n "$OLD_F" ]] || die "current image tags are not set in $ENV_FILE"
@@ -75,10 +96,7 @@ if apply_tags "$NEW_G" "$NEW_F"; then
   say "ready on $NEW_G"
   echo "$(date -u +%FT%TZ) ok $OLD_G -> $NEW_G" >> "$LOG"
   if (( PRUNE )); then
-    for repo in deer-flow-gateway deer-flow-frontend; do
-      docker images --format '{{.Repository}}:{{.Tag}}' "$repo" | grep ':main-' \
-        | grep -vxF -e "$NEW_G" -e "$NEW_F" -e "$OLD_G" -e "$OLD_F" | while read -r old; do say "prune $old"; docker image rm "$old" >/dev/null 2>&1 || true; done
-    done
+    prune_old || { say "release is ready on $NEW_G, but listing docker images failed: nothing more was pruned (exit 4)"; exit 4; }
   fi
   exit 0
 fi
