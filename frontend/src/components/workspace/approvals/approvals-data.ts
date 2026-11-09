@@ -63,6 +63,7 @@ function safeHref(value: unknown): string | null {
  */
 export function socialPostLink(approval: Approval): string | null {
   if (approval.action_type !== "social_post") return null;
+  if (approval.taken_down_at) return null;
   return safeHref(approval.destination_url);
 }
 
@@ -79,7 +80,9 @@ export function statusText(approval: Approval): string {
   if (isReadyToSend(approval)) return "Ready to send";
   if (approval.status === "executed") {
     if (approval.action_type === "portal_publish") return "Published in portal";
-    if (approval.action_type === "social_post") return "Published";
+    if (approval.action_type === "social_post") {
+      return approval.taken_down_at ? "Taken down" : "Published";
+    }
   }
   return STATUS_LABEL[approval.status];
 }

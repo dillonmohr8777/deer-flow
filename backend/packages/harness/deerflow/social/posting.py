@@ -231,6 +231,14 @@ async def published_posts(session_factory, organization_id: str, *, limit: int =
         return list(rows)
 
 
+async def post_unpublished_at(session_factory, organization_id: str | None, approval_id: str) -> datetime | None:
+    """When this approval's post was taken down, or ``None`` if it is live or was never recorded."""
+    if not organization_id:
+        return None
+    async with session_factory() as session:
+        return await session.scalar(select(SocialPostRow.unpublished_at).where(SocialPostRow.organization_id == organization_id, SocialPostRow.approval_id == approval_id))
+
+
 async def settings_for_slug(session_factory, slug: str) -> WorkspaceSocial | None:
     async with session_factory() as session:
         row = await session.scalar(select(WorkspaceSocialSettingsRow).where(WorkspaceSocialSettingsRow.public_slug == slug))
