@@ -107,8 +107,8 @@ def test_curriculum_is_well_formed():
     assert len(momobot["lessons"]) == 6
     assert momobot["lessons"][0]["id"] == "momobot-01-meet-momo"
     assert all(lesson["video_slot"] is None for lesson in momobot["lessons"])
-    assert len(ACADEMY_VIDEO_STEMS) == 16
-    assert {"00-platform-tour", "14-week-by-week", "15-month-by-month"} <= ACADEMY_VIDEO_STEMS
+    assert len(ACADEMY_VIDEO_STEMS) == 17
+    assert {"00-platform-tour", "staff-quick-start-20261104", "14-week-by-week", "15-month-by-month"} <= ACADEMY_VIDEO_STEMS
     roles = next(track for track in TRACKS if track["id"] == "work-roles")
     assert len(roles["lessons"]) == 10
     assert TRACKS[0]["id"] == "work-foundations"
