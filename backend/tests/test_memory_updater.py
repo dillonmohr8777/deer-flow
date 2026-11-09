@@ -27,11 +27,6 @@ from deerflow.trace_context import get_current_trace_id, request_trace_context
 _RECENT_ISO = (datetime.now(UTC) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-# Hybrid capacity scoring decays with wall-clock time, so "recent" timestamps
-# must be relative to now rather than a hard-coded date.
-_RECENT_ISO = (datetime.now(UTC) - timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _make_memory(facts: list[dict[str, object]] | None = None) -> dict[str, object]:
     return {
         "version": "1.0",
