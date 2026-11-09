@@ -4,41 +4,24 @@ WORK_TRACKS = [
     {
         "id": "work-foundations",
         "title": "Start here: AI and MomoBot at work",
-        "summary": "Five practical foundations, including the complete twelve-minute platform tour and the latest staff quick start.",
+        "summary": "Four practical foundations, including the platform tour in under ten minutes.",
         "lessons": [
             {
                 "id": "work-00-platform-tour",
-                "title": "The complete MomoBot workspace: a twelve-minute walkthrough",
-                "minutes": 12,
-                "summary": "Tour the workspace, modes, AI Academy, Momo Daily, prompting, memory, schedules, inbox, approvals, tools and projects through practical account-manager examples.",
+                "title": "The entire MomoBot workspace in under ten minutes",
+                "minutes": 9,
+                "summary": "Follow one client brief through chat, files, run history and review, then find your way around the desktop and mobile workspace.",
                 "steps": [
-                    "Open the correct workspace, choose a mode and find the staff learning area.",
-                    "Supply a brief and source facts, then correct and check the result.",
-                    "Use the saved reporting, research and approval examples to practice reviewing work.",
-                    "Keep working rules, project materials and the next action in the right workspace.",
-                    "Propose a recurring task with a reviewer and a clear result to check.",
+                    "Open the correct workspace and a saved chat.",
+                    "Supply the brief, source dates and a clear acceptance check.",
+                    "Inspect the generated file and its run record.",
+                    "Save the owner, approval state and next action.",
+                    "Reopen the same chat on your phone and compare the saved work.",
                 ],
-                "try_it": "Use Sample Client Co as a synthetic client and ask for a weekly update draft from "
-                "facts you provide. Correct the draft, verify its claims and save a useful working rule. Share the "
-                "reviewed result, the next use and the time it took including review.",
+                "try_it": "Use Sample Dental Group as a synthetic client and ask for a weekly report draft from "
+                "facts you provide. Record the chat link, artifact, owner and next action. Reopen that "
+                "same chat on mobile and confirm the artifact and run status match.",
                 "video_slot": "00-platform-tour",
-                "video_url": None,
-            },
-            {
-                "id": "work-staff-quick-start-20261104",
-                "title": "Staff quick start: real work, corrections and memory",
-                "minutes": 3,
-                "summary": "The November staff walkthrough: give MomoBot a real task, check its output and save a useful working rule.",
-                "steps": [
-                    "Sign in with your approved staff account.",
-                    "Open MomoBot Max and supply one real task with its source notes.",
-                    "Push back once and check each factual claim.",
-                    "Save a useful rule in the correct workspace memory.",
-                    "Share the reviewed output and the time it took, including review.",
-                ],
-                "try_it": "Complete one repetitive task using approved inputs. Keep clients in their own authorized workspaces. "
-                "Return the reviewed result, one correction and the time it took compared with your normal process.",
-                "video_slot": "staff-quick-start-20261104",
                 "video_url": None,
             },
             {
