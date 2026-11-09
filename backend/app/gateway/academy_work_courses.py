@@ -10,17 +10,17 @@ WORK_TRACKS = [
                 "id": "work-00-platform-tour",
                 "title": "The complete MomoBot workspace: a twelve-minute walkthrough",
                 "minutes": 12,
-                "summary": "Follow one client brief through chat, files, run history and review, then find your way around the desktop and mobile workspace.",
+                "summary": "Tour the workspace, modes, AI Academy, Momo Daily, prompting, memory, schedules, inbox, approvals, tools and projects through practical account-manager examples.",
                 "steps": [
-                    "Open the correct workspace and a saved chat.",
-                    "Supply the brief, source dates and a clear acceptance check.",
-                    "Inspect the generated file and its run record.",
-                    "Save the owner, approval state and next action.",
-                    "Reopen the same chat on your phone and compare the saved work.",
+                    "Open the correct workspace, choose a mode and find the staff learning area.",
+                    "Supply a brief and source facts, then correct and check the result.",
+                    "Use the saved reporting, research and approval examples to practice reviewing work.",
+                    "Keep working rules, project materials and the next action in the right workspace.",
+                    "Propose a recurring task with a reviewer and a clear result to check.",
                 ],
-                "try_it": "Use Sample Dental Group as a synthetic client and ask for a weekly report draft from "
-                "facts you provide. Record the chat link, artifact, owner and next action. Reopen that "
-                "same chat on mobile and confirm the artifact and run status match.",
+                "try_it": "Use Sample Client Co as a synthetic client and ask for a weekly update draft from "
+                "facts you provide. Correct the draft, verify its claims and save a useful working rule. Share the "
+                "reviewed result, the next use and the time it took including review.",
                 "video_slot": "00-platform-tour",
                 "video_url": None,
             },
