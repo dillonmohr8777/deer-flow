@@ -20,7 +20,7 @@
 # ============================================================================
 # Bump this number when the config schema changes.
 # Run `make config-upgrade` to merge new fields into your local config.yaml.
-config_version: 49
+config_version: 50
 
 # Optional per-model request pacing (inside a models[] entry):
 # request_admission:
@@ -2440,6 +2440,19 @@ momentum_internal:
 #   staff_model: claude-haiku-5-5   # non-admin staff run Max on this (clients and admins keep `model`)
 #   staff_effort: high
 #   base_effort: medium             # ...at this effort, with no subagent team
+
+# ============================================================================
+# Social Posting (approve to publish on the workspace page)
+# ============================================================================
+# Agents propose social posts with the propose_social_post tool; each one is an
+# approval of type social_post. An approved post goes live on the workspace's own
+# public MomoBot page (/api/public/social/<slug>, noindex). Nothing is sent to an
+# outside network. Each workspace also has its own switch (off by default) that an
+# owner or admin turns on with PUT /api/social/settings. While this global flag is false the
+# tool, the /api/social routes and every public page are unavailable.
+social_posting:
+  enabled: false
+  # public_base_url: https://momobot.example.com   # origin for shareable links
 
 # ============================================================================
 # Skill Self-Evolution Configuration

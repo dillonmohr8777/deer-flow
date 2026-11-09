@@ -223,6 +223,13 @@ def get_available_tools(
     if getattr(private_workspace, "enabled", False) is True:
         builtin_tools.extend((agent_room_read, agent_room_post))
 
+    # Social posting files drafts for the workspace's own MomoBot page (off by default).
+    social_posting = getattr(config, "social_posting", None)
+    if getattr(social_posting, "enabled", False) is True:
+        from deerflow.tools.builtins.propose_social_post_tool import propose_social_post
+
+        builtin_tools.append(propose_social_post)
+
     # Add subagent tools only if enabled via runtime parameter
     if subagent_enabled:
         builtin_tools.extend(SUBAGENT_TOOLS)

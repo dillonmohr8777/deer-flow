@@ -93,6 +93,19 @@ class PrivateWorkspaceConfig(BaseModel):
     )
 
 
+class SocialPostingConfig(BaseModel):
+    """Social posting inside MomoBot: agents propose posts, approved posts go live on the workspace's own MomoBot page."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Global switch. When false the propose_social_post tool, the /api/social routes and every public page are unavailable, whatever each workspace's own switch says.",
+    )
+    public_base_url: str | None = Field(
+        default=None,
+        description="Origin used to build shareable page links (e.g. https://momobot.example.com). When unset, links are relative paths on the gateway origin.",
+    )
+
+
 class MomentumInternalConfig(BaseModel):
     """Staff-only surfaces (Team channels, AI Academy) for the agency's own workspace."""
 
@@ -286,6 +299,7 @@ class AppConfig(BaseModel):
     private_workspace: PrivateWorkspaceConfig = Field(default_factory=PrivateWorkspaceConfig, description="Owner-only private workspace switches (the Desk home)")
     momentum_internal: MomentumInternalConfig = Field(default_factory=MomentumInternalConfig, description="Staff-only Team channels and AI Academy for the agency's own workspace")
     momobot_max: MomobotMaxConfig = Field(default_factory=MomobotMaxConfig, description="MomoBot Max, the built-in all-in-one agent for client accounts (off by default)")
+    social_posting: SocialPostingConfig = Field(default_factory=SocialPostingConfig, description="Social posting inside MomoBot: approve to publish on the workspace page (off by default)")
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")
     subagents: SubagentsAppConfig = Field(default_factory=SubagentsAppConfig, description="Subagent runtime configuration")
     guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig, description="Guardrail middleware configuration")

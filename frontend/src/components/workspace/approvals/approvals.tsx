@@ -33,10 +33,10 @@ import boardStyles from "../board/board.module.css";
 
 import {
   STATUS_FILTERS,
-  STATUS_LABEL,
   TYPE_LABEL,
   fieldsFor,
-  isReadyToSend,
+  socialPostLink,
+  statusText,
   statusTone,
   targetLabel,
 } from "./approvals-data";
@@ -195,12 +195,7 @@ export function ApprovalsBody() {
                       <span>{row.agent_name ?? "Agent"}</span>
                     </span>
                     <StatusTag tone={statusTone(row.status)}>
-                      {isReadyToSend(row)
-                        ? "Ready to send"
-                        : row.action_type === "portal_publish" &&
-                            row.status === "executed"
-                          ? "Published in portal"
-                          : STATUS_LABEL[row.status]}
+                      {statusText(row)}
                     </StatusTag>
                   </button>
                 </li>
@@ -244,6 +239,8 @@ function asText(value: unknown): string {
 
 function ApprovalDetail({ approval }: { approval: Approval }) {
   const fields = fieldsFor(approval.action_type);
+  const social = approval.action_type === "social_post";
+  const socialLink = socialPostLink(approval);
   const editMutation = useEditApproval();
   const approveMutation = useApproveApproval();
   const rejectMutation = useRejectApproval();
@@ -263,7 +260,11 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
   let parseError: string | null = null;
   if (fields) {
     // Keep keys the form doesn't show (e.g. thread_ts) so an edit never drops them.
-    parsed = { ...approval.payload, ...values };
+    // An optional field left blank that the payload never had stays absent.
+    parsed = { ...approval.payload };
+    for (const [key, value] of Object.entries(values)) {
+      if (value !== "" || key in approval.payload) parsed[key] = value;
+    }
   } else {
     try {
       const value: unknown = JSON.parse(json);
@@ -317,26 +318,45 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
           ) : null}
         </div>
         <StatusTag tone={statusTone(approval.status)}>
-          {isReadyToSend(approval)
-            ? "Ready to send"
-            : approval.action_type === "portal_publish" &&
-                approval.status === "executed"
-              ? "Published in portal"
-              : STATUS_LABEL[approval.status]}
+          {statusText(approval)}
         </StatusTag>
       </header>
 
-      <div className={styles.field}>
-        <label htmlFor="approval-target" className={pageStyles.eyebrow}>
-          {targetLabel(approval.action_type)}
-        </label>
-        <Input
-          id="approval-target"
-          value={target}
-          disabled={!pending || !can.edit}
-          onChange={(event) => setTarget(event.target.value)}
-        />
-      </div>
+      {social ? (
+        <div className={styles.field} data-testid="social-post-destination">
+          <p className={pageStyles.eyebrow}>
+            {targetLabel(approval.action_type)}
+          </p>
+          <p>
+            Your MomoBot page only. Nothing is posted to Google, Facebook,
+            Instagram or LinkedIn.
+          </p>
+          {socialLink ? (
+            <a
+              className="text-sm underline"
+              href={socialLink}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {approval.status === "executed"
+                ? "See it live on your MomoBot page"
+                : "Open your MomoBot page"}
+            </a>
+          ) : null}
+        </div>
+      ) : (
+        <div className={styles.field}>
+          <label htmlFor="approval-target" className={pageStyles.eyebrow}>
+            {targetLabel(approval.action_type)}
+          </label>
+          <Input
+            id="approval-target"
+            value={target}
+            disabled={!pending || !can.edit}
+            onChange={(event) => setTarget(event.target.value)}
+          />
+        </div>
+      )}
 
       {fields ? (
         fields.map((field) => (
@@ -454,7 +474,11 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
             title={dirty ? "Save your edits first" : undefined}
             onClick={() => approveMutation.mutate({ id: approval.id })}
           >
-            {approveMutation.isPending ? "Approving..." : "Approve and send"}
+            {approveMutation.isPending
+              ? "Approving..."
+              : social
+                ? "Approve and publish"
+                : "Approve and send"}
           </Button>
           <Button
             variant="outline"
@@ -475,10 +499,7 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
         </div>
       ) : approval.decided_at ? (
         <p className={boardStyles.muted}>
-          {approval.action_type === "portal_publish" &&
-          approval.status === "executed"
-            ? "Published in portal"
-            : STATUS_LABEL[approval.status]}{" "}
+          {statusText(approval)}{" "}
           {new Date(approval.decided_at).toLocaleString()}
         </p>
       ) : null}

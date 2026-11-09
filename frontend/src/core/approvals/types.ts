@@ -4,6 +4,7 @@ export type ApprovalActionType =
   | "ad_change"
   | "deploy_report"
   | "portal_publish"
+  | "social_post"
   | "other";
 
 export type ApprovalStatus =
