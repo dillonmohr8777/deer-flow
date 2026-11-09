@@ -4,12 +4,12 @@ WORK_TRACKS = [
     {
         "id": "work-foundations",
         "title": "Start here: AI and MomoBot at work",
-        "summary": "Four practical foundations, including the platform tour in under ten minutes.",
+        "summary": "Five practical foundations, including the complete twelve-minute platform tour and the latest staff quick start.",
         "lessons": [
             {
                 "id": "work-00-platform-tour",
-                "title": "The entire MomoBot workspace in under ten minutes",
-                "minutes": 9,
+                "title": "The complete MomoBot workspace: a twelve-minute walkthrough",
+                "minutes": 12,
                 "summary": "Follow one client brief through chat, files, run history and review, then find your way around the desktop and mobile workspace.",
                 "steps": [
                     "Open the correct workspace and a saved chat.",
@@ -22,6 +22,23 @@ WORK_TRACKS = [
                 "facts you provide. Record the chat link, artifact, owner and next action. Reopen that "
                 "same chat on mobile and confirm the artifact and run status match.",
                 "video_slot": "00-platform-tour",
+                "video_url": None,
+            },
+            {
+                "id": "work-staff-quick-start-20261104",
+                "title": "Staff quick start: real work, corrections and memory",
+                "minutes": 3,
+                "summary": "The November staff walkthrough: give MomoBot a real task, check its output and save a useful working rule.",
+                "steps": [
+                    "Sign in with your approved staff account.",
+                    "Open MomoBot Max and supply one real task with its source notes.",
+                    "Push back once and check each factual claim.",
+                    "Save a useful rule in the correct workspace memory.",
+                    "Share the reviewed output and the time it took, including review.",
+                ],
+                "try_it": "Complete one repetitive task using approved inputs. Keep clients in their own authorized workspaces. "
+                "Return the reviewed result, one correction and the time it took compared with your normal process.",
+                "video_slot": "staff-quick-start-20261104",
                 "video_url": None,
             },
             {
