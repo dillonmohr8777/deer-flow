@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import type { ReactNode } from "react";
 
 import { MessageGroup } from "@/components/workspace/messages/message-group";
 import { I18nContext } from "@/core/i18n/context";
@@ -15,6 +16,13 @@ import { enUS } from "@/core/i18n/locales/en-US";
 
 rs.mock("@/components/workspace/artifacts", () => ({
   useArtifacts: () => ({ setOpen: () => undefined, select: () => undefined }),
+}));
+// FlipDisplay animates with Motion. happy-dom 21 rejects a canceled
+// animation's `finished` promise without marking it handled (browsers mark it
+// handled), so Motion's cleanup on unmount surfaced as unhandled AbortErrors
+// that failed this file. The flip animation is not what this file tests.
+rs.mock("@/components/workspace/flip-display", () => ({
+  FlipDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 afterEach(() => {
   cleanup();
