@@ -99,6 +99,8 @@ async def test_payload_rules():
         (TARGET_OWN_PAGE, {"text": "   "}),
         (TARGET_OWN_PAGE, {"text": "x" * 3001}),
         (TARGET_OWN_PAGE, {"text": "ok", "link": "javascript:alert(1)"}),
+        (TARGET_OWN_PAGE, {"text": "ok", "link": "https://["}),
+        (TARGET_OWN_PAGE, {"text": "ok", "link": "http://[::1"}),
         (TARGET_OWN_PAGE, {"text": "ok", "channel": "facebook"}),
         ("facebook_page", {"text": "ok"}),
     ):
@@ -267,3 +269,10 @@ async def test_tool_files_for_approval_by_default(org_world):  # noqa: F811
     assert row["status"] == "pending" and row["action_type"] == ACTION_TYPE and row["target"] == TARGET_OWN_PAGE
     assert row["payload"]["text"] == "Pumpkin bread is back this week."
     assert await _post_count(org_world) == 0
+
+
+async def test_tool_rejects_malformed_bracketed_link(org_world):  # noqa: F811
+    await _enable(org_world)
+    out = await propose_social_post.coroutine(runtime=_runtime(), text="Hello", link="https://[")
+    assert out.startswith("Not filed:") and "propose_social_post again" in out
+    assert await PendingActionRepository(org_world).list(user_id=USER_A) == []

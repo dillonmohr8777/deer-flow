@@ -84,7 +84,10 @@ def _clean_link(value: Any) -> str | None:
     link = value.strip()
     if len(link) > MAX_LINK_CHARS or any(ch.isspace() for ch in link):
         raise InvalidPayloadError("link must be a single http(s) URL")
-    parts = urlsplit(link)
+    try:
+        parts = urlsplit(link)
+    except ValueError as exc:
+        raise InvalidPayloadError("link must be a valid http(s) URL") from exc
     if parts.scheme not in ("http", "https") or not parts.netloc:
         raise InvalidPayloadError("link must start with http:// or https://")
     return link
