@@ -7,6 +7,7 @@ import {
   UsersRound,
   Hash,
   CalendarClock,
+  ClipboardList,
   Inbox,
   MessagesSquare,
   LampDesk,
@@ -38,6 +39,7 @@ import {
   useCrmEnabled,
   useDeskEnabled,
   useMomentumInternalEnabled,
+  useServiceTiersEnabled,
 } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 import { MOMO_DAILY_NAME, MOMO_DAILY_PATH } from "@/core/momo-daily";
@@ -133,6 +135,7 @@ export function WorkspaceNavChatList() {
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
   const { enabled: crmEnabled } = useCrmEnabled();
+  const { enabled: serviceTiersEnabled } = useServiceTiersEnabled();
   const { data: brandKit } = useBrandKit();
   const { user } = useAuth();
   const isAdmin = user?.system_role === "admin";
@@ -247,6 +250,23 @@ export function WorkspaceNavChatList() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {/* Off unless config turns service tiers on; the server checks the role on every call. */}
+          {serviceTiersEnabled && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/workspace/service"}
+                asChild
+              >
+                <Link
+                  className="text-muted-foreground"
+                  href="/workspace/service"
+                >
+                  <ClipboardList />
+                  <span>Service setup</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
           {/* The CRM at /crm/ is served by the deployment's reverse proxy, not by Next.js: keep this a plain anchor (a full page load); next/link would look for a client route that does not exist. */}
           {crmEnabled && (
             <SidebarMenuItem>
