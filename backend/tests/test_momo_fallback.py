@@ -97,6 +97,19 @@ def test_http_429_falls_back_with_tools_preserved(monkeypatch, factory):
     assert result.response_metadata["momo_fallback_reason"] == "HTTPStatusError"
 
 
+def test_http_504_gateway_timeout_falls_back(monkeypatch, factory):
+    fake, calls = factory
+    from deerflow.models.openai_codex_provider import CodexChatModel
+
+    monkeypatch.setattr(CodexChatModel, "_call_codex_api", _raise(_http_error(504)))
+
+    result = _make_model()._generate([HumanMessage(content="hi")])
+
+    assert result.generations[0].message.content == "from fallback"
+    assert len(calls) == 1
+    assert fake.invoked_with[0].content == "hi"
+
+
 def test_quota_error_text_falls_back_without_tools(monkeypatch, factory):
     fake, calls = factory
     from deerflow.models.openai_codex_provider import CodexChatModel

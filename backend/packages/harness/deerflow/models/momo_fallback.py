@@ -19,7 +19,7 @@ from deerflow.models.openai_codex_provider import CodexChatModel
 
 logger = logging.getLogger(__name__)
 
-_FALLBACK_STATUS = {401, 402, 403, 429, 500, 502, 503, 529}
+_FALLBACK_STATUS = {401, 402, 403, 429, 500, 502, 503, 504, 529}
 _FALLBACK_WORDS = ("usage limit", "rate limit", "quota", "credential", "unauthorized", "expired", "too many requests",
                    "stream ended", "response.completed", "connection reset", "server error", "overloaded")
 
