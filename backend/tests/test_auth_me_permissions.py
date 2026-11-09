@@ -211,6 +211,7 @@ def _stub_user() -> SimpleNamespace:
         system_role="user",
         needs_setup=False,
         oauth_provider=None,
+        password_hash=None,
     )
 
 
