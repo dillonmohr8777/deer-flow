@@ -4,6 +4,7 @@ export type ApprovalActionType =
   | "ad_change"
   | "deploy_report"
   | "portal_publish"
+  | "social_post"
   | "other";
 
 export type ApprovalStatus =
@@ -52,6 +53,10 @@ export type Approval = {
   capabilities?: ApprovalCapabilities;
   proposer?: { user_id: string; display_name: string } | null;
   workspace?: { id: string; name: string } | null;
+  /** Server-computed link to where the action appears (social posts: the workspace page). Never from the payload. */
+  destination_url?: string | null;
+  /** Social posts: when the published post was taken down; the live link is withheld then. */
+  taken_down_at?: string | null;
   error: string | null;
   created_at: string;
   updated_at: string;

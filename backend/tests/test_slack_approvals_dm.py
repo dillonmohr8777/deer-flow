@@ -119,6 +119,19 @@ def test_edit_links_without_deciding_and_stale_and_missing():
     assert asyncio.run(sa.route_action(_action("skip"), CFG, FakeStore(row=None))).kind == "missing"
 
 
+def test_social_posts_are_approved_in_momobot_only():
+    row = _row(action_type="social_post", title="Social post: Fresh sourdough", target="momobot_page", payload={"text": "Fresh sourdough is out of the oven."})
+    text, blocks = sa.build_message(row, CFG)
+    assert "in MomoBot" in text
+    assert all(block["type"] != "actions" for block in blocks)  # no Approve, Edit or Skip buttons
+    assert "<https://momo.example/workspace/approvals?id=abc123|Approve this one in MomoBot>" in blocks[-1]["elements"][0]["text"]
+    for verb in ("approve", "skip"):  # a press on an old message never settles the row
+        store = FakeStore(row=row, decided=_row(status="approved"))
+        result = asyncio.run(sa.route_action(_action(verb), CFG, store))
+        assert result.kind == "web_only" and "approvals?id=abc123" in result.text
+        assert store.calls == []
+
+
 def test_off_by_default_registers_no_hook_and_ignores_interactive():
     channel = SlackChannel(bus=MessageBus(), config={"bot_token": "xoxb-a", "app_token": "xapp-a"})
     assert channel._approvals_dm.enabled is False

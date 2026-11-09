@@ -36,7 +36,9 @@ async def old_child(root: Path, database: Path, expected: Path, action: str) -> 
     try:
         async with engine_module.get_engine().connect() as connection:
             revision = (await connection.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
-            assert revision == "0053_board_work_plan"
+            # The seed phase runs the old checkout's bootstrap on a fresh database, so it
+            # stops at the old head; later phases see the revision the new source upgraded to.
+            assert revision == ("0053_board_work_plan" if action == "seed" else "0054_social_posts")
         if action == "seed":
             await repository.put("old-before", thread_id="old-before", status="success", kwargs={"written_by": "old-before"}, user_id=None)
             return {"sources": sources, "revision": revision, "seeded": "old-before"}

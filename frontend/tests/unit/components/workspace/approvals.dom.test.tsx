@@ -5,6 +5,8 @@ import { ApprovalsBody } from "@/components/workspace/approvals/approvals";
 import {
   fieldsFor,
   isReadyToSend,
+  socialPostLink,
+  statusText,
   statusTone,
 } from "@/components/workspace/approvals/approvals-data";
 import type { Approval } from "@/core/approvals";
@@ -246,6 +248,75 @@ describe("ApprovalsBody", () => {
       true,
     );
   });
+
+  it("shows a social post's exact text, where it appears, and approve-to-publish", () => {
+    mocks.rows = [
+      approval({
+        action_type: "social_post",
+        title: "Social post: Fresh sourdough",
+        target: "momobot_page",
+        payload: { text: "Fresh sourdough is out of the oven." },
+        destination_url:
+          "/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b",
+      }),
+    ];
+    render(<ApprovalsBody />);
+    fireEvent.click(screen.getByText("Social post: Fresh sourdough"));
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Post").value).toBe(
+      "Fresh sourdough is out of the oven.",
+    );
+    expect(screen.getByText(/Your MomoBot page only/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Open your MomoBot page" })
+        .getAttribute("href"),
+    ).toBe("/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Approve and publish" }),
+    );
+    expect(mocks.approve).toHaveBeenCalledWith({ id: "a1" });
+  });
+
+  it("never renders a social post link planted in the payload", () => {
+    mocks.rows = [
+      approval({
+        action_type: "social_post",
+        title: "Social post: Planted",
+        target: "momobot_page",
+        payload: { text: "Hello.", page_url: "https://evil.example/p" },
+      }),
+    ];
+    render(<ApprovalsBody />);
+    fireEvent.click(screen.getByText("Social post: Planted"));
+    expect(screen.getByText(/Your MomoBot page only/)).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: "Open your MomoBot page" }),
+    ).toBeNull();
+  });
+
+  it("links a published social post to its live page", () => {
+    mocks.rows = [
+      approval({
+        action_type: "social_post",
+        title: "Social post: Rye",
+        target: "momobot_page",
+        payload: { text: "Rye loaves today." },
+        status: "executed",
+        decided_at: "2026-10-05T11:00:00Z",
+        execution_result: { delivery: "momobot_page" },
+        destination_url:
+          "/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b",
+      }),
+    ];
+    render(<ApprovalsBody />);
+    fireEvent.click(screen.getByText("Social post: Rye"));
+    expect(
+      screen
+        .getByRole("link", { name: "See it live on your MomoBot page" })
+        .getAttribute("href"),
+    ).toBe("/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b");
+    expect(screen.getAllByText("Published").length).toBeGreaterThan(0);
+  });
 });
 
 describe("approvals-data", () => {
@@ -263,5 +334,45 @@ describe("approvals-data", () => {
     expect(isReadyToSend(approval({ status: "executed" }))).toBe(false);
     expect(fieldsFor("ad_change")).toBeNull();
     expect(fieldsFor("email")?.map((f) => f.key)).toEqual(["subject", "body"]);
+    expect(fieldsFor("social_post")?.map((f) => f.key)).toEqual([
+      "text",
+      "link",
+    ]);
+  });
+
+  it("only renders safe social post links and labels failures", () => {
+    const post = (patch: Partial<Approval>) =>
+      approval({
+        action_type: "social_post",
+        target: "momobot_page",
+        ...patch,
+      });
+    expect(
+      socialPostLink(post({ destination_url: "javascript:1" })),
+    ).toBeNull();
+    expect(
+      socialPostLink(post({ destination_url: "//evil.test/p" })),
+    ).toBeNull();
+    // A link planted in the payload or execution result is never rendered.
+    expect(
+      socialPostLink(
+        post({
+          payload: { text: "x", page_url: "https://evil.example/p" },
+          execution_result: { live_url: "https://evil.example/p" },
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      socialPostLink(
+        post({
+          payload: { text: "x", page_url: "https://evil.example/p" },
+          destination_url:
+            "/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b",
+        }),
+      ),
+    ).toBe("/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b");
+    expect(socialPostLink(approval())).toBeNull();
+    expect(statusText(post({ status: "failed" }))).toBe("Failed");
+    expect(statusText(post({ status: "executed" }))).toBe("Published");
   });
 });

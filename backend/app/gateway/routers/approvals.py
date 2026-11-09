@@ -31,6 +31,8 @@ from deerflow.persistence.organizations.delegation import OrganizationDelegation
 from deerflow.persistence.organizations.model import OrganizationRow
 from deerflow.persistence.organizations.resolution import active_organization_for_user
 from deerflow.runtime.user_context import resolve_organization_id
+from deerflow.social import ACTION_TYPE as SOCIAL_POST
+from deerflow.social import live_page_url, post_unpublished_at
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +89,11 @@ class ApprovalResponse(BaseModel):
     capabilities: ApprovalCapabilities = Field(default_factory=ApprovalCapabilities)
     proposer: ApprovalProposer | None = None
     workspace: ApprovalWorkspace | None = None
+    # Server-computed link to where the action appears (social posts: the workspace page from its slug).
+    # Never read from the payload, so a proposal cannot plant a link the page presents as trusted.
+    destination_url: str | None = None
+    # Social posts only: when the published post was taken down (ISO timestamp); the live link is suppressed then.
+    taken_down_at: str | None = None
 
 
 class ApprovalListResponse(BaseModel):
@@ -133,6 +140,14 @@ async def _out(row: dict, request: Request) -> ApprovalResponse:
     async with repo.session_factory() as session:
         workspace = await session.get(OrganizationRow, row["organization_id"])
     out["workspace"] = ApprovalWorkspace(id=workspace.id, name=workspace.name) if workspace else None
+    out["destination_url"] = None
+    out["taken_down_at"] = None
+    if row["action_type"] == SOCIAL_POST:
+        unpublished_at = await post_unpublished_at(repo.session_factory, row["organization_id"], row["id"])
+        if unpublished_at is not None:
+            out["taken_down_at"] = unpublished_at.isoformat()
+        else:
+            out["destination_url"] = await live_page_url(repo.session_factory, row["organization_id"])
     out["proposer"] = None
     if row["action_type"] == "composio_tool_call":
         own = actor == row["user_id"]

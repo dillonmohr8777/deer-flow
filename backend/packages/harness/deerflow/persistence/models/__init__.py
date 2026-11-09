@@ -43,6 +43,7 @@ from deerflow.persistence.projects.model import ProjectDocumentRow, ProjectRow
 from deerflow.persistence.run.model import RunChangeClockRow, RunRow
 from deerflow.persistence.scheduled_task_runs.model import ScheduledTaskRunRow
 from deerflow.persistence.scheduled_tasks.model import ScheduledTaskRow
+from deerflow.persistence.social.model import SocialPostRow, WorkspaceSocialSettingsRow
 from deerflow.persistence.subagent_batches.model import SubagentBatchItemRow, SubagentBatchRow
 from deerflow.persistence.team_board.model import TeamChannelRow, TeamMessageRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
@@ -85,6 +86,7 @@ __all__ = [
     "RunRow",
     "ScheduledTaskRow",
     "ScheduledTaskRunRow",
+    "SocialPostRow",
     "SubagentBatchRow",
     "SubagentBatchItemRow",
     "TeamChannelRow",
@@ -94,4 +96,5 @@ __all__ = [
     "UserPreferenceRow",
     "UserRow",
     "WebhookDeliveryRow",
+    "WorkspaceSocialSettingsRow",
 ]

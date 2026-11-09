@@ -5,6 +5,11 @@ inbox (``pending_actions``) and its adapters -- there is no second queue. Approv
 runs the same adapter path as the web Approve button (email/ad_change/other only
 mark the row ``ready_to_send``; nothing is emailed), Skip rejects the row, Edit
 just links to the item in the UI. Only Slack users in ``user_ids`` may act.
+
+Types in ``WEB_ONLY_TYPES`` (social posts) need the workspace context and the
+owner-or-admin check of the web inbox, which a DM button press does not carry:
+their DM has no Approve or Skip buttons, and a press on one is answered with a
+link to MomoBot without settling the row.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ ACTION_PREFIX = "momo_approval_"
 VERBS = ("approve", "edit", "skip")
 SUMMARY_CHARS = 600
 DEFAULT_BASE_URL = "http://127.0.0.1:2026"
+WEB_ONLY_TYPES = frozenset({"social_post"})
 
 _SECRET_RE = re.compile(r"(xox[abprs]-[\w-]+|xapp-[\w-]+|sk-[\w-]{8,}|Bearer\s+[\w.~+/=-]{8,}|(?i:(?:api[_-]?key|token|password|secret)\s*[:=]\s*)\S+)")
 
@@ -78,6 +84,13 @@ def build_message(row: dict[str, Any], cfg: ApprovalsDmConfig) -> tuple[str, lis
     title = str(row.get("title") or "").strip() or "Untitled"
     head = f"*{_esc(_client(row))}* | {_esc(str(row['action_type']))} | {_esc(title[:120])}"
     action_id = str(row["id"])
+    if row.get("action_type") in WEB_ONLY_TYPES:
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": head}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": _esc(snippet) or "_(empty)_"}},
+            {"type": "context", "elements": [{"type": "mrkdwn", "text": f"<{item_url(cfg, action_id)}|Approve this one in MomoBot>"}]},
+        ]
+        return f"Approval needed in MomoBot: {_client(row)} / {row['action_type']} / {title[:120]}", blocks
     buttons = [
         {"type": "button", "action_id": f"{ACTION_PREFIX}approve", "value": action_id, "style": "primary", "text": {"type": "plain_text", "text": "Approve"}},
         {"type": "button", "action_id": f"{ACTION_PREFIX}edit", "value": action_id, "text": {"type": "plain_text", "text": "Edit"}},
@@ -135,7 +148,7 @@ class ApprovalStore(Protocol):
 
 @dataclass(frozen=True)
 class ActionResult:
-    kind: str  # denied | edit | approved | skipped | stale | missing
+    kind: str  # denied | edit | web_only | approved | skipped | stale | missing
     text: str
 
 
@@ -148,6 +161,8 @@ async def route_action(action: ParsedAction, cfg: ApprovalsDmConfig, store: Appr
         return ActionResult("missing", "That approval no longer exists.")
     if action.verb == "edit":
         return ActionResult("edit", f"Edit it here: {item_url(cfg, action.item_id)}")
+    if row.get("action_type") in WEB_ONLY_TYPES:
+        return ActionResult("web_only", f"Approve this one in MomoBot: {item_url(cfg, action.item_id)}")
     approve = action.verb == "approve"
     decided = await store.decide(row, approve=approve, decided_by=f"slack:{action.user_id}")
     if decided is None:
