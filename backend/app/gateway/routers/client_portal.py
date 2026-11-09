@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
+from app.gateway import service_tiers
 from app.gateway.approval_adapters import register_adapter
 from app.gateway.client_boundary import CLIENT_ROLE
 from app.gateway.client_context import bind_staff_work_project, client_operating_context, require_staff_client, require_staff_project
@@ -90,6 +91,10 @@ class Draft(Closed):
 class Publish(Closed):
     approval_id: str = Field(min_length=1, max_length=64)
     expected_revision: int = Field(ge=1)
+
+
+class RequestChanges(Publish):
+    note: str = Field(min_length=1, max_length=2000)
 
 
 class CustomerWorkspaceInvitation(Closed):
@@ -346,9 +351,11 @@ def _message(message, staff=False):
     }
 
 
-async def _summary(thread, portal, staff, request):
+async def _summary(thread, portal, staff, request, tier=None):
     state = "published" if portal.published_id else "needs_approval" if portal.approval_id else "pending"
-    out = {"id": thread.id, "client_id": thread.client_id, "subject": thread.subject, "state": state, "updated_at": thread.updated_at.isoformat(), "revision": portal.revision, "publish_receipt": portal.published_id, "momo_href": MAX_CHAT}
+    # Standard tier keeps MomoBot internal: the client's inbox links to no chat.
+    momo_href = None if tier == "standard" and not staff else MAX_CHAT
+    out = {"id": thread.id, "client_id": thread.client_id, "subject": thread.subject, "state": state, "updated_at": thread.updated_at.isoformat(), "revision": portal.revision, "publish_receipt": portal.published_id, "momo_href": momo_href}
     if staff:
         out.update(approval_id=portal.approval_id, work_chat_id=portal.work_chat_id, work_run_id=portal.work_run_id)
     if portal.work_run_id and not portal.approval_id and not portal.published_id:
@@ -364,7 +371,14 @@ async def _summary(thread, portal, staff, request):
 async def portal_clients(request: Request):
     actor, org, admin, external = await _identity(request)
     ids = await _client_ids(actor, org, admin, external)
-    return {"workspace_id": org, "clients": [{"id": key, "name": name} for key, name in ids.items()], "can_review": admin, "can_draft": not external}
+    out = {"workspace_id": org, "clients": [{"id": key, "name": name} for key, name in ids.items()], "can_review": admin, "can_draft": not external}
+    tier = await service_tiers.workspace_tier(org)
+    if tier is not None:
+        settings = await service_tiers.read_service_settings(org)
+        # Per conversation, ``detail`` is authoritative; this is the roster's hint.
+        out["can_review"] = admin and tier != "software"
+        out["service"] = {"tier": tier, "booking_url": settings.booking_url if settings is not None and tier == "software" else None}
+    return out
 
 
 @router.get("/clients/{client_id}/context")
@@ -394,7 +408,8 @@ async def list_threads(
         stmt = stmt.where(BoardPortalRow.approval_id.is_(None), BoardPortalRow.published_id.is_(None))
     async with _sf()() as session:
         rows = (await session.execute(stmt.order_by(BoardThreadRow.updated_at.desc(), BoardThreadRow.id).offset(offset).limit(limit + 1))).all()
-    return {"threads": [await _summary(t, p, not external, request) for t, p in rows[:limit]], "has_more": len(rows) > limit}
+    tier = await service_tiers.workspace_tier(org)
+    return {"threads": [await _summary(t, p, not external, request, tier) for t, p in rows[:limit]], "has_more": len(rows) > limit}
 
 
 @router.post("/threads")
@@ -426,17 +441,39 @@ async def compose(body: Compose, request: Request):
 @router.get("/threads/{thread_id}")
 async def detail(thread_id: ThreadId, request: Request):
     thread, portal, admin, external = await _load(request, thread_id)
+    review = await _review(request, thread, portal, admin, external)
+    pending = None
     async with _sf()() as session:
         stmt = select(BoardMessageRow).where(BoardMessageRow.thread_id == thread_id)
         if external:
             stmt = stmt.where(BoardMessageRow.visibility == "published")
         messages = (await session.execute(stmt.order_by(BoardMessageRow.created_at, BoardMessageRow.id))).scalars().all()
-    out = await _summary(thread, portal, not external, request)
-    out.update(messages=[_message(m, not external) for m in messages], can_review=admin, can_draft=not external)
+        if review.tier == "software" and external and review.can_approve and portal.approval_id and portal.draft_id and not portal.published_id:
+            pending = await session.get(BoardMessageRow, portal.draft_id)
+    out = await _summary(thread, portal, not external, request, review.tier)
+    out.update(messages=[_message(m, not external) for m in messages], can_review=review.can_approve and not external, can_draft=not external)
     if not external:
         draft = next((m for m in messages if m.id == portal.draft_id), None)
         out["draft"] = {"body": draft.body, "attachments": draft.attachments or []} if draft else None
+    if review.tier is not None:
+        out["service_tier"] = review.tier
+        out["review_reason"] = None if review.can_approve else review.reason
+    if pending is not None and pending.thread_id == thread.id:
+        # Software tier: the client is the reviewer, so they read the exact draft they approve.
+        out["can_approve"] = True
+        out["review"] = {
+            "approval_id": portal.approval_id,
+            "revision": portal.revision,
+            "message_id": pending.id,
+            "body": pending.body,
+            "attachments": [{"name": a["name"], "sha256": a["sha256"]} for a in pending.attachments or []],
+        }
     return out
+
+
+async def _review(request, thread, portal, admin, external):
+    actor = str((await get_current_user_from_request(request)).id)
+    return await service_tiers.portal_review(actor_id=actor, organization_id=portal.organization_id, client_id=thread.client_id, admin=admin, external=external)
 
 
 @router.get("/threads/{thread_id}/work-plan")
@@ -585,8 +622,10 @@ register_adapter("portal_publish", PortalPublishAdapter())
 @router.post("/threads/{thread_id}/publish")
 async def publish(thread_id: ThreadId, body: Publish, request: Request):
     thread, portal, admin, external = await _load(request, thread_id)
-    if not admin:
-        raise HTTPException(403, "An organization owner or admin must approve publication")
+    review = await _review(request, thread, portal, admin, external)
+    if not review.can_approve or external:
+        # Clients approve through ``/approve``; this route stays the staff path.
+        raise HTTPException(403, review.reason or service_tiers.LEGACY_REASON)
     if portal.approval_id != body.approval_id or portal.revision != body.expected_revision:
         raise HTTPException(409, "Draft changed; review the current version")
     if portal.published_id:
@@ -617,12 +656,106 @@ async def publish(thread_id: ThreadId, body: Publish, request: Request):
     return result
 
 
+async def _client_review(request, thread_id, body):
+    """Shared admission for the software-tier client decisions. Invisible unless tiers are on."""
+    if not service_tiers.service_tiers_enabled():
+        raise _missing()
+    thread, portal, admin, external = await _load(request, thread_id)
+    if not external:
+        raise _missing()
+    review = await _review(request, thread, portal, admin, external)
+    if review.tier is None:
+        raise _missing()
+    if not review.can_approve:
+        raise HTTPException(403, review.reason or service_tiers.TEAM_REVIEWS)
+    if portal.published_id is None and (portal.approval_id != body.approval_id or portal.revision != body.expected_revision):
+        raise HTTPException(409, "This draft changed. Reload to see the latest version.")
+    return thread, portal
+
+
+@router.post("/threads/{thread_id}/approve")
+async def client_approve(thread_id: ThreadId, body: Publish, request: Request):
+    """Software tier: the client approves the exact draft they read; it appears in their inbox."""
+    thread, portal = await _client_review(request, thread_id, body)
+    if portal.published_id:
+        return await detail(thread_id, request)
+    from app.gateway.deps import get_pending_action_repo
+    from app.gateway.routers.approvals import settle_approval
+
+    repo = get_pending_action_repo(request)
+    current = await repo.get(body.approval_id)
+    if current is None or current["action_type"] != "portal_publish" or current["target"] != thread_id or current["organization_id"] != portal.organization_id:
+        raise HTTPException(409, "This draft changed. Reload to see the latest version.")
+    actor = str((await get_current_user_from_request(request)).id)
+    if current["status"] == "approved":
+        # Same DB-only recovery as the staff publish route; nothing external is retried.
+        outcome = await PortalPublishAdapter().execute(current)
+        await repo.record_outcome(body.approval_id, status=outcome.status, result=outcome.detail, error=outcome.error)
+    elif current["status"] == "pending":
+        await settle_approval(request, repo, current, actor)
+    else:
+        raise HTTPException(409, "This draft is no longer waiting for you.")
+    result = await detail(thread_id, request)
+    if not result["publish_receipt"]:
+        raise HTTPException(409, "Approval did not complete. Reload and try again.")
+    return result
+
+
+@router.post("/threads/{thread_id}/request-changes")
+async def client_request_changes(thread_id: ThreadId, body: RequestChanges, request: Request):
+    """Software tier: the client declines the draft with a note; the team drafts again."""
+    thread, portal = await _client_review(request, thread_id, body)
+    if portal.published_id:
+        raise HTTPException(409, "This reply is already in your inbox.")
+    actor = str((await get_current_user_from_request(request)).id)
+    now = datetime.now(UTC)
+    note = body.note.strip()
+    if not note:
+        raise HTTPException(422, "Tell us what to change.")
+    async with _sf()() as session, session.begin():
+        declined = await session.execute(
+            update(PendingActionRow)
+            .where(PendingActionRow.id == body.approval_id, PendingActionRow.organization_id == portal.organization_id, PendingActionRow.user_id == get_effective_user_id(), PendingActionRow.status == "pending")
+            .values(status="rejected", decided_by=actor, decided_at=now, error="The client asked for changes", updated_at=now)
+        )
+        cleared = await session.execute(
+            update(BoardPortalRow)
+            .where(
+                BoardPortalRow.thread_id == thread_id,
+                BoardPortalRow.organization_id == portal.organization_id,
+                BoardPortalRow.approval_id == body.approval_id,
+                BoardPortalRow.revision == body.expected_revision,
+                BoardPortalRow.published_id.is_(None),
+            )
+            .values(approval_id=None)
+        )
+        if declined.rowcount != 1 or cleared.rowcount != 1:
+            raise HTTPException(409, "This draft changed. Reload to see the latest version.")
+        session.add(BoardMessageRow(id=uuid.uuid4().hex, thread_id=thread_id, author_kind="client", author_user_id=actor, body=note, visibility="published", attachments=[], created_at=now))
+        await session.execute(update(BoardThreadRow).where(BoardThreadRow.id == thread_id, BoardThreadRow.organization_id == portal.organization_id).values(status="new", updated_at=now))
+    await record_audit_event(
+        request,
+        action="client_portal.changes_requested",
+        outcome="success",
+        actor_user_id=actor,
+        organization_id=portal.organization_id,
+        target_type="client_portal_thread",
+        target_id=thread_id,
+        details={"source": "client_portal", "approval_id": body.approval_id, "revision": body.expected_revision},
+    )
+    return await detail(thread_id, request)
+
+
 @router.get("/threads/{thread_id}/messages/{message_id}/attachments/{name}")
 async def attachment(thread_id: ThreadId, message_id: str, name: str, request: Request):
-    _, _, _, external = await _load(request, thread_id)
+    thread, portal, admin, external = await _load(request, thread_id)
     async with _sf()() as session:
         message = await session.get(BoardMessageRow, message_id)
-    if message is None or message.thread_id != thread_id or (external and message.visibility != "published"):
+    reviewing = False
+    if external and message is not None and message.visibility != "published" and message.id == portal.draft_id and portal.approval_id and not portal.published_id:
+        # Software tier only: the client may read the attachments of the draft they are asked to approve.
+        reviewing = (await _review(request, thread, portal, admin, external)).can_approve
+    if message is None or message.thread_id != thread_id or (external and message.visibility != "published" and not reviewing):
         raise _missing()
     item = next((a for a in message.attachments or [] if a["name"] == name), None)
     if item is None:
@@ -640,6 +773,9 @@ async def _chat(thread_id: ThreadId, request: Request, *, work: bool):
     if not work:
         from app.gateway.client_workspace import require_client_workspace
 
+        if external and await service_tiers.workspace_tier(portal.organization_id) == "standard":
+            # Standard tier keeps MomoBot internal; the client's request stays with the team.
+            raise HTTPException(403, service_tiers.STANDARD_NO_CHAT)
         await require_client_workspace(await get_current_user_from_request(request))
     from app.gateway.deps import get_thread_store
 

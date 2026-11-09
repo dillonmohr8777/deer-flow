@@ -80,6 +80,12 @@ class MomentumInternalFeature(BaseModel):
     enabled: bool = Field(..., description="Whether the caller is staff in the agency's own workspace, so Team and Academy are shown")
 
 
+class ServiceTiersFeature(BaseModel):
+    """Availability of workspace service tiers and the seller onboarding flow."""
+
+    enabled: bool = Field(..., description="Whether service tiers are on, so tier settings, client approval and onboarding screens are shown")
+
+
 class OpenAIAgentsFeature(BaseModel):
     """Whether the hosted OpenAI agent service (the OpenAI crew page) has been set up."""
 
@@ -97,6 +103,7 @@ class FeaturesResponse(BaseModel):
     knowledge_base: KnowledgeBaseFeature
     desk: DeskFeature
     momentum_internal: MomentumInternalFeature
+    service_tiers: ServiceTiersFeature
     openai_agents: OpenAIAgentsFeature
     crm: bool = Field(..., description="Whether the deployment serves the optional CRM at /crm/, so the Growth link is shown")
 
@@ -144,6 +151,8 @@ async def list_features(request: Request, config: AppConfig = Depends(get_config
         # from config) plus a staff role in it. The routes behind it enforce
         # the same predicate.
         momentum_internal=MomentumInternalFeature(enabled=await is_momentum_staff(request, config)),
+        # Config-only, read per request; a config without the section reads as off.
+        service_tiers=ServiceTiersFeature(enabled=getattr(getattr(config, "service_tiers", None), "enabled", False) is True),
         openai_agents=OpenAIAgentsFeature(configured=openai_agents_configured()),
         crm=_crm_enabled(),
     )

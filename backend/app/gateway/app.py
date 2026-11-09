@@ -69,6 +69,7 @@ from app.gateway.routers import (
     user_preferences,
     workflows,
     workspace_branding,
+    workspace_service,
     workspaces,
     wsl_diagnostics,
 )
@@ -1466,6 +1467,8 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(invitations.router)
     app.include_router(workspaces.router)
     app.include_router(workspace_branding.router)
+    app.include_router(workspace_service.router)
+    app.include_router(workspace_service.onboarding_router)
     app.include_router(momobot_brand.router)
     app.include_router(user_preferences.router)
     app.include_router(onboarding.router)

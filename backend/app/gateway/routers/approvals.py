@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from langchain_core.tools import ToolException
 from pydantic import BaseModel, Field
 
+from app.gateway import service_tiers
 from app.gateway.approval_adapters import execute_approved
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_current_user_from_request, get_pending_action_repo, record_audit_event
@@ -149,6 +150,11 @@ async def _out(row: dict, request: Request) -> ApprovalResponse:
         reviewer = await _is_active_org_admin(actor)
         caps.approve = caps.reject = caps.edit = reviewer
         caps.reason = None if reviewer else "An active organization owner or admin must review this action"
+        review = await _portal_review(row, actor, admin=reviewer)
+        if review is not None:
+            # The workspace's service tier names the reviewer; edits stay admin-only.
+            caps.approve, caps.reject = review.can_approve, review.can_withdraw
+            caps.reason = review.reason
     auth = getattr(request.state, "auth", None)
     if pending and (auth is None or not auth.has_permission("approvals", "write")):
         caps.approve = caps.reject = caps.edit = False
@@ -162,6 +168,50 @@ async def _require_reviewer(request: Request) -> str:
     if not await _is_active_org_admin(user_id):
         raise HTTPException(status_code=403, detail="Only an organization owner or admin can review outbound actions.")
     return user_id
+
+
+async def _portal_review(row: dict, actor: str, *, admin: bool | None = None):
+    """Tier policy for a portal draft, or ``None`` to keep the original owner/admin rule."""
+    if row.get("action_type") != "portal_publish":
+        return None
+    organization_id = row["organization_id"]
+    if await service_tiers.workspace_tier(organization_id) is None:
+        return None
+    if admin is None:
+        admin = await _is_active_org_admin(actor)
+    client_id = await service_tiers.portal_thread_client(organization_id, row["target"])
+    # This router is staff-only (``_staff_approvals_only``), so the actor is never the client.
+    return await service_tiers.portal_review(actor_id=actor, organization_id=organization_id, client_id=client_id, admin=admin, external=False)
+
+
+async def _require_action_reviewer(request: Request, row: dict, *, withdraw: bool = False) -> str:
+    """The original reviewer rule, or the workspace tier's for a portal draft."""
+    user_id = str((await get_current_user_from_request(request)).id)
+    review = await _portal_review(row, user_id)
+    if review is None:
+        return await _require_reviewer(request)
+    if not (review.can_withdraw if withdraw else review.can_approve):
+        raise HTTPException(status_code=403, detail=review.reason or "You cannot review this action.")
+    return user_id
+
+
+async def settle_approval(request: Request, repo, current: dict, reviewer: str) -> dict:
+    """Approve *current* as *reviewer*, run its adapter once and record the outcome.
+
+    The caller has already authorized *reviewer*. Only the caller that wins the
+    pending->approved compare-and-set runs the adapter.
+    """
+    action_id = current["id"]
+    await _recheck_if_edited(repo, current)
+    approved = await repo.decide(action_id, approve=True, decided_by=reviewer)
+    if approved is None:
+        raise HTTPException(status_code=409, detail="This action was already decided")
+    await _audit(request, "approvals.approved", reviewer, action_id, "success", {"action_type": approved["action_type"], "target": approved["target"]})
+    await _record_correction(repo, approved, reviewer)
+    outcome = await execute_approved(approved)
+    settled = await repo.record_outcome(action_id, status=outcome.status, result=outcome.detail, error=outcome.error)
+    await _audit(request, "approvals.executed", reviewer, action_id, "success" if outcome.status != "failed" else "failure", {"status": outcome.status, "error": outcome.error})
+    return settled or approved
 
 
 async def _audit(request: Request, action: str, actor: str, action_id: str, outcome: str, details: dict | None) -> None:
@@ -299,17 +349,8 @@ async def approve_action(action_id: str, request: Request) -> ApprovalResponse:
             settled = await repo.record_composio_outcome(action_id, status=outcome.status, result=outcome.detail, error=outcome.error)
             await _audit(request, "approvals.executed", authority.decider, action_id, "success" if outcome.status != "failed" else "failure", {**details, "status": outcome.status, "error": outcome.error})
             return await _out(settled or {**approved, "execution_result": {"state": "outcome_unknown"}, "error": "Composio outcome could not be settled; reconcile before any new proposal"}, request)
-    reviewer = await _require_reviewer(request)
-    await _recheck_if_edited(repo, current)
-    approved = await repo.decide(action_id, approve=True, decided_by=reviewer)
-    if approved is None:
-        raise HTTPException(status_code=409, detail="This action was already decided")
-    await _audit(request, "approvals.approved", reviewer, action_id, "success", {"action_type": approved["action_type"], "target": approved["target"]})
-    await _record_correction(repo, approved, reviewer)
-    outcome = await execute_approved(approved)
-    settled = await repo.record_outcome(action_id, status=outcome.status, result=outcome.detail, error=outcome.error)
-    await _audit(request, "approvals.executed", reviewer, action_id, "success" if outcome.status != "failed" else "failure", {"status": outcome.status, "error": outcome.error})
-    return await _out(settled or approved, request)
+    reviewer = await _require_action_reviewer(request, current)
+    return await _out(await settle_approval(request, repo, current, reviewer), request)
 
 
 @router.post("/{action_id}/reject", response_model=ApprovalResponse)
@@ -321,10 +362,11 @@ async def reject_action(action_id: str, request: Request) -> ApprovalResponse:
         reviewer = str((await get_current_user_from_request(request)).id)
         rejected = await repo.decide_composio(action_id, approve=False)
     else:
-        reviewer = await _require_reviewer(request)
         current = own or await repo.get_composio_for_org(action_id)
         if current is None:
+            await _require_reviewer(request)
             raise _not_found()
+        reviewer = await _require_action_reviewer(request, current, withdraw=True)
         rejected = await repo.decide(action_id, approve=False, decided_by=reviewer) if own is not None else await repo.reject_composio_for_org(action_id)
     if own is None and rejected is None and await repo.get_composio_for_org(action_id) is None:
         raise _not_found()

@@ -89,6 +89,7 @@ def test_features_reports_agents_api_enabled() -> None:
         },
         "desk": {"enabled": False},
         "momentum_internal": {"enabled": False},
+        "service_tiers": {"enabled": False},
         "openai_agents": {"configured": False},
         "crm": False,
     }
@@ -114,6 +115,7 @@ def test_features_reports_agents_api_disabled() -> None:
         },
         "desk": {"enabled": False},
         "momentum_internal": {"enabled": False},
+        "service_tiers": {"enabled": False},
         "openai_agents": {"configured": False},
         "crm": False,
     }
