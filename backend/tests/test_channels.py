@@ -1947,8 +1947,8 @@ class TestChannelManager:
 
             history_by_checkpoint: dict[tuple[str, str], list[str]] = {}
 
-            async def _runs_wait(thread_id, assistant_id, *, input, config, context, multitask_strategy=None):
-                del assistant_id, context  # unused in this test, kept for signature parity
+            async def _runs_wait(thread_id, assistant_id, *, input, config, context, multitask_strategy=None, on_run_created=None):
+                del assistant_id, context, on_run_created  # unused in this test, kept for signature parity
 
                 checkpoint_ns = config.get("configurable", {}).get("checkpoint_ns")
                 key = (thread_id, str(checkpoint_ns))
