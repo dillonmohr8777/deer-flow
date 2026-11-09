@@ -6,9 +6,12 @@ pending->approved compare-and-set. Posts go live on the workspace's own
 MomoBot-hosted page; nothing is sent to an outside network.
 
 While the global ``social_posting.enabled`` flag is off every route here
-answers 404. While a workspace's own switch is off its page and post list
-answer 404 too; only its owners and admins still see the settings, so they can
-turn it on.
+answers 404, for every caller, before any permission or role check. Client
+contacts never reach these routes (the same staff gate as the approvals inbox).
+While a workspace's own switch is off its page and post list answer 404 too;
+only its owners and admins still see the settings, so they can turn it on.
+Drafts (the post list) and take-downs are owner-or-admin only. The public page
+is never cached, so a take-down or switch-off shows at once.
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ import html
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
@@ -25,18 +28,18 @@ from sqlalchemy import select
 from app.gateway.approval_adapters import register_adapter
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_current_user_from_request, record_audit_event
+from app.gateway.routers.approvals import _staff_approvals_only
 from app.gateway.routers.clients import _is_active_org_admin
 from deerflow.approvals import AdapterOutcome
 from deerflow.persistence.approvals.model import PendingActionRow
 from deerflow.persistence.organizations.branding import OrganizationBrandingRow
 from deerflow.persistence.organizations.model import OrganizationRow
+from deerflow.persistence.social.model import SocialPostRow
 from deerflow.runtime.user_context import resolve_organization_id
-from deerflow.social import ACTION_TYPE, OWN_PAGE_LABEL, global_enabled, is_valid_slug, load_settings, page_url, publish_approved, published_posts, save_settings, settings_for_slug
-
-router = APIRouter(prefix="/api/social", tags=["social-posting"])
-public_router = APIRouter(prefix="/api/public/social", tags=["social-posting"])
+from deerflow.social import ACTION_TYPE, OWN_PAGE_LABEL, global_enabled, is_valid_slug, load_settings, page_url, publish_approved, published_posts, save_settings, settings_for_slug, unpublish_post
 
 STATUS_LABELS = {"pending": "Waiting for approval", "approved": "Publishing", "executed": "Published", "failed": "Failed", "rejected": "Rejected"}
+TAKEN_DOWN_LABEL = "Taken down"
 
 
 def _sf():
@@ -53,8 +56,13 @@ def _unavailable() -> HTTPException:
 
 
 def _require_global() -> None:
+    """First router dependency: flag off is a 404 for everyone, ahead of the staff gate and permission decorators."""
     if not global_enabled():
         raise _unavailable()
+
+
+router = APIRouter(prefix="/api/social", tags=["social-posting"], dependencies=[Depends(_require_global), Depends(_staff_approvals_only)])
+public_router = APIRouter(prefix="/api/public/social", tags=["social-posting"])
 
 
 async def business_name(session_factory, organization_id: str) -> str:
@@ -91,12 +99,19 @@ class SocialPostItem(BaseModel):
     decided_at: str | None
     executed_at: str | None
     live_url: str | None
+    unpublished_at: str | None
     error: str | None
 
 
 class SocialPostList(BaseModel):
     page_url: str | None
     items: list[SocialPostItem]
+
+
+class SocialUnpublishResponse(BaseModel):
+    id: str
+    status_label: str = TAKEN_DOWN_LABEL
+    unpublished_at: str | None
 
 
 async def _settings_response(sf, organization_id: str, actor: str) -> SocialSettingsResponse:
@@ -112,7 +127,6 @@ async def _settings_response(sf, organization_id: str, actor: str) -> SocialSett
 @router.get("/settings", response_model=SocialSettingsResponse)
 @require_permission("approvals", "read")
 async def get_social_settings(request: Request) -> SocialSettingsResponse:
-    _require_global()
     organization_id = resolve_organization_id()
     if not organization_id:
         raise _unavailable()
@@ -126,13 +140,10 @@ async def get_social_settings(request: Request) -> SocialSettingsResponse:
 @router.put("/settings", response_model=SocialSettingsResponse)
 @require_permission("approvals", "write")
 async def update_social_settings(body: SocialSettingsUpdate, request: Request) -> SocialSettingsResponse:
-    _require_global()
     organization_id = resolve_organization_id()
     if not organization_id:
         raise _unavailable()
-    actor = str((await get_current_user_from_request(request)).id)
-    if not await _is_active_org_admin(actor):
-        raise HTTPException(403, "Only a workspace owner or admin can change social posting")
+    actor = await _require_admin(request, "Only a workspace owner or admin can change social posting")
     sf = _sf()
     await save_settings(sf, organization_id, actor_user_id=actor, business_name=await business_name(sf, organization_id), enabled=body.enabled)
     await record_audit_event(
@@ -152,39 +163,79 @@ def _iso(value: Any) -> str | None:
     return value.isoformat() if isinstance(value, datetime) else value
 
 
+async def _require_admin(request: Request, detail: str) -> str:
+    actor = str((await get_current_user_from_request(request)).id)
+    if not await _is_active_org_admin(actor):
+        raise HTTPException(403, detail)
+    return actor
+
+
 @router.get("/posts", response_model=SocialPostList)
 @require_permission("approvals", "read")
 async def list_social_posts(request: Request) -> SocialPostList:
-    _require_global()
+    """Every social post of the workspace, drafts included: owners and admins only."""
     organization_id = resolve_organization_id()
     if not organization_id:
         raise _unavailable()
+    await _require_admin(request, "Only a workspace owner or admin can see social post drafts")
     sf = _sf()
     settings = await load_settings(sf, organization_id)
     if not settings.live:
         raise _unavailable()
+    live_page = page_url(settings.public_slug)
     async with sf() as session:
-        rows = await session.scalars(select(PendingActionRow).where(PendingActionRow.organization_id == organization_id, PendingActionRow.action_type == ACTION_TYPE).order_by(PendingActionRow.created_at.desc()).limit(100))
-        actions = list(rows)
+        rows = await session.execute(
+            select(PendingActionRow, SocialPostRow.unpublished_at)
+            .outerjoin(SocialPostRow, SocialPostRow.approval_id == PendingActionRow.id)
+            .where(PendingActionRow.organization_id == organization_id, PendingActionRow.action_type == ACTION_TYPE)
+            .order_by(PendingActionRow.created_at.desc())
+            .limit(100)
+        )
+        actions = list(rows.all())
     items = []
-    for row in actions:
+    for row, unpublished_at in actions:
         payload = row.payload if isinstance(row.payload, dict) else {}
-        result = row.execution_result if isinstance(row.execution_result, dict) else {}
+        on_page = row.status == "executed" and unpublished_at is None
         items.append(
             SocialPostItem(
                 id=row.id,
                 status=row.status,
-                status_label=STATUS_LABELS.get(row.status, row.status),
+                status_label=TAKEN_DOWN_LABEL if unpublished_at is not None else STATUS_LABELS.get(row.status, row.status),
                 text=str(payload.get("text") or ""),
                 link=payload.get("link") or None,
                 created_at=_iso(row.created_at),
                 decided_at=_iso(row.decided_at),
                 executed_at=_iso(row.executed_at),
-                live_url=result.get("live_url") if row.status == "executed" else None,
+                live_url=live_page if on_page else None,
+                unpublished_at=_iso(unpublished_at),
                 error=row.error,
             )
         )
-    return SocialPostList(page_url=page_url(settings.public_slug), items=items)
+    return SocialPostList(page_url=live_page, items=items)
+
+
+@router.post("/posts/{approval_id}/unpublish", response_model=SocialUnpublishResponse)
+@require_permission("approvals", "write")
+async def unpublish_social_post(approval_id: str, request: Request) -> SocialUnpublishResponse:
+    """Take one published post off the public page. Owners and admins only; the record is kept."""
+    organization_id = resolve_organization_id()
+    if not organization_id:
+        raise _unavailable()
+    actor = await _require_admin(request, "Only a workspace owner or admin can take a post down")
+    taken_down = await unpublish_post(_sf(), organization_id, approval_id, actor_user_id=actor)
+    if taken_down is None:
+        raise HTTPException(404, "No published post with that id in this workspace")
+    await record_audit_event(
+        request,
+        action="social_posting.post_unpublished",
+        outcome="success",
+        actor_user_id=actor,
+        organization_id=organization_id,
+        target_type="pending_action",
+        target_id=approval_id,
+        details=None,
+    )
+    return SocialUnpublishResponse(id=approval_id, unpublished_at=_iso(taken_down))
 
 
 _PAGE_HEADERS = {
@@ -192,7 +243,7 @@ _PAGE_HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
-    "Cache-Control": "public, max-age=60",
+    "Cache-Control": "no-store",
 }
 
 _PAGE_CSS = (

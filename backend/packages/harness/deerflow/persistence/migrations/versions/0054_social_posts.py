@@ -39,6 +39,8 @@ def upgrade() -> None:
             sa.Column("link", sa.String(2048), nullable=True),
             sa.Column("published_by", sa.String(64), nullable=True),
             sa.Column("published_at", sa.DateTime(timezone=True), nullable=False),
+            sa.Column("unpublished_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("unpublished_by", sa.String(64), nullable=True),
         )
         op.create_index("ix_social_posts_org_published", "social_posts", ["organization_id", "published_at"])
 

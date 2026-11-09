@@ -49,8 +49,8 @@ async def propose_social_post(runtime: Runtime, text: str, link: str | None = No
     settings = await load_settings(session_factory, organization_id)
     if not settings.live:
         return "Social posting is turned off for this workspace. An owner or admin can turn it on in Social."
-    live_page = page_url(settings.public_slug)
-    payload = {"text": text, "page_url": live_page}
+    live_page = page_url(settings.public_slug)  # computed from the slug, never stored in the proposal
+    payload: dict[str, str] = {"text": text}
     if link:
         payload["link"] = link
     title = "Social post: " + " ".join(text.split())[:80]

@@ -9,6 +9,7 @@ from deerflow.social.posting import (
     clean_post,
     global_enabled,
     is_valid_slug,
+    live_page_url,
     load_settings,
     make_slug,
     page_path,
@@ -17,6 +18,7 @@ from deerflow.social.posting import (
     published_posts,
     save_settings,
     settings_for_slug,
+    unpublish_post,
     validate_social_payload,
 )
 
@@ -29,6 +31,7 @@ __all__ = [
     "clean_post",
     "global_enabled",
     "is_valid_slug",
+    "live_page_url",
     "load_settings",
     "make_slug",
     "page_path",
@@ -37,5 +40,6 @@ __all__ = [
     "published_posts",
     "save_settings",
     "settings_for_slug",
+    "unpublish_post",
     "validate_social_payload",
 ]

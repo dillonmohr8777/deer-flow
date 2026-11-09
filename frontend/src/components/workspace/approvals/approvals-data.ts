@@ -57,13 +57,13 @@ function safeHref(value: unknown): string | null {
   return /^https?:\/\//.test(value) ? value : null;
 }
 
-/** Where a social post appears: its live link once published, else the page it will go to. */
+/**
+ * Where a social post appears: the workspace page link the server computes from
+ * its slug. Payload and execution fields are never trusted for this link.
+ */
 export function socialPostLink(approval: Approval): string | null {
   if (approval.action_type !== "social_post") return null;
-  return (
-    safeHref(approval.execution_result?.live_url) ??
-    safeHref(approval.payload.page_url)
-  );
+  return safeHref(approval.destination_url);
 }
 
 /** An approved row an adapter stubbed: reviewed, but nothing was sent. */

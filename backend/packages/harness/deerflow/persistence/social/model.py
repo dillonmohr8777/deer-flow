@@ -1,13 +1,15 @@
 """ORM models for social posting inside MomoBot.
 
 ``SocialPostRow`` is the receipt of one approved post on a workspace's own
-MomoBot page: a row exists only once the post is live, and ``approval_id`` is
-unique, so one approval can never publish twice. Pending, rejected and failed
-posts live in ``pending_actions`` like every other approval.
+MomoBot page: a row exists only once the post went live, and ``approval_id`` is
+unique, so one approval can never publish twice. An owner or admin can take a
+post down: ``unpublished_at`` is set and the row is kept for the record.
+Pending, rejected and failed posts live in ``pending_actions`` like every other
+approval.
 
-``WorkspaceSocialSettingsRow`` holds the per-workspace switch (off by default),
-the demo-only auto-publish setting and the public page slug. The slug is random
-and never derived from an internal id. ``organization_id`` is server-owned with
+``WorkspaceSocialSettingsRow`` holds the per-workspace switch (off by default)
+and the public page slug. The slug is random and never derived from an internal
+id. ``organization_id`` is server-owned with
 no DB-level foreign key, matching the rest of this package.
 """
 
@@ -47,3 +49,5 @@ class SocialPostRow(Base):
     link: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     published_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    unpublished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    unpublished_by: Mapped[str | None] = mapped_column(String(64), nullable=True)

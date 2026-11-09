@@ -8,8 +8,11 @@ rejected post is never published; a post that cannot publish settles as
 
 Two switches, both off by default, gate everything: the global
 ``social_posting.enabled`` config flag and the per-workspace
-``workspace_social_settings.enabled`` switch an owner or admin sets.
-Every post needs an owner or admin's approval; nothing publishes on its own.
+``workspace_social_settings.enabled`` switch an owner or admin sets. While the
+global flag is off no ``social_post`` row can be filed by any tool. Every post
+needs an owner or admin's approval in the web inbox; nothing publishes on its
+own. The page link is never taken from a proposal: the server computes it from
+the workspace's slug whenever it is shown.
 """
 
 from __future__ import annotations
@@ -34,7 +37,7 @@ OWN_PAGE_LABEL = "Your MomoBot page"
 MAX_TEXT_CHARS = 3000
 MAX_LINK_CHARS = 2048
 PUBLIC_PATH_PREFIX = "/api/public/social/"
-_PAYLOAD_KEYS = {"text", "link", "page_url"}
+_PAYLOAD_KEYS = {"text", "link"}
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
@@ -69,7 +72,7 @@ def page_url(slug: str) -> str:
 def make_slug(business_name: str | None) -> str:
     """Readable, unguessable slug: the business name plus random hex. Never derived from an internal id."""
     base = re.sub(r"[^a-z0-9]+", "-", (business_name or "").lower()).strip("-")[:40].strip("-") or "page"
-    return f"{base}-{secrets.token_hex(4)}"
+    return f"{base}-{secrets.token_hex(8)}"
 
 
 def is_valid_slug(slug: str) -> bool:
@@ -95,6 +98,8 @@ def _clean_link(value: Any) -> str | None:
 
 def clean_post(payload: dict[str, Any]) -> tuple[str, str | None]:
     """Return ``(text, link)`` of a valid post payload or raise ``InvalidPayloadError``."""
+    if "page_url" in payload:
+        raise InvalidPayloadError("page_url is set by MomoBot from the workspace page; leave it out")
     extra = set(payload) - _PAYLOAD_KEYS
     if extra:
         raise InvalidPayloadError(f"Unknown social post fields: {sorted(extra)}")
@@ -103,13 +108,13 @@ def clean_post(payload: dict[str, Any]) -> tuple[str, str | None]:
         raise InvalidPayloadError("A social post needs text")
     if len(text) > MAX_TEXT_CHARS:
         raise InvalidPayloadError(f"Social post text is limited to {MAX_TEXT_CHARS} characters")
-    page = payload.get("page_url")
-    if page is not None and not isinstance(page, str):
-        raise InvalidPayloadError("page_url must be a string")
     return text.strip(), _clean_link(payload.get("link"))
 
 
 def validate_social_payload(target: str, payload: dict[str, Any]) -> None:
+    """Runs at propose and edit time for every tool, so the global flag also stops generic filing."""
+    if not global_enabled():
+        raise InvalidPayloadError("Social posting is not available on this MomoBot")
     if target != TARGET_OWN_PAGE:
         raise InvalidPayloadError("Social posts can only go to the workspace's own MomoBot page")
     clean_post(payload)
@@ -139,6 +144,14 @@ def _snapshot(row: WorkspaceSocialSettingsRow | None, organization_id: str) -> W
 async def load_settings(session_factory, organization_id: str) -> WorkspaceSocial:
     async with session_factory() as session:
         return _snapshot(await session.get(WorkspaceSocialSettingsRow, organization_id), organization_id)
+
+
+async def live_page_url(session_factory, organization_id: str | None) -> str | None:
+    """The workspace page link, computed from its slug; ``None`` unless the page is live."""
+    if not organization_id:
+        return None
+    settings = await load_settings(session_factory, organization_id)
+    return page_url(settings.public_slug) if settings.live and settings.public_slug else None
 
 
 async def save_settings(
@@ -212,8 +225,9 @@ async def publish_approved(session_factory, action: dict[str, Any]) -> AdapterOu
 
 
 async def published_posts(session_factory, organization_id: str, *, limit: int = 50) -> list[SocialPostRow]:
+    """Posts on the public page: published and not taken down, newest first."""
     async with session_factory() as session:
-        rows = await session.scalars(select(SocialPostRow).where(SocialPostRow.organization_id == organization_id).order_by(SocialPostRow.published_at.desc(), SocialPostRow.id.desc()).limit(limit))
+        rows = await session.scalars(select(SocialPostRow).where(SocialPostRow.organization_id == organization_id, SocialPostRow.unpublished_at.is_(None)).order_by(SocialPostRow.published_at.desc(), SocialPostRow.id.desc()).limit(limit))
         return list(rows)
 
 
@@ -221,3 +235,19 @@ async def settings_for_slug(session_factory, slug: str) -> WorkspaceSocial | Non
     async with session_factory() as session:
         row = await session.scalar(select(WorkspaceSocialSettingsRow).where(WorkspaceSocialSettingsRow.public_slug == slug))
         return _snapshot(row, row.organization_id) if row is not None else None
+
+
+async def unpublish_post(session_factory, organization_id: str, approval_id: str, *, actor_user_id: str) -> datetime | None:
+    """Take one published post off the workspace page. The row stays for the record.
+
+    Returns when it was taken down (the first time, if already down), or ``None``
+    when this workspace has no published post for ``approval_id``.
+    """
+    async with session_factory() as session, session.begin():
+        post = await session.scalar(select(SocialPostRow).where(SocialPostRow.organization_id == organization_id, SocialPostRow.approval_id == approval_id))
+        if post is None:
+            return None
+        if post.unpublished_at is None:
+            post.unpublished_at = datetime.now(UTC)
+            post.unpublished_by = actor_user_id
+        return post.unpublished_at

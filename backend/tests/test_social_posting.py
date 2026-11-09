@@ -2,13 +2,16 @@
 
 One test per rule: approve publishes exactly once, reject never publishes, a
 failure shows as failed, switches off answer 404 or "unavailable", the public
-page shows only published posts of enabled workspaces, and auto-publish only
-ever applies to the workspace's own MomoBot page. Business names are made up.
+page shows only published posts of enabled workspaces, client contacts and
+plain members never see drafts, the page link is computed on the server, the
+Slack DM never settles a social post, and an owner or admin can take a post
+down. Business names are made up.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -23,11 +26,14 @@ from app.gateway.routers import approvals, social_posting
 from deerflow.approvals import InvalidPayloadError, validate_payload
 from deerflow.config.app_config import AppConfig, reset_app_config, set_app_config
 from deerflow.persistence.approvals import PendingActionRepository
+from deerflow.persistence.approvals.model import PendingActionRow
 from deerflow.persistence.audit_events import AuditEventRepository
+from deerflow.persistence.clients.model import ClientAssignmentRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.social.model import SocialPostRow
 from deerflow.persistence.user.model import UserRow
-from deerflow.social import ACTION_TYPE, TARGET_OWN_PAGE, WorkspaceSocial, load_settings, page_url, publish_approved, save_settings
+from deerflow.social import ACTION_TYPE, TARGET_OWN_PAGE, WorkspaceSocial, load_settings, make_slug, page_url, publish_approved, save_settings
+from deerflow.tools.builtins.propose_action_tool import propose_action
 from deerflow.tools.builtins.propose_social_post_tool import propose_social_post
 from deerflow.tools.tools import get_available_tools
 
@@ -69,8 +75,7 @@ async def _enable(session_factory, organization_id=ORG_A, actor=USER_A, **kw) ->
 
 
 async def _file(session_factory, text="Fresh sourdough is out of the oven.", user="user-a", **payload) -> dict:
-    settings = await load_settings(session_factory, ORG_S if user == "storage-s" else ORG_A)
-    body = {"text": text, "page_url": page_url(settings.public_slug or "pending")} | payload
+    body = {"text": text} | payload
     return await PendingActionRepository(session_factory).create(action_type=ACTION_TYPE, target=TARGET_OWN_PAGE, payload=body, title=f"Social post: {text[:40]}", user_id=user)
 
 
@@ -86,6 +91,11 @@ async def _add_member(session_factory, user_id="plain"):
         session.add(OrganizationMemberRow(organization_id=ORG_S, user_id=user_id, role="member", status="active", created_at=now, updated_at=now))
 
 
+async def _make_client_contact(session_factory, user_id=USER_C, organization_id=ORG_S):
+    async with session_factory() as session, session.begin():
+        session.add(ClientAssignmentRow(client_id="client-maple", user_id=user_id, organization_id=organization_id, role="client_contact"))
+
+
 def _runtime(user=USER_A):
     return SimpleNamespace(context={"user_id": user, "thread_id": "t-1", "run_id": "r-1", "agent_name": "momo"}, config={})
 
@@ -94,8 +104,10 @@ def _runtime(user=USER_A):
 
 
 async def test_payload_rules():
-    validate_payload(ACTION_TYPE, TARGET_OWN_PAGE, {"text": "Open late on Fridays.", "link": "https://example.com/menu", "page_url": "/x"})
+    validate_payload(ACTION_TYPE, TARGET_OWN_PAGE, {"text": "Open late on Fridays.", "link": "https://example.com/menu"})
     for target, payload in (
+        (TARGET_OWN_PAGE, {"text": "ok", "page_url": "/x"}),
+        (TARGET_OWN_PAGE, {"text": "ok", "page_url": "https://evil.example/p"}),
         (TARGET_OWN_PAGE, {"text": "   "}),
         (TARGET_OWN_PAGE, {"text": "x" * 3001}),
         (TARGET_OWN_PAGE, {"text": "ok", "link": "javascript:alert(1)"}),
@@ -106,6 +118,9 @@ async def test_payload_rules():
     ):
         with pytest.raises(InvalidPayloadError):
             validate_payload(ACTION_TYPE, target, payload)
+    set_app_config(_config(False))
+    with pytest.raises(InvalidPayloadError, match="not available"):
+        validate_payload(ACTION_TYPE, TARGET_OWN_PAGE, {"text": "Open late on Fridays."})
 
 
 # --- approve publishes exactly once ------------------------------------------
@@ -174,12 +189,17 @@ async def test_publisher_crash_marks_failed(org_world, monkeypatch):  # noqa: F8
 
 async def test_global_flag_off_hides_every_surface(org_world):  # noqa: F811
     settings = await _enable(org_world)
+    row = await _file(org_world)
+    await _add_member(org_world)
+    await _make_client_contact(org_world)
     set_app_config(_config(False))
     async with _http(org_world) as client:
-        h = auth_headers(USER_A)
-        assert (await client.get("/api/social/settings", headers=h)).status_code == 404
-        assert (await client.put("/api/social/settings", json={"enabled": True}, headers=h)).status_code == 404
-        assert (await client.get("/api/social/posts", headers=h)).status_code == 404
+        # Admin, plain member and client contact alike: 404 ahead of the staff gate and the permission checks.
+        for h in (auth_headers(USER_A), auth_headers("plain", ORG_S), auth_headers(USER_C, ORG_S)):
+            assert (await client.get("/api/social/settings", headers=h)).status_code == 404
+            assert (await client.put("/api/social/settings", json={"enabled": True}, headers=h)).status_code == 404
+            assert (await client.get("/api/social/posts", headers=h)).status_code == 404
+            assert (await client.post(f"/api/social/posts/{row['id']}/unpublish", headers=h)).status_code == 404
         assert (await client.get(f"/api/public/social/{settings.public_slug}")).status_code == 404
     assert "not available" in await propose_social_post.coroutine(runtime=_runtime(), text="Hello")
     for enabled in (False, True):
@@ -267,7 +287,7 @@ async def test_tool_files_for_approval_by_default(org_world):  # noqa: F811
     assert out["status"] == "pending_approval" and out["page_url"] == page_url(settings.public_slug)
     row = await PendingActionRepository(org_world).get(out["id"], user_id=USER_A)
     assert row["status"] == "pending" and row["action_type"] == ACTION_TYPE and row["target"] == TARGET_OWN_PAGE
-    assert row["payload"]["text"] == "Pumpkin bread is back this week."
+    assert row["payload"] == {"text": "Pumpkin bread is back this week."}  # the page link is never stored
     assert await _post_count(org_world) == 0
 
 
@@ -276,3 +296,113 @@ async def test_tool_rejects_malformed_bracketed_link(org_world):  # noqa: F811
     out = await propose_social_post.coroutine(runtime=_runtime(), text="Hello", link="https://[")
     assert out.startswith("Not filed:") and "propose_social_post again" in out
     assert await PendingActionRepository(org_world).list(user_id=USER_A) == []
+
+
+# --- staff only: client contacts and plain members never see drafts -------------
+
+
+async def test_client_contacts_are_refused_every_social_route(org_world):  # noqa: F811
+    await _enable(org_world, ORG_S, USER_C)
+    row = await _file(org_world, user="storage-s")
+    await _make_client_contact(org_world)
+    async with _http(org_world) as client:
+        h = auth_headers(USER_C, ORG_S)
+        for method, path, body in (
+            ("GET", "/api/social/settings", None),
+            ("PUT", "/api/social/settings", {"enabled": False}),
+            ("GET", "/api/social/posts", None),
+            ("POST", f"/api/social/posts/{row['id']}/unpublish", None),
+        ):
+            out = await client.request(method, path, json=body, headers=h)
+            assert out.status_code == 403 and out.json()["detail"] == "Staff approval access required", (path, out.text)
+    assert (await load_settings(org_world, ORG_S)).enabled is True
+
+
+async def test_plain_member_cannot_list_drafts_or_take_posts_down(org_world):  # noqa: F811
+    await _enable(org_world, ORG_S, USER_C)
+    row = await _file(org_world, text="Draft by a teammate.", user="storage-s")
+    await _add_member(org_world)
+    async with _http(org_world) as client:
+        plain = auth_headers("plain", ORG_S)
+        listing = await client.get("/api/social/posts", headers=plain)
+        assert listing.status_code == 403 and "Draft by a teammate" not in listing.text
+        assert (await client.post(f"/api/social/posts/{row['id']}/unpublish", headers=plain)).status_code == 403
+        admin = (await client.get("/api/social/posts", headers=auth_headers(USER_C, ORG_S))).json()
+    assert [item["text"] for item in admin["items"]] == ["Draft by a teammate."]
+
+
+# --- the page link is computed on the server ---------------------------------
+
+
+async def test_generic_tool_cannot_plant_a_page_link(org_world):  # noqa: F811
+    settings = await _enable(org_world)
+    for planted in ("https://evil.example/p", page_url(settings.public_slug)):
+        out = await propose_action.coroutine(runtime=_runtime(), action_type=ACTION_TYPE, title="Social post: Hello", target=TARGET_OWN_PAGE, payload={"text": "Hello", "page_url": planted})
+        assert out.startswith("Not filed") and "page_url" in out
+    assert await PendingActionRepository(org_world).list(user_id=USER_A) == []
+
+
+async def test_generic_tool_cannot_file_a_social_post_with_the_flag_off(org_world):  # noqa: F811
+    await _enable(org_world)
+    proposal = {"action_type": ACTION_TYPE, "title": "Social post: Hello", "target": TARGET_OWN_PAGE, "payload": {"text": "Hello"}}
+    set_app_config(_config(False))
+    out = await propose_action.coroutine(runtime=_runtime(), **proposal)
+    assert out.startswith("Not filed") and "not available" in out
+    assert await PendingActionRepository(org_world).list(user_id=USER_A) == []
+    set_app_config(_config(True))
+    assert json.loads(await propose_action.coroutine(runtime=_runtime(), **proposal))["status"] == "pending_approval"
+
+
+async def test_inbox_link_comes_from_the_slug_never_the_payload(org_world):  # noqa: F811
+    settings = await _enable(org_world)
+    row = await _file(org_world)
+    async with org_world() as session, session.begin():  # a row planted past the validator still cannot steer the link
+        await session.execute(update(PendingActionRow).where(PendingActionRow.id == row["id"]).values(payload={"text": "Hello", "page_url": "https://evil.example/p"}))
+    async with _http(org_world) as client:
+        h = auth_headers(USER_A)
+        one = (await client.get(f"/api/approvals/{row['id']}", headers=h)).json()
+        listed = (await client.get("/api/approvals", headers=h)).json()["approvals"]
+        await save_settings(org_world, ORG_A, actor_user_id=USER_A, business_name=BAKERY, enabled=False)
+        off = (await client.get(f"/api/approvals/{row['id']}", headers=h)).json()
+    assert one["destination_url"] == page_url(settings.public_slug)
+    assert [item["destination_url"] for item in listed] == [page_url(settings.public_slug)]
+    assert off["destination_url"] is None
+
+
+# --- take-down ------------------------------------------------------------------
+
+
+async def test_owner_takes_a_post_down_and_the_record_stays(org_world):  # noqa: F811
+    settings = await _enable(org_world)
+    keep = await _file(org_world, text="Keep: bagels on Sunday.")
+    gone = await _file(org_world, text="Gone: wrong opening hours.")
+    async with _http(org_world) as client:
+        h = auth_headers(USER_A)
+        for row in (keep, gone):
+            assert (await client.post(f"/api/approvals/{row['id']}/approve", headers=h)).json()["status"] == "executed"
+        waiting = await _file(org_world, text="Still waiting.")
+        assert (await client.post(f"/api/social/posts/{waiting['id']}/unpublish", headers=h)).status_code == 404
+        assert (await client.post("/api/social/posts/no-such-post/unpublish", headers=h)).status_code == 404
+        assert (await client.post(f"/api/social/posts/{gone['id']}/unpublish", headers=auth_headers(USER_B))).status_code == 404
+        first = await client.post(f"/api/social/posts/{gone['id']}/unpublish", headers=h)
+        again = await client.post(f"/api/social/posts/{gone['id']}/unpublish", headers=h)
+        page = await client.get(f"/api/public/social/{settings.public_slug}")
+        listing = (await client.get("/api/social/posts", headers=h)).json()
+    assert first.status_code == 200 and first.json()["status_label"] == "Taken down", first.text
+    assert again.status_code == 200 and again.json()["unpublished_at"][:19] == first.json()["unpublished_at"][:19]
+    assert page.headers["cache-control"] == "no-store"
+    assert "Keep: bagels" in page.text and "Gone: wrong" not in page.text
+    shown = {item["text"]: (item["status_label"], item["live_url"]) for item in listing["items"]}
+    assert shown["Gone: wrong opening hours."] == ("Taken down", None)
+    assert shown["Keep: bagels on Sunday."] == ("Published", page_url(settings.public_slug))
+    async with org_world() as session:
+        post = await session.scalar(select(SocialPostRow).where(SocialPostRow.approval_id == gone["id"]))
+    assert post is not None and post.text == "Gone: wrong opening hours."
+    assert post.unpublished_at is not None and post.unpublished_by == USER_A
+    assert await _post_count(org_world) == 2
+
+
+async def test_slug_carries_sixteen_random_hex_chars():
+    slug = make_slug(BAKERY)
+    assert re.fullmatch(r"maple-street-bakery-[0-9a-f]{16}", slug), slug
+    assert make_slug(BAKERY) != slug

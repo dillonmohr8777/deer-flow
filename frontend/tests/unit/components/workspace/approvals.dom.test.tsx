@@ -255,10 +255,9 @@ describe("ApprovalsBody", () => {
         action_type: "social_post",
         title: "Social post: Fresh sourdough",
         target: "momobot_page",
-        payload: {
-          text: "Fresh sourdough is out of the oven.",
-          page_url: "/api/public/social/maple-street-bakery-1a2b3c4d",
-        },
+        payload: { text: "Fresh sourdough is out of the oven." },
+        destination_url:
+          "/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b",
       }),
     ];
     render(<ApprovalsBody />);
@@ -271,11 +270,28 @@ describe("ApprovalsBody", () => {
       screen
         .getByRole("link", { name: "Open your MomoBot page" })
         .getAttribute("href"),
-    ).toBe("/api/public/social/maple-street-bakery-1a2b3c4d");
+    ).toBe("/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b");
     fireEvent.click(
       screen.getByRole("button", { name: "Approve and publish" }),
     );
     expect(mocks.approve).toHaveBeenCalledWith({ id: "a1" });
+  });
+
+  it("never renders a social post link planted in the payload", () => {
+    mocks.rows = [
+      approval({
+        action_type: "social_post",
+        title: "Social post: Planted",
+        target: "momobot_page",
+        payload: { text: "Hello.", page_url: "https://evil.example/p" },
+      }),
+    ];
+    render(<ApprovalsBody />);
+    fireEvent.click(screen.getByText("Social post: Planted"));
+    expect(screen.getByText(/Your MomoBot page only/)).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: "Open your MomoBot page" }),
+    ).toBeNull();
   });
 
   it("links a published social post to its live page", () => {
@@ -287,10 +303,9 @@ describe("ApprovalsBody", () => {
         payload: { text: "Rye loaves today." },
         status: "executed",
         decided_at: "2026-10-05T11:00:00Z",
-        execution_result: {
-          delivery: "momobot_page",
-          live_url: "/api/public/social/maple-street-bakery-1a2b3c4d",
-        },
+        execution_result: { delivery: "momobot_page" },
+        destination_url:
+          "/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b",
       }),
     ];
     render(<ApprovalsBody />);
@@ -299,7 +314,7 @@ describe("ApprovalsBody", () => {
       screen
         .getByRole("link", { name: "See it live on your MomoBot page" })
         .getAttribute("href"),
-    ).toBe("/api/public/social/maple-street-bakery-1a2b3c4d");
+    ).toBe("/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b");
     expect(screen.getAllByText("Published").length).toBeGreaterThan(0);
   });
 });
@@ -333,15 +348,29 @@ describe("approvals-data", () => {
         ...patch,
       });
     expect(
+      socialPostLink(post({ destination_url: "javascript:1" })),
+    ).toBeNull();
+    expect(
+      socialPostLink(post({ destination_url: "//evil.test/p" })),
+    ).toBeNull();
+    // A link planted in the payload or execution result is never rendered.
+    expect(
       socialPostLink(
-        post({ payload: { text: "x", page_url: "javascript:1" } }),
+        post({
+          payload: { text: "x", page_url: "https://evil.example/p" },
+          execution_result: { live_url: "https://evil.example/p" },
+        }),
       ),
     ).toBeNull();
     expect(
       socialPostLink(
-        post({ payload: { text: "x", page_url: "//evil.test/p" } }),
+        post({
+          payload: { text: "x", page_url: "https://evil.example/p" },
+          destination_url:
+            "/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b",
+        }),
       ),
-    ).toBeNull();
+    ).toBe("/api/public/social/maple-street-bakery-1a2b3c4d5e6f7a8b");
     expect(socialPostLink(approval())).toBeNull();
     expect(statusText(post({ status: "failed" }))).toBe("Failed");
     expect(statusText(post({ status: "executed" }))).toBe("Published");

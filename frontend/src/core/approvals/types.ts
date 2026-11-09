@@ -53,6 +53,8 @@ export type Approval = {
   capabilities?: ApprovalCapabilities;
   proposer?: { user_id: string; display_name: string } | null;
   workspace?: { id: string; name: string } | null;
+  /** Server-computed link to where the action appears (social posts: the workspace page). Never from the payload. */
+  destination_url?: string | null;
   error: string | null;
   created_at: string;
   updated_at: string;
