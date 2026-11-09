@@ -2686,3 +2686,8 @@ can expose saved context without a Mac service or new collector. It is prepared 
 production registration and private snapshot installation are separate release steps.
 
 Local client-readiness and throwaway backup restore checks are documented in [the EC2 runbook](deploy/momentum/ec2/README.md#local-daily-tenant-and-nightly-recovery-checks).
+
+
+### Momentum staff walkthroughs
+
+Momentum's staff-only AI Academy describes a twelve-minute workspace tour and a short staff quick start alongside its role lessons. A lesson player is published only when its accepted MP4, poster, captions and transcript are present in the private Academy media folder. Written lessons and the separate creative film library remain distinct from published training videos.
