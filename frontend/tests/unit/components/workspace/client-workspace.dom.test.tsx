@@ -52,6 +52,7 @@ rs.mock("@/core/features", () => ({
     isLoading: false,
   }),
   useCrmEnabled: () => ({ enabled: mocks.crm, isLoading: false }),
+  useServiceTiersEnabled: () => ({ enabled: false, isLoading: false }),
 }));
 // Mark every anchor next/link renders so a test can tell a client-routed link
 // from a plain <a>.
