@@ -36,10 +36,21 @@ NEW_G=deer-flow-gateway:main-$SHA8; NEW_F=deer-flow-frontend:main-$SHA8
 say() { printf '[release %s] %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 die() { say "STOP: $*"; exit 1; }
 get_env() { grep -E "^[[:space:]]*$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d "\"'\r"; }
-set_env() { # rewrite one KEY=value line in place (keeps mode and owner of .env; value is an image tag, not a secret)
-  local tmp; tmp=$(mktemp)
-  awk -v k="$1" -v v="$2" '$0 ~ "^[[:space:]]*" k "=" {print k "=" v; f=1; next} {print} END{if(!f) print k "=" v}' "$ENV_FILE" > "$tmp"
-  cat "$tmp" > "$ENV_FILE"; rm -f "$tmp"
+set_env() { # rewrite one KEY=value line: full replacement written beside .env, same mode/owner, renamed only after every step succeeded
+  # Every step is checked explicitly: apply_tags runs inside an `if`, where errexit is disabled. .env is never touched on failure.
+  local tmp
+  tmp=$(mktemp "$ENV_FILE.new.XXXXXX") || { say "cannot create a temporary file beside $ENV_FILE"; return 1; }
+  if awk -v k="$1" -v v="$2" '$0 ~ "^[[:space:]]*" k "=" {print k "=" v; f=1; next} {print} END{if(!f) print k "=" v}' "$ENV_FILE" > "$tmp" \
+     && chmod --reference="$ENV_FILE" "$tmp" \
+     && chown --reference="$ENV_FILE" "$tmp" \
+     && sync "$tmp" \
+     && [[ -s "$tmp" ]] \
+     && mv -f "$tmp" "$ENV_FILE"; then
+    return 0
+  fi
+  rm -f "$tmp"
+  say "could not update $1 in $ENV_FILE; $ENV_FILE was left unchanged"
+  return 1
 }
 wait_ready() {
   local end=$((SECONDS + READY_TIMEOUT)) out code
@@ -61,7 +72,7 @@ prune_old() { # an empty candidate list is success; a failing `docker images` is
     done <<< "$list"
   done
 }
-apply_tags() { set_env MOMENTUM_GATEWAY_IMAGE "$1"; set_env MOMENTUM_FRONTEND_IMAGE "$2"; "$PC_UP" && wait_ready; }
+apply_tags() { set_env MOMENTUM_GATEWAY_IMAGE "$1" || return 1; set_env MOMENTUM_FRONTEND_IMAGE "$2" || return 1; "$PC_UP" && wait_ready; }
 
 # Exclusive host lock, taken before reading the current tags and held (fd 9) until this process exits, so it covers
 # backup, deployment, rollback and cleanup. backup.sh takes the same lock when it runs on its own (timer), so a

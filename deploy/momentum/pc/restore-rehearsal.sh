@@ -14,7 +14,11 @@ WORK=$DEPLOY/restore/rehearsal-$RUN; INT=$P-net
 GW=$P-gateway; RD=$P-redis; PX=$P-proxy; VG=${P}_gateway-data; VR=${P}_redis-data
 IMAGE="$("$DEPLOY/src/deploy/momentum/vps/dotenv-get.sh" "$DEPLOY/.env" MOMENTUM_GATEWAY_IMAGE)"
 [[ $EUID -eq 0 ]] || { echo "run as root (sudo)" >&2; exit 2; }
-if systemctl is-active --quiet momobot-backup.service; then echo "a backup is running; wait for it" >&2; exit 3; fi
+# Same exclusion as backup.sh and release.sh: hold release.lock (fd 9) until this process exits, after teardown, so a
+# backup (whose retention cleanup could remove the selected archive) or a release cannot overlap the rehearsal.
+command -v flock >/dev/null || { echo "flock is required" >&2; exit 3; }
+exec 9>"$DEPLOY/release.lock" || { echo "cannot open $DEPLOY/release.lock" >&2; exit 3; }
+flock -n 9 || { echo "a backup or release holds $DEPLOY/release.lock; wait for it to finish" >&2; exit 3; }
 ss -ltn | grep -q ":$PORT " && { echo "port $PORT is in use" >&2; exit 3; }
 TIMES=(); t0=$(date +%s.%N)
 step() { local n=$1; shift; local s=$(date +%s.%N); "$@"; TIMES+=("$(awk -v a="$s" -v b="$(date +%s.%N)" -v n="$n" 'BEGIN{printf "%-34s %7.1fs", n, b-a}')"); echo "[$n] done"; }
