@@ -37,13 +37,15 @@ is a known outcome only when it reports `cost_known:true`, a finite cost no high
 and complete token fields. Paid failures record `claude_sdk_worker_failed` with that usage. A zero-cost refusal with no
 token usage records `claude_sdk_worker_refused` and leaves its attempt reserved, so the run reports usage incomplete.
 Zero cost with tokens, and anything else, stays uncertain. The bridge serializes calls inside one Gateway process and
-checks that the receipt ledger is a readable regular file before paying. Keep `GATEWAY_WORKERS=1` for this route: an
+checks that the receipt ledger is a readable regular file with at least 64 KiB left under the 8 MiB read bound before paying. Keep `GATEWAY_WORKERS=1` for this route: an
 overlapping call from a second process is refused by the worker (`worker_busy`) and that run fails. Successful receipts require exactly one actual observed
 `claude-haiku-5-5` model, known finite estimated cost, complete token fields,
 no external tools, a terminal/session receipt and readback of the **exact
-JSONL line and matching metadata/output hash** from the worker ledger. Ledger
-symlinks, partial/invalid lines, missing receipts, changed content and journals
-above the 8 MiB read bound fail closed. Receipt persistence is repaired from
+JSONL line and matching metadata/output hash** from the worker ledger. Only
+lines naming the job are parsed, so another job's malformed line cannot block
+readback. Ledger symlinks, partial/invalid lines for the job, missing receipts,
+changed content and journals above the 8 MiB read bound fail closed. Until the
+worker rotates its ledger, the route turns unavailable once the ledger nears that bound. Receipt persistence is repaired from
 a previously validated durable call receipt without another paid request.
 The SDK's internal `StructuredOutput` formatter is permitted only as the
 exact sole `tools_used` entry, validated separately by the worker; it grants

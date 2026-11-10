@@ -47,3 +47,26 @@ test("renderer has no native execution or relaxed web security", () => {
   assert.equal("preload" in preferences, false);
   assert.equal(preferences.partition.startsWith("persist:"), true);
 });
+
+test("artifact filenames must use an allowed document or image extension", () => {
+  const { artifactFilename } = require("../src/security.cjs");
+  for (const filename of ["report.md", "notes.txt", "data.csv", "deck.pdf", "screenshot.png", "photo.JPG", "evidence.json", "sheet.xlsx", "brief.docx", "report.html"]) assert.equal(artifactFilename(filename), filename);
+  // macOS runs or redirects these on a double-click through Terminal, Finder, Automator or Script Editor.
+  for (const filename of ["run.terminal", "x.tool", "link.inetloc", "file.fileloc", "flow.workflow", "s.scptd", "image.svg", "bundle.zip", "disk.iso", "README"]) assert.equal(artifactFilename(filename), null);
+});
+
+test("only the workspace may write to the clipboard; it may never read it", () => {
+  const { permittedSessionRequest } = require("../src/security.cjs");
+  const endpoint = "https://momo.example.com/workspace/openai";
+  assert.equal(permittedSessionRequest("clipboard-sanitized-write", "https://momo.example.com", endpoint), true);
+  assert.equal(permittedSessionRequest("media", "https://momo.example.com", endpoint, { mediaTypes: ["audio"] }), true);
+  for (const [permission, origin] of [["clipboard-sanitized-write", "https://evil.example"], ["clipboard-read", "https://momo.example.com"], ["notifications", "https://momo.example.com"]]) assert.equal(permittedSessionRequest(permission, origin, endpoint), false);
+});
+
+test("permission checks accept Chromium's serialized origin with a trailing slash", () => {
+  const { permittedSessionRequest } = require("../src/security.cjs");
+  const endpoint = "https://momo.example.com/workspace/openai";
+  assert.equal(permittedSessionRequest("clipboard-sanitized-write", "https://momo.example.com/", endpoint), true);
+  assert.equal(permittedSessionRequest("clipboard-sanitized-write", "https://evil.example/", endpoint), false);
+  assert.equal(permittedSessionRequest("clipboard-sanitized-write", "not a url", endpoint), false);
+});

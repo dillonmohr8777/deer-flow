@@ -5,7 +5,7 @@ const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { DEFAULT_ENDPOINT, validateEndpoint, isSameOriginNavigation, safeExternalURL, permittedMediaRequest, rendererPreferences } = require("./security.cjs");
+const { DEFAULT_ENDPOINT, validateEndpoint, isSameOriginNavigation, safeExternalURL, permittedSessionRequest, rendererPreferences } = require("./security.cjs");
 const { startSettingsServer, SECRET_HEADER } = require("./settings-server.cjs");
 const { handleArtifactDownload } = require("./artifact-download.cjs");
 const { validateUpdateURL, checkForUpdate } = require("./update-check.cjs");
@@ -37,6 +37,11 @@ let external;
 let configured = false;
 let stopping = false;
 let smokeDirectory;
+// A slow or unreachable server shows the retry page instead of a blank window that never finishes loading.
+const LOAD_TIMEOUT_MS = 20_000;
+// One app instance owns the shared cookie profile; a second launch focuses the first window instead.
+const primary = smoke || app.requestSingleInstanceLock();
+if (!primary) app.quit();
 
 app.setName("MomoBot");
 if (smoke) {
@@ -51,12 +56,33 @@ function showLocal(route = "/") {
   if (window && !window.isDestroyed()) void window.loadURL(`${settings.origin}${route}`).catch(() => {});
 }
 
+function showWindow() {
+  if (!window || window.isDestroyed()) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+}
+
 async function openWorkspace() {
   external = undefined;
+  // Only a page that never arrives times out. Once the workspace page has committed, its scripts
+  // may keep loading slowly; stopping then would leave a half-loaded app instead of an error page.
+  const committed = () => clearTimeout(timer);
+  const timer = setTimeout(() => {
+    if (window.isDestroyed()) return;
+    window.webContents.off("did-navigate", committed);
+    failure = `MomoBot could not reach the workspace within ${LOAD_TIMEOUT_MS / 1000} seconds. Check the server and your network, then try again.`;
+    window.webContents.stop();
+  }, LOAD_TIMEOUT_MS);
+  window.webContents.once("did-navigate", committed);
   try {
     await window.loadURL(endpoint);
   } catch {
-    showLocal("/error");
+    // A redirect to an external page cancels this load; keep its confirmation page instead of the error page.
+    if (!external) showLocal("/error");
+  } finally {
+    clearTimeout(timer);
+    if (!window.isDestroyed()) window.webContents.off("did-navigate", committed);
   }
 }
 
@@ -100,12 +126,12 @@ function configureSession(partition) {
     if (details.url.startsWith(`${settings.origin}/`)) headers[SECRET_HEADER] = settings.secret;
     callback({ requestHeaders: headers });
   });
-  partition.setPermissionCheckHandler((_contents, permission, origin, details) => permittedMediaRequest(permission, origin, endpoint, details));
+  partition.setPermissionCheckHandler((_contents, permission, origin, details) => permittedSessionRequest(permission, origin, endpoint, details));
   partition.setPermissionRequestHandler((_contents, permission, callback, details) => {
     let origin = "";
     try { origin = new URL(details.requestingUrl).origin; } catch { /* Reject unknown documents. */ }
     const mediaTypes = "mediaTypes" in details ? details.mediaTypes : undefined;
-    callback(!smoke && permittedMediaRequest(permission, origin, endpoint, { mediaTypes }));
+    callback(!smoke && permittedSessionRequest(permission, origin, endpoint, { mediaTypes }));
   });
   partition.on("will-download", (event, item, contents, frame) => {
     if ((smoke && !smokeProfile) || !window || window.isDestroyed() || contents !== window.webContents || frame !== contents.mainFrame) {
@@ -166,6 +192,7 @@ async function runSmoke() {
 }
 
 app.whenReady().then(async () => {
+  if (!primary) return;
   const configPath = path.join(app.getPath("userData"), "connection.json");
   try {
     const saved = JSON.parse(await fs.readFile(configPath, "utf8"));
@@ -220,7 +247,11 @@ app.whenReady().then(async () => {
     webPreferences: preferences,
   });
   window.webContents.on("will-navigate", guardNavigation);
-  window.webContents.on("will-redirect", guardNavigation);
+  window.webContents.on("will-redirect", (details) => {
+    // Only the main frame may move the window; an embedded preview redirecting off-site is just blocked.
+    if (details.isMainFrame) guardNavigation(details, details.url);
+    else if (!isSameOriginNavigation(details.url, endpoint, settings.origin)) details.preventDefault();
+  });
   window.webContents.on("will-frame-navigate", (details) => {
     if (!details.isMainFrame && !isSameOriginNavigation(details.url, endpoint, settings.origin)) details.preventDefault();
   });
@@ -260,7 +291,7 @@ app.whenReady().then(async () => {
     await runSmoke();
     return;
   }
-  window.once("ready-to-show", () => window.show());
+  showWindow();
   setTimeout(() => { void checkUpdates(false); }, 5_000);
   if (configured) await openWorkspace();
   else await window.loadURL(settings.origin);
@@ -269,6 +300,8 @@ app.whenReady().then(async () => {
   app.exit(1);
 });
 
+app.on("second-instance", showWindow);
+app.on("activate", showWindow);
 app.on("window-all-closed", () => app.quit());
 app.on("before-quit", (event) => {
   if (stopping || !settings) return;
