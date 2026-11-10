@@ -331,12 +331,12 @@ async def test_linked_account_cannot_enroll_app_level_mfa_afterwards(db):
     assert linked.password_hash is not None
 
     with pytest.raises(HTTPException) as exc_info:
-        auth_router._refuse_sso_mfa(await _provider(db).get_user_by_id(str(account.id)))
+        auth_router._refuse_sso_mfa(await _provider(db).get_user(str(account.id)))
     assert exc_info.value.status_code == 400
 
     # An unlinked password account can still enroll.
     other = await _password_account(db, email="other@example.com")
-    auth_router._refuse_sso_mfa(await _provider(db).get_user_by_id(str(other.id)))
+    auth_router._refuse_sso_mfa(await _provider(db).get_user(str(other.id)))
 
 
 # ── repository ──────────────────────────────────────────────────────────
