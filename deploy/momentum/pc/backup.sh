@@ -26,6 +26,8 @@ docker run --rm --network none --mount "type=volume,source=$SNAP,target=/b,reado
 cp "$DEPLOY/config.yaml" "$DEPLOY/extensions_config.json" "$STAGE/"
 docker exec "${PROJECT}-redis" redis-cli --rdb - >"$STAGE/redis.rdb" 2>/dev/null
 tar czf "$STAGE/ec2-mounts.tgz" -C "$DEPLOY" data code
+# host-mounted operator extension tree (compose.pc.yaml bind source under /opt/momobot/extensions); an empty archive if none
+if [[ -d "$DEPLOY/extensions" ]]; then tar czf "$STAGE/extensions.tgz" -C "$DEPLOY" extensions; else tar czf "$STAGE/extensions.tgz" -T /dev/null; fi
 (cd "$STAGE" && sha256sum ./* >MANIFEST.sha256)
 trap 'rm -f "$OUT/momobot-$stamp.tgz.enc"; cleanup' EXIT
 tar czf - -C "$STAGE" . | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass file:"$KEY" -out "$OUT/momobot-$stamp.tgz.enc"

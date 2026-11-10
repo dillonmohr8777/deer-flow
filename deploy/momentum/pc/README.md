@@ -101,8 +101,13 @@ If data was written by the bad release and the schema moved forward, restore the
 ## Restore
 
 Decrypt with `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:KEY -in momobot-<stamp>.tgz.enc | tar xzf -`,
-check `MANIFEST.sha256`, extract `gateway-data.tgz` into an empty `momobot-prod_gateway-data` volume, copy
-`redis.rdb` into the redis volume as `dump.rdb`, then run `pc-up.sh` (it restores the private modes).
+check `MANIFEST.sha256`, then **stop the whole stack first** (`docker compose -p momobot-prod -f /opt/momobot/compose.pc.yaml down`;
+`pc-up.sh` uses `compose up`, which leaves unchanged containers running, so Redis would never load a restored dump and could
+overwrite it, and SQLite files must not be replaced under a running gateway). With the services down, restore into empty
+volumes (remove and recreate `momobot-prod_gateway-data` and the redis volume): extract `gateway-data.tgz` into the gateway
+volume, copy `redis.rdb` into the redis volume as `dump.rdb`, and extract `extensions.tgz` into `/opt/momobot` to recover the
+host-mounted operator extension (archives made before it was added do not contain it). Only after all of that finishes, run
+`pc-up.sh` to start the services (it restores the private modes).
 
 ### Restore rehearsal and recovery time
 

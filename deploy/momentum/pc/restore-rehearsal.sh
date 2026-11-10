@@ -51,6 +51,9 @@ restore_volumes() {
   local v=/var/lib/docker/volumes/$VG/_data
   for d in "$v/brainforge" "$v/wsl-bridge"; do [[ -d $d ]] && { find "$d" -type d -exec chmod 700 {} +; find "$d" -type f -exec chmod 600 {} +; }; done
   mkdir -p "$WORK/mounts" && tar xzf "$WORK/stage/ec2-mounts.tgz" -C "$WORK/mounts"
+  # operator extension tree comes from the archive (archives made before extensions.tgz existed simply have none)
+  [[ -f "$WORK/stage/extensions.tgz" ]] && tar xzf "$WORK/stage/extensions.tgz" -C "$WORK/mounts"
+  true
 }
 start_stack() {
   # scratch config: Slack and the scheduler off, so even a leaked route cannot act; secrets stay out of the scratch env
@@ -82,9 +85,9 @@ PY
   [[ -d $m/data/brand ]] && args+=(-v "$m/data/brand:/var/momobot-brand:ro")
   [[ -d $m/code ]] && args+=(-v "$m/code/momo_guard.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_guard.py:ro"
     -v "$m/code/momo_protocol.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_protocol.py:ro")
-  # operator extension (inert unless config names it): reuse the prod bind source read-only so a missing path cannot fail the start
+  # operator extension (inert unless config names it): mount the copy restored from the archive, never the prod directory
   local ext; ext=$(awk '/source: \/opt\/momobot\/extensions\//{print $2; exit}' "$DEPLOY/compose.pc.yaml" 2>/dev/null || true)
-  [[ -n "$ext" && -d "$ext" ]] && args+=(-v "$ext:/app/backend/$(basename "$ext"):ro")
+  [[ -n "$ext" && -d "$m/${ext#"$DEPLOY"/}" ]] && args+=(-v "$m/${ext#"$DEPLOY"/}:/app/backend/$(basename "$ext"):ro")
   docker run "${args[@]}" "$IMAGE" sh -c "cd backend && PYTHONPATH=. uv run --no-sync uvicorn app.gateway.app:app --host 0.0.0.0 --port 8001 --workers 1" >/dev/null
   printf 'server { listen 80; location / { proxy_pass http://gateway:8001; proxy_set_header Host $host; } }\n' > "$WORK/proxy.conf"
   docker create --name "$PX" -p "127.0.0.1:$PORT:80" -v "$WORK/proxy.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine >/dev/null
