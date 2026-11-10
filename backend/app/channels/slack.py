@@ -628,6 +628,10 @@ class SlackChannel(Channel):
                 # team_id is already resolved (payload team_id/team, else event team) by the caller.
                 "team_id": team_id,
                 "requires_personal_connection": not globally_allowed,
+                # Set for every sender (including globally allowlisted ones) in a
+                # channel whose policy is channel-wide, so the manager can enforce
+                # the restricted route independently of how the sender was admitted.
+                "public_channel_policy": policy.get("allow_all_users") is True,
                 "message_id": event.get("ts"),
                 "client_msg_id": event.get("client_msg_id"),
             },

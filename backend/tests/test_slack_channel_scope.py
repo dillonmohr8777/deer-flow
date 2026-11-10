@@ -191,6 +191,33 @@ def test_public_news_route_is_off_unless_channel_and_team_are_configured(tmp_pat
     assert manager._resolve_run_params(msg, "thread")[2]["public_news_channel"] is False
 
 
+def test_allowlisted_sender_in_public_policy_channel_is_flagged_by_the_adapter():
+    adapter = channel()
+    adapter._make_inbound = MagicMock(wraps=adapter._make_inbound)
+    adapter._handle_message_event({"type": "app_mention", "channel": CHAT, "user": "UOWNER", "text": "<@UBOT> hi", "ts": "1"}, team_id=TEAM)
+    metadata = adapter._make_inbound.call_args.kwargs["metadata"]
+    assert metadata["requires_personal_connection"] is False
+    assert metadata["public_channel_policy"] is True
+
+
+@pytest.mark.parametrize("public_news", [None, {"channel_id": "COTHER", "team_id": TEAM}])
+def test_upgrade_allowlisted_sender_in_public_policy_channel_fails_closed_without_matching_route(tmp_path, public_news):
+    from app.channels.manager import InvalidChannelSessionConfigError
+
+    manager = ChannelManager(bus=MessageBus(), store=ChannelStore(path=tmp_path / "store.json"), public_news=public_news)
+    msg = InboundMessage(channel_name="slack", chat_id=CHAT, user_id="UOWNER", text="hi", metadata={"team_id": TEAM, "requires_personal_connection": False, "public_channel_policy": True})
+    with pytest.raises(InvalidChannelSessionConfigError):
+        manager._resolve_run_params(msg, "thread")
+
+
+def test_allowlisted_sender_in_public_policy_channel_uses_the_restricted_route_when_configured(tmp_path):
+    manager = ChannelManager(bus=MessageBus(), store=ChannelStore(path=tmp_path / "store.json"), public_news={"channel_id": CHAT, "team_id": TEAM})
+    msg = InboundMessage(channel_name="slack", chat_id=CHAT, user_id="UOWNER", text="hi", metadata={"team_id": TEAM, "requires_personal_connection": False, "public_channel_policy": True})
+    _, _, context = manager._resolve_run_params(msg, "thread")
+    assert context["public_news_channel"] is True
+    assert context["agent_name"] == "ai-tech-news"
+
+
 def test_channel_service_reads_the_public_news_route_from_the_slack_channel_config():
     from app.channels.service import ChannelService
 

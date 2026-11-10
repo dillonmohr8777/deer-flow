@@ -1757,11 +1757,12 @@ class ChannelManager:
 
         # Public news routing cannot be widened by user preferences or /agent state.
         public_news = self._public_news_route is not None and msg.channel_name == "slack" and (msg.chat_id, msg_metadata.get("team_id")) == self._public_news_route
-        # Fail closed: Slack messages admitted via the channel-wide ``allow_all_users``
-        # policy must only ever run on the restricted news route. If
-        # ``channels.slack.public_news`` is missing or does not match this channel,
-        # refuse rather than falling through to normal private-agent routing.
-        if msg.channel_name == "slack" and msg_metadata.get("requires_personal_connection") and not public_news:
+        # Fail closed: any Slack message in a channel with a channel-wide
+        # ``allow_all_users`` policy (including globally allowlisted senders) must only
+        # ever run on the restricted news route. If ``channels.slack.public_news`` is
+        # missing or does not match this channel, refuse rather than falling through
+        # to normal private-agent routing.
+        if msg.channel_name == "slack" and (msg_metadata.get("requires_personal_connection") or msg_metadata.get("public_channel_policy")) and not public_news:
             raise InvalidChannelSessionConfigError("Public Slack channel admission requires channels.slack.public_news (channel_id and team_id) to match this channel; configure it to enable replies here.")
         run_context["public_news_channel"] = public_news
         if public_news:
