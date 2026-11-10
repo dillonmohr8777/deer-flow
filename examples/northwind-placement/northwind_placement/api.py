@@ -35,11 +35,14 @@ class Service:
         if not self.data_dir.is_absolute():
             raise ValueError("Northwind requires an absolute persistent data_dir")
         self.organization_id = config.get("organization_id")
-        self.workspace_id = config.get("workspace_id", "northwind-placement")
+        self.workspace_id = config.get("workspace_id")
         if not isinstance(self.organization_id, str) or not self.organization_id.strip():
             raise ValueError("Northwind requires an explicit organization_id")
         if not isinstance(self.workspace_id, str) or not self.workspace_id.strip():
-            raise ValueError("Northwind requires a nonempty workspace_id")
+            raise ValueError(
+                "Northwind requires an explicit workspace_id; set it to the value the existing database was created with "
+                "(the previous implicit default), since it selects the SQLite file"
+            )
         allowed = config.get("allowed_user_ids", [])
         confirmers = config.get("placement_confirmer_user_ids", [])
         if not isinstance(allowed, list) or not allowed or not all(isinstance(x, str) and x.strip() for x in allowed):

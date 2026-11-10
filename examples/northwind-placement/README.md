@@ -33,7 +33,9 @@ plugins:
     config:
       data_dir: /persistent/private-data/northwind
       organization_id: VERIFIED_Northwind_ORGANIZATION_ID
-      workspace_id: northwind-placement
+      # Required. For an existing install, use the workspace_id it already ran with
+      # (the old implicit default if the key was omitted); it selects the SQLite file.
+      workspace_id: EXISTING_OR_CHOSEN_WORKSPACE_ID
       allowed_user_ids:
         - VERIFIED_AVERY_USER_ID
         - VERIFIED_JUSTIN_USER_ID

@@ -20,7 +20,7 @@ BASE = datetime(2026, 10, 20, 20, tzinfo=UTC)
 def build_test_app(data_dir, user_id="jordan", organization_id="northwind", auth_source="session", principal=True, csrf=False):
     """Test-only host adapter; never install this identity stub in a real Gateway."""
     service = Service(
-        {"data_dir": str(data_dir), "organization_id": "northwind", "allowed_user_ids": ["jordan", "avery"], "placement_confirmer_user_ids": ["jordan"]}
+        {"data_dir": str(data_dir), "organization_id": "northwind", "workspace_id": "test-workspace", "allowed_user_ids": ["jordan", "avery"], "placement_confirmer_user_ids": ["jordan"]}
     )
     asyncio.run(service.start(None))
     app = FastAPI()
@@ -377,7 +377,7 @@ def test_extension_registration_and_stop(tmp_path):
             self.routes = routers
 
     registry = Registry()
-    install(registry, {"data_dir": str(tmp_path), "organization_id": "northwind", "allowed_user_ids": ["jordan"]})
+    install(registry, {"data_dir": str(tmp_path), "organization_id": "northwind", "workspace_id": "test-workspace", "allowed_user_ids": ["jordan"]})
     assert registry.routes[0].prefix == "/api/northwind"
     app, service = build_test_app(tmp_path)
     asyncio.run(service.stop())
