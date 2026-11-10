@@ -232,19 +232,32 @@ async def test_uploads_still_work_in_an_unflagged_workspace(session_factory, tmp
 async def test_the_project_shelf_routes_refuse_uploads_in_a_flagged_workspace(session_factory):
     from app.gateway.routers import project_documents
 
-    guards = {route.path: [d.dependency for d in route.dependencies] for route in project_documents.router.routes if "POST" in route.methods}
-    base = "/api/projects/{project_id}/documents"
-    for path in (base, f"{base}/from-thread", f"{base}/{{document_id}}/attach-to-thread/{{thread_id}}"):
-        assert no_phi.uploads_allowed in guards[path], path
+    # The guard runs inside the handlers, after the owned-project check, so a foreign project stays a 404.
+    for route in project_documents.router.routes:
+        if "POST" in route.methods:
+            assert not route.dependencies, route.path
     config = SimpleNamespace(no_phi=NoPhiConfig())
     with patch.object(no_phi, "resolve_organization_id", return_value="org-health"), pytest.raises(HTTPException) as refused:
-        await no_phi.uploads_allowed(SimpleNamespace(path_params={}), config)
+        await no_phi.require_uploads_allowed(config)
     assert refused.value.status_code == 403
     with patch.object(no_phi, "resolve_organization_id", return_value="org-plain"):
-        await no_phi.uploads_allowed(SimpleNamespace(path_params={"project_id": "proj-plain"}), config)
+        await no_phi.require_uploads_allowed(config, project_id="proj-plain")
         with pytest.raises(HTTPException) as refused:  # an agency workspace, a flagged client's project
-            await no_phi.uploads_allowed(SimpleNamespace(path_params={"project_id": "proj-health"}), config)
+            await no_phi.require_uploads_allowed(config, project_id="proj-health")
     assert refused.value.status_code == 403
+
+
+async def test_attaching_to_a_flagged_clients_thread_is_refused_from_an_unflagged_source_project(session_factory):
+    config = SimpleNamespace(no_phi=NoPhiConfig())
+    with patch.object(no_phi, "resolve_organization_id", return_value="org-plain"):
+        await no_phi.require_uploads_allowed(config, project_id="proj-plain", thread_id="thread-plain")
+        with pytest.raises(HTTPException) as refused:  # unflagged source project, flagged destination thread
+            await no_phi.require_uploads_allowed(config, project_id="proj-plain", thread_id="thread-health")
+        assert refused.value.status_code == 403
+        with pytest.raises(HTTPException) as refused:  # flagged source project, unflagged destination thread
+            await no_phi.require_uploads_allowed(config, project_id="proj-health", thread_id="thread-plain")
+        assert refused.value.status_code == 403
+    assert await no_phi.organization_is_no_phi("org-plain", project_id="proj-plain", thread_id="thread-health") is True
 
 
 # -- admin switch -----------------------------------------------------------

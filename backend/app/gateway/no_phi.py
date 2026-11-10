@@ -27,11 +27,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.gateway.deps import get_config
 from deerflow.config.app_config import AppConfig, get_app_config
 from deerflow.persistence.clients.model import ClientRow
 from deerflow.persistence.engine import get_session_factory
@@ -58,13 +57,21 @@ def configured_no_phi_slugs(app_config: AppConfig | None) -> frozenset[str]:
     return frozenset(slug.strip().lower() for slug in getattr(section, "organization_slugs", ()) if isinstance(slug, str) and slug.strip())
 
 
-async def _project_client_id(session: AsyncSession, project_id: str | None, thread_id: str | None) -> str | None:
-    """The client a project (or the project a thread belongs to) is linked to, if any."""
-    if not project_id and thread_id:
-        project_id = (await session.execute(select(ThreadMetaRow.project_id).where(ThreadMetaRow.thread_id == thread_id))).scalar_one_or_none()
-    if not project_id:
-        return None
-    return (await session.execute(select(ProjectRow.client_id).where(ProjectRow.id == project_id))).scalar_one_or_none()
+async def _linked_client_ids(session: AsyncSession, project_id: str | None, thread_id: str | None) -> list[str]:
+    """Clients linked to the named project and, independently, to the project the named thread belongs to."""
+    project_ids: list[str] = []
+    if project_id:
+        project_ids.append(project_id)
+    if thread_id:
+        thread_project_id = (await session.execute(select(ThreadMetaRow.project_id).where(ThreadMetaRow.thread_id == thread_id))).scalar_one_or_none()
+        if thread_project_id and thread_project_id not in project_ids:
+            project_ids.append(thread_project_id)
+    client_ids: list[str] = []
+    for linked_project_id in project_ids:
+        client_id = (await session.execute(select(ProjectRow.client_id).where(ProjectRow.id == linked_project_id))).scalar_one_or_none()
+        if client_id and client_id not in client_ids:
+            client_ids.append(client_id)
+    return client_ids
 
 
 async def organization_is_no_phi(
@@ -115,11 +122,11 @@ async def _organization_is_no_phi(
     if factory is None or not (project_id or thread_id):
         return False
     async with factory() as session:
-        client_id = await _project_client_id(session, project_id, thread_id)
-        if not client_id:
-            return False
-        project_client_flag = (await session.execute(select(ClientRow.no_phi).where(ClientRow.id == client_id))).scalar_one_or_none()
-    return project_client_flag is None or bool(project_client_flag)
+        for client_id in await _linked_client_ids(session, project_id, thread_id):
+            project_client_flag = (await session.execute(select(ClientRow.no_phi).where(ClientRow.id == client_id))).scalar_one_or_none()
+            if project_client_flag is None or bool(project_client_flag):
+                return True
+    return False
 
 
 async def delegation_is_no_phi(delegation_id: str | None, app_config: AppConfig | None = None, *, thread_id: str | None = None) -> bool:
@@ -163,9 +170,3 @@ async def require_uploads_allowed(app_config: AppConfig | None = None, *, projec
     """Raise 403 when the request's workspace, or the client of its project/thread, is no-PHI. Internal callers (no workspace) pass."""
     if await organization_is_no_phi(resolve_organization_id(), app_config, project_id=project_id, thread_id=thread_id):
         raise HTTPException(status_code=403, detail=UPLOADS_BLOCKED_DETAIL)
-
-
-async def uploads_allowed(request: Request, config: AppConfig = Depends(get_config)) -> None:
-    """Route dependency form of :func:`require_uploads_allowed`; reads ``project_id`` / ``thread_id`` from the path."""
-    params = request.path_params
-    await require_uploads_allowed(config, project_id=params.get("project_id"), thread_id=params.get("thread_id"))

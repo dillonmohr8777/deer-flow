@@ -23,7 +23,7 @@ from pydantic import BaseModel
 
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_config, get_project_document_repo, get_project_repo, get_thread_store
-from app.gateway.no_phi import uploads_allowed
+from app.gateway.no_phi import require_uploads_allowed
 from app.gateway.routers.uploads import DEFAULT_MAX_FILE_SIZE, UPLOAD_CHUNK_SIZE, _get_upload_limit, reserve_upload_write
 from app.gateway.upload_ingestion import ThreadUploadIngestionService, UnsafeFilenameError, UnsafeUploadDestinationError
 from deerflow.config.app_config import AppConfig
@@ -163,7 +163,7 @@ async def list_project_documents(
     )
 
 
-@router.post("", response_model=ProjectDocumentUploadResponse, status_code=201, dependencies=[Depends(uploads_allowed)])
+@router.post("", response_model=ProjectDocumentUploadResponse, status_code=201)
 @require_permission("projects", "write")
 async def upload_project_document(
     project_id: str,
@@ -182,6 +182,9 @@ async def upload_project_document(
     separator-bearing, or over 255 UTF-8 bytes). Size reuses
     ``uploads.max_file_size`` (413, mirroring the uploads router).
     """
+    # Owned-project check first so a foreign project's no-PHI status is never revealed.
+    await _require_project(request, project_id)
+    await require_uploads_allowed(config, project_id=project_id)
     try:
         display_name = validate_shelf_filename(name) if name is not None else validate_shelf_filename(normalize_filename(file.filename or ""))
     except ValueError as exc:
@@ -266,7 +269,7 @@ def _resolve_thread_source(paths: Paths, *, user_id: str, thread_id: str, kind: 
     return candidate if candidate.is_file() else None
 
 
-@router.post("/from-thread", response_model=ProjectDocumentUploadResponse, status_code=201, dependencies=[Depends(uploads_allowed)])
+@router.post("/from-thread", response_model=ProjectDocumentUploadResponse, status_code=201)
 @require_permission("projects", "write")
 @require_permission("threads", "read")
 async def promote_thread_file_to_shelf(
@@ -287,6 +290,9 @@ async def promote_thread_file_to_shelf(
     Response mirrors upload: 201 created, 200 on a content dedup hit (the
     existing row keeps its own name and provenance, §10.9).
     """
+    # Owned-project check first so a foreign project's no-PHI status is never revealed.
+    await _require_project(request, project_id)
+    await require_uploads_allowed(config, project_id=project_id)
     if await get_thread_store(request).get(body.thread_id) is None:
         raise _not_found()
     repo = get_project_document_repo(request)
@@ -334,7 +340,7 @@ async def promote_thread_file_to_shelf(
     return ProjectDocumentUploadResponse(document=_to_response(row), deduplicated=not created)
 
 
-@router.post("/{document_id}/attach-to-thread/{thread_id}", response_model=AttachDocumentResponse, dependencies=[Depends(uploads_allowed)])
+@router.post("/{document_id}/attach-to-thread/{thread_id}", response_model=AttachDocumentResponse)
 @require_permission("projects", "write")
 @require_permission("threads", "write", owner_check=True, require_existing=True)
 async def attach_project_document_to_thread(
@@ -361,6 +367,10 @@ async def attach_project_document_to_thread(
     owner check above, ``require_existing``); the response is returned only
     after ingestion succeeds.
     """
+    # Owned-project check first so a foreign project's no-PHI status is never revealed;
+    # then the source project and the destination thread's project are both checked.
+    await _require_project(request, project_id)
+    await require_uploads_allowed(config, project_id=project_id, thread_id=thread_id)
     try:
         async with reserve_upload_write(thread_id, request):
             # The route's earlier owner check can become stale before admission.
