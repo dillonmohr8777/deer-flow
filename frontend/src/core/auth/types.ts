@@ -12,6 +12,9 @@ export const userSchema = z.object({
   system_role: z.enum(SYSTEM_ROLES),
   needs_setup: z.boolean().optional().default(false),
   oauth_provider: z.string().nullable().optional().default(null),
+  // Whether the account has a local password. Linked SSO accounts can have
+  // both an oauth_provider and a password.
+  has_password: z.boolean().optional(),
   // Effective route permissions (RFC #4063 Phase 4). Optional + nullable:
   // absent = pre-Phase-4 backend, null = credential-creation response that
   // never resolved them — both are consumed as "permissive, unresolved", see

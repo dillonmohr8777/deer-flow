@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -321,4 +321,79 @@ class SQLiteUserRepository(UserRepository):
         async with self._sf() as session:
             result = await session.execute(stmt)
             row = result.scalar_one_or_none()
+            return self._row_to_user(row) if row is not None else None
+
+    async def count_users_by_email(self, email: str) -> int:
+        stmt = select(func.count()).select_from(UserRow).where(func.lower(UserRow.email) == _normalize_email(email))
+        async with self._sf() as session:
+            return await session.scalar(stmt) or 0
+
+    async def link_oauth_identity_if_unlinked(self, user_id: str, provider: str, oauth_id: str) -> User | None:
+        stmt = (
+            update(UserRow)
+            .where(
+                UserRow.id == user_id,
+                UserRow.oauth_provider.is_(None),
+                UserRow.oauth_id.is_(None),
+                UserRow.disabled_at.is_(None),
+            )
+            .values(oauth_provider=provider, oauth_id=oauth_id)
+            .returning(UserRow)
+            .execution_options(populate_existing=True)
+        )
+        async with self._sf() as session:
+            try:
+                # RETURNING captures the linked row (and its token_version)
+                # in the same statement as the update, before the commit.
+                row = (await session.execute(stmt)).scalars().first()
+                user = self._row_to_user(row) if row is not None else None
+                await session.commit()
+            except IntegrityError as exc:
+                await session.rollback()
+                if _is_oauth_identity_violation(exc):
+                    raise ValueError(f"OAuth account already linked: {provider}") from exc
+                raise
+            return user
+
+    async def set_oauth_identity(
+        self,
+        user_id: str,
+        provider: str | None,
+        oauth_id: str | None,
+        *,
+        expected_provider: str | None,
+        expected_oauth_id: str | None,
+        revoke_sessions: bool,
+    ) -> User | None:
+        if (provider is None) != (oauth_id is None):
+            raise ValueError("provider and oauth_id must be set or cleared together")
+
+        def _matches(column, value):
+            return column.is_(None) if value is None else column == value
+
+        values: dict = {"oauth_provider": provider, "oauth_id": oauth_id}
+        if revoke_sessions:
+            # In SQL, so a concurrent force-logout's bump is never lost.
+            values["token_version"] = UserRow.token_version + 1
+        stmt = (
+            update(UserRow)
+            .where(
+                UserRow.id == user_id,
+                _matches(UserRow.oauth_provider, expected_provider),
+                _matches(UserRow.oauth_id, expected_oauth_id),
+            )
+            .values(**values)
+        )
+        async with self._sf() as session:
+            try:
+                result = await session.execute(stmt)
+                await session.commit()
+            except IntegrityError as exc:
+                await session.rollback()
+                if _is_oauth_identity_violation(exc):
+                    raise ValueError(f"OAuth account already linked: {provider}") from exc
+                raise
+            if result.rowcount != 1:
+                return None
+            row = await session.get(UserRow, user_id, populate_existing=True)
             return self._row_to_user(row) if row is not None else None

@@ -40,7 +40,7 @@ from app.gateway.auth.recovery_codes import generate_recovery_codes, hash_recove
 from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME, SESSION_PERSISTENCE_COOKIE_NAME, set_session_cookie
 from app.gateway.auth.session_cookie_state import SKIP_AUTH_CSRF_COOKIE_STATE_ATTR
 from app.gateway.auth.totp import build_otpauth_uri, generate_totp_secret, verify_totp_code
-from app.gateway.auth.user_provisioning import get_or_provision_oidc_user
+from app.gateway.auth.user_provisioning import ExistingAccountConflict, get_or_provision_oidc_user
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, _request_origin, auth_csrf_cookie_settings, generate_csrf_token, is_secure_request
 from app.gateway.deps import get_current_user_from_request, get_local_provider, get_mfa_repo, record_audit_event
 from deerflow.config.auth_config import OIDCProviderConfig
@@ -513,9 +513,7 @@ async def login_local(
 
     _record_login_success(client_ip)
 
-    mfa_repo = getattr(request.app.state, "mfa_repo", None)
-    mfa_row = await mfa_repo.get(str(user.id)) if mfa_repo is not None else None
-    if mfa_row is not None and mfa_row["enabled_at"] is not None:
+    if await _mfa_enabled_for(request, str(user.id)):
         challenge = _issue_mfa_challenge(str(user.id))
         return MfaChallengeResponse(challenge=challenge)
 
@@ -677,7 +675,7 @@ async def register(request: Request, response: Response, body: RegisterRequest):
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request, remember_me=body.remember_me)
 
-    return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role, oauth_provider=user.oauth_provider)
+    return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role, oauth_provider=user.oauth_provider, has_password=user.password_hash is not None)
 
 
 @router.post("/logout", response_model=MessageResponse)
@@ -779,22 +777,16 @@ async def get_me(request: Request):
         from app.gateway.authz import resolve_route_permissions_for_request
 
         permissions = await resolve_route_permissions_for_request(request, user)
-    # try/except, not a direct .app.state access: several existing tests call
-    # this handler directly against a lightweight fake Request (a
-    # SimpleNamespace with .state but no .app at all).
-    try:
-        mfa_repo = request.app.state.mfa_repo
-    except Exception:
-        mfa_repo = None
-    mfa_row = await mfa_repo.get(str(user.id)) if mfa_repo is not None else None
+    mfa_enabled = await _mfa_enabled_for(request, str(user.id))
     return UserResponse(
         id=str(user.id),
         email=user.email,
         system_role=user.system_role,
         needs_setup=user.needs_setup,
         oauth_provider=user.oauth_provider,
+        has_password=user.password_hash is not None,
         permissions=permissions,
-        mfa_enabled=mfa_row is not None and mfa_row["enabled_at"] is not None,
+        mfa_enabled=mfa_enabled,
     )
 
 
@@ -968,7 +960,9 @@ def _refuse_sso_mfa(user) -> None:
     and could never be removed. Their second factor is the identity
     provider's own (e.g. Google 2-Step Verification).
     """
-    if user.password_hash is None:
+    # A linked account keeps its password, but its SSO login still skips the
+    # TOTP step, so enabling TOTP afterwards would be bypassed.
+    if user.password_hash is None or user.oauth_provider is not None or user.oauth_id is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message="Single sign-on accounts use their identity provider's two-factor authentication").model_dump(),
@@ -1200,7 +1194,7 @@ async def initialize_admin(request: Request, response: Response, body: Initializ
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request, remember_me=body.remember_me)
 
-    return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role, oauth_provider=user.oauth_provider)
+    return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role, oauth_provider=user.oauth_provider, has_password=user.password_hash is not None)
 
 
 # ── OIDC / SSO Endpoints ────────────────────────────────────────────────
@@ -1477,19 +1471,56 @@ async def oauth_callback(
         return RedirectResponse(url=redirect, status_code=status.HTTP_302_FOUND)
 
     # ── Provision / link user ────────────────────────────────────────
+    client_ip = _get_client_ip(request)
+    user_agent = request.headers.get("user-agent")
     try:
-        result = await get_or_provision_oidc_user(provider, provider_config, identity, get_local_provider())
+        result = await get_or_provision_oidc_user(
+            provider,
+            provider_config,
+            identity,
+            get_local_provider(),
+            local_registration_open=_local_registration_enabled,
+            mfa_enabled=lambda user_id: _mfa_enabled_for(request, user_id),
+        )
     except HTTPException as exc:
         error_map = {
             status.HTTP_403_FORBIDDEN: "sso_not_allowed",
             status.HTTP_409_CONFLICT: "sso_account_exists",
         }
         error_code = error_map.get(exc.status_code, "sso_failed")
-        logger.warning("OIDC user provisioning failed for %s (%s): %s", identity.email, provider, exc.detail)
+        if isinstance(exc, ExistingAccountConflict):
+            logger.warning("OIDC login for %s (%s) matches an existing account it may not link to: %s", identity.email, provider, exc.reason)
+            # The subject is recorded so an admin can link the identity
+            # explicitly (PUT /api/admin/users/{id}/oauth) after checking
+            # with the person.
+            await record_audit_event(
+                request,
+                action="auth.oauth.link_refused",
+                outcome="denied",
+                target_type="user" if exc.user_id else None,
+                target_id=exc.user_id,
+                ip=client_ip,
+                user_agent=user_agent,
+                details={"provider": provider, "reason": exc.reason, "subject": identity.subject},
+            )
+        else:
+            logger.warning("OIDC user provisioning failed for %s (%s): %s", identity.email, provider, exc.detail)
         redirect = _build_error_redirect(oidc_config.frontend_base_url, error_code)
         return RedirectResponse(url=redirect, status_code=status.HTTP_302_FOUND)
 
     user = result["user"]
+    if result.get("linked"):
+        await record_audit_event(
+            request,
+            action="auth.oauth.linked",
+            outcome="success",
+            actor_user_id=str(user.id),
+            target_type="user",
+            target_id=str(user.id),
+            ip=client_ip,
+            user_agent=user_agent,
+            details={"provider": provider, "subject": identity.subject, "via": "verified_email"},
+        )
 
     # ── Join invited workspaces ──────────────────────────────────────
     # An account created just now for a pending invitation joins that
@@ -1530,6 +1561,25 @@ async def oauth_callback(
     delete_state_cookie(redirect_response, request, provider)
 
     return redirect_response
+
+
+async def _mfa_enabled_for(request: Request, user_id: str) -> bool:
+    """Whether ``user_id`` has confirmed TOTP enrollment.
+
+    The single definition the password login, ``/me`` and SSO account linking
+    share. No MFA repository (memory backend) means nobody could have
+    enrolled. try/except, not a direct ``.app.state`` access: several existing
+    tests call handlers directly against a lightweight fake Request with no
+    ``.app`` at all.
+    """
+    try:
+        mfa_repo = request.app.state.mfa_repo
+    except Exception:
+        mfa_repo = None
+    if mfa_repo is None:
+        return False
+    row = await mfa_repo.get(user_id)
+    return row is not None and row["enabled_at"] is not None
 
 
 def _build_error_redirect(frontend_base_url: str | None, error_code: str) -> str:

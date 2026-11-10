@@ -3329,6 +3329,12 @@ entitlements:
 #         # refusal as auto_create_users: false. Accounts it created keep
 #         # signing in after their invitation is used. Default: false.
 #         auto_create_requires_invitation: true
+#         # Let a first Google sign-in link to the one existing password
+#         # account with the same verified email instead of refusing it, when
+#         # local self-registration is off and that account has no SSO
+#         # identity, is not disabled and has no two-factor authentication.
+#         # Links and refusals are audited. Default: false.
+#         link_existing_accounts: true
 #         require_verified_email: true
 #         # Restrict sign-in to a Google Workspace domain (leave unset to allow
 #         # any Google account, including personal gmail.com addresses):
