@@ -260,6 +260,36 @@ async def test_attaching_to_a_flagged_clients_thread_is_refused_from_an_unflagge
     assert await no_phi.organization_is_no_phi("org-plain", project_id="proj-plain", thread_id="thread-health") is True
 
 
+async def test_promoting_a_flagged_source_thread_is_refused_into_an_unflagged_project(session_factory):
+    config = SimpleNamespace(no_phi=NoPhiConfig())
+    with patch.object(no_phi, "resolve_organization_id", return_value="org-plain"):
+        await no_phi.require_uploads_allowed(config, project_id="proj-plain", thread_id="thread-plain")
+        with pytest.raises(HTTPException) as refused:  # unflagged destination project, flagged source thread
+            await no_phi.require_uploads_allowed(config, project_id="proj-plain", thread_id="thread-health")
+    assert refused.value.status_code == 403
+
+
+async def test_multipart_upload_routes_enforce_the_policy_before_the_body_is_parsed(session_factory):
+    from app.gateway.routers import project_documents
+
+    async def _denied_preflight(*_args, **_kwargs):
+        raise HTTPException(status_code=403, detail=no_phi.UPLOADS_BLOCKED_DETAIL)
+
+    for router, path in ((uploads.router, "/api/threads/{thread_id}/uploads"), (project_documents.router, "/api/projects/{project_id}/documents")):
+        route = next(r for r in router.routes if r.path == path and "POST" in r.methods)
+        assert isinstance(route, uploads.NoPhiPreflightRoute)
+        assert getattr(route.endpoint, "__no_phi_preflight__", False)
+        request = MagicMock()
+        request.form = AsyncMock()  # reading the multipart body goes through request.form()
+
+        with patch.object(type(route), "preflight", _denied_preflight):
+            handler = route.get_route_handler()
+            with pytest.raises(HTTPException) as refused:
+                await handler(request)
+        assert refused.value.status_code == 403
+        request.form.assert_not_called()
+
+
 # -- admin switch -----------------------------------------------------------
 
 

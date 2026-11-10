@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
@@ -47,7 +48,41 @@ from deerflow.utils.thread_id import ThreadId
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/threads/{thread_id}/uploads", tags=["uploads"])
+_NO_PHI_PREFLIGHT_ATTR = "__no_phi_preflight__"
+
+
+def no_phi_preflight(endpoint):
+    """Mark a multipart endpoint so its route enforces the no-PHI policy BEFORE the body is parsed.
+
+    FastAPI parses ``File(...)``/``Form(...)`` parameters (spooling large parts to
+    temporary files) before any dependency or handler code runs, so the policy has to
+    run in the route handler wrapper, ahead of body parsing. Apply below the router
+    decorator: ``@router.post(...)`` / ``@no_phi_preflight`` / ``@require_permission(...)``.
+    """
+    setattr(endpoint, _NO_PHI_PREFLIGHT_ATTR, True)
+    return endpoint
+
+
+class NoPhiPreflightRoute(APIRoute):
+    """Route class running :meth:`preflight` before FastAPI reads the request body of marked endpoints."""
+
+    async def preflight(self, request: Request) -> None:
+        config = request.app.dependency_overrides.get(get_config, get_config)()
+        await require_uploads_allowed(config, thread_id=request.path_params.get("thread_id"))
+
+    def get_route_handler(self):
+        original = super().get_route_handler()
+        if not getattr(self.endpoint, _NO_PHI_PREFLIGHT_ATTR, False):
+            return original
+
+        async def handler(request: Request) -> Response:
+            await self.preflight(request)
+            return await original(request)
+
+        return handler
+
+
+router = APIRouter(prefix="/api/threads/{thread_id}/uploads", tags=["uploads"], route_class=NoPhiPreflightRoute)
 
 # Ingestion bridge surface (Phase-2 Slice C): the shared thread-upload
 # ingestion service (``app.gateway.upload_ingestion``) resolves these
@@ -371,6 +406,7 @@ async def reserve_upload_write(thread_id: str, request: Request) -> AsyncIterato
 
 
 @router.post("", response_model=UploadResponse)
+@no_phi_preflight
 # New chats reserve durable actor ownership before opening the upload directory.
 @require_permission("threads", "write", owner_check=True, require_existing=False)
 async def upload_files(

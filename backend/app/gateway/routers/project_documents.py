@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_config, get_project_document_repo, get_project_repo, get_thread_store
 from app.gateway.no_phi import require_uploads_allowed
-from app.gateway.routers.uploads import DEFAULT_MAX_FILE_SIZE, UPLOAD_CHUNK_SIZE, _get_upload_limit, reserve_upload_write
+from app.gateway.routers.uploads import DEFAULT_MAX_FILE_SIZE, UPLOAD_CHUNK_SIZE, NoPhiPreflightRoute, _get_upload_limit, no_phi_preflight, reserve_upload_write
 from app.gateway.upload_ingestion import ThreadUploadIngestionService, UnsafeFilenameError, UnsafeUploadDestinationError
 from deerflow.config.app_config import AppConfig
 from deerflow.config.paths import Paths, get_paths
@@ -49,7 +49,18 @@ from deerflow.utils.thread_id import ThreadId
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/projects/{project_id}/documents", tags=["project-documents"])
+class _ProjectNoPhiPreflightRoute(NoPhiPreflightRoute):
+    """Enforce the project no-PHI policy before the multipart body of a marked endpoint is parsed."""
+
+    async def preflight(self, request: Request) -> None:
+        project_id = request.path_params["project_id"]
+        # Owned-project check first so a foreign project's no-PHI status is never revealed.
+        await _require_project(request, project_id)
+        config = request.app.dependency_overrides.get(get_config, get_config)()
+        await require_uploads_allowed(config, project_id=project_id)
+
+
+router = APIRouter(prefix="/api/projects/{project_id}/documents", tags=["project-documents"], route_class=_ProjectNoPhiPreflightRoute)
 
 
 class ProjectDocumentResponse(BaseModel):
@@ -164,6 +175,7 @@ async def list_project_documents(
 
 
 @router.post("", response_model=ProjectDocumentUploadResponse, status_code=201)
+@no_phi_preflight
 @require_permission("projects", "write")
 async def upload_project_document(
     project_id: str,
@@ -292,9 +304,11 @@ async def promote_thread_file_to_shelf(
     """
     # Owned-project check first so a foreign project's no-PHI status is never revealed.
     await _require_project(request, project_id)
-    await require_uploads_allowed(config, project_id=project_id)
+    # The source thread is verified first so a foreign thread's no-PHI status is never revealed;
+    # then both ends are checked, as attach-to-thread does.
     if await get_thread_store(request).get(body.thread_id) is None:
         raise _not_found()
+    await require_uploads_allowed(config, project_id=project_id, thread_id=body.thread_id)
     repo = get_project_document_repo(request)
     try:
         display_name = validate_shelf_filename(body.shelf_name) if body.shelf_name is not None else validate_shelf_filename(normalize_filename(body.name))
