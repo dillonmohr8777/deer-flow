@@ -323,7 +323,49 @@ async def test_identity_linked_to_another_account_meanwhile_is_refused(db):
     await _assert_unlinked(db, account.id)
 
 
+async def test_linked_account_cannot_enroll_app_level_mfa_afterwards(db):
+    # Linking keeps the password, but SSO sign-ins skip TOTP, so enabling MFA
+    # after the link would be bypassed by every later Google login.
+    account = await _password_account(db)
+    linked = (await _provision(db))["user"]
+    assert linked.password_hash is not None
+
+    with pytest.raises(HTTPException) as exc_info:
+        auth_router._refuse_sso_mfa(await _provider(db).get_user_by_id(str(account.id)))
+    assert exc_info.value.status_code == 400
+
+    # An unlinked password account can still enroll.
+    other = await _password_account(db, email="other@example.com")
+    auth_router._refuse_sso_mfa(await _provider(db).get_user_by_id(str(other.id)))
+
+
 # ── repository ──────────────────────────────────────────────────────────
+
+
+async def test_link_returns_the_snapshot_taken_with_the_update(db):
+    account = await _password_account(db)
+
+    def racing_session_factory():
+        session = db()
+        real_commit = session.commit
+
+        async def commit_then_admin_replaces_identity():
+            await real_commit()
+            async with db() as other:
+                await other.execute(update(UserRow).where(UserRow.id == str(account.id)).values(oauth_provider="google", oauth_id="replacement", token_version=UserRow.token_version + 1))
+                await other.commit()
+
+        session.commit = commit_then_admin_replaces_identity
+        return session
+
+    linked = await SQLiteUserRepository(racing_session_factory).link_oauth_identity_if_unlinked(str(account.id), "google", _SUBJECT)
+
+    # The callback sees the state its own link produced, not the replacement's
+    # bumped token_version / identity, so it cannot mint a session that
+    # outlives the replacement's revocation.
+    assert linked.oauth_id == _SUBJECT and linked.token_version == 0
+    row = await _row(db, account.id)
+    assert row.oauth_id == "replacement" and row.token_version == 1
 
 
 async def test_count_users_by_email_is_case_insensitive(db):

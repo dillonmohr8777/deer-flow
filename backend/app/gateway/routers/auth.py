@@ -960,7 +960,9 @@ def _refuse_sso_mfa(user) -> None:
     and could never be removed. Their second factor is the identity
     provider's own (e.g. Google 2-Step Verification).
     """
-    if user.password_hash is None:
+    # A linked account keeps its password, but its SSO login still skips the
+    # TOTP step, so enabling TOTP afterwards would be bypassed.
+    if user.password_hash is None or user.oauth_provider is not None or user.oauth_id is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message="Single sign-on accounts use their identity provider's two-factor authentication").model_dump(),

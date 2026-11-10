@@ -338,20 +338,22 @@ class SQLiteUserRepository(UserRepository):
                 UserRow.disabled_at.is_(None),
             )
             .values(oauth_provider=provider, oauth_id=oauth_id)
+            .returning(UserRow)
+            .execution_options(populate_existing=True)
         )
         async with self._sf() as session:
             try:
-                result = await session.execute(stmt)
+                # RETURNING captures the linked row (and its token_version)
+                # in the same statement as the update, before the commit.
+                row = (await session.execute(stmt)).scalars().first()
+                user = self._row_to_user(row) if row is not None else None
                 await session.commit()
             except IntegrityError as exc:
                 await session.rollback()
                 if _is_oauth_identity_violation(exc):
                     raise ValueError(f"OAuth account already linked: {provider}") from exc
                 raise
-            if result.rowcount != 1:
-                return None
-            row = await session.get(UserRow, user_id, populate_existing=True)
-            return self._row_to_user(row) if row is not None else None
+            return user
 
     async def set_oauth_identity(
         self,
