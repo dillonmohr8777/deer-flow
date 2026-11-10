@@ -63,12 +63,24 @@ def no_phi_preflight(endpoint):
     return endpoint
 
 
+async def _authorize_thread_write(request: Request, thread_id: str) -> None:
+    return None
+
+
+_authorize_thread_write = require_permission("threads", "write", owner_check=True, require_existing=False)(_authorize_thread_write)
+
+
 class NoPhiPreflightRoute(APIRoute):
     """Route class running :meth:`preflight` before FastAPI reads the request body of marked endpoints."""
 
     async def preflight(self, request: Request) -> None:
+        thread_id = request.path_params.get("thread_id")
+        # Authorize + ownership-check first (same policy as the endpoint's own
+        # decorator; new thread IDs stay allowed) so a foreign thread's no-PHI
+        # status is never revealed.
+        await _authorize_thread_write(request=request, thread_id=thread_id)
         config = request.app.dependency_overrides.get(get_config, get_config)()
-        await require_uploads_allowed(config, thread_id=request.path_params.get("thread_id"))
+        await require_uploads_allowed(config, thread_id=thread_id)
 
     def get_route_handler(self):
         original = super().get_route_handler()
