@@ -20,6 +20,10 @@ class GuardrailsConfig(BaseModel):
 
     enabled: bool = Field(default=False, description="Enable guardrail middleware")
     fail_closed: bool = Field(default=True, description="Block tool calls if provider errors")
+    audit_only: bool = Field(
+        default=False,
+        description="Evaluate and record every decision but never block: a would-be denial or a provider error is recorded and the tool call proceeds. Use it to observe a policy before enforcing it.",
+    )
     passport: str | None = Field(default=None, description="OAP passport path or hosted agent ID")
     provider: GuardrailProviderConfig | None = Field(default=None, description="Guardrail provider configuration")
 

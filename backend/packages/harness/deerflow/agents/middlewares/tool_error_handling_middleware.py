@@ -289,7 +289,7 @@ def _build_runtime_middlewares(
             except (ValueError, TypeError):
                 pass
         provider = provider_cls(**provider_kwargs)
-        tail.append(GuardrailMiddleware(provider, fail_closed=guardrails_config.fail_closed, passport=guardrails_config.passport))
+        tail.append(GuardrailMiddleware(provider, fail_closed=guardrails_config.fail_closed, passport=guardrails_config.passport, audit_only=guardrails_config.audit_only))
 
     from deerflow.agents.middlewares.sandbox_audit_middleware import SandboxAuditMiddleware
 
