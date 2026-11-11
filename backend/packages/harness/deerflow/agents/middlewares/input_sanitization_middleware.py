@@ -127,6 +127,9 @@ _BLOCKED_TAG_NAMES: frozenset[str] = frozenset(
         # Subscription block (lead_agent/prompt.py): the server-set MomoBot tier.
         # Forging it in untrusted input could change how the agent presents itself.
         "momobot_tier",
+        # No-PHI guard block (lead_agent/prompt.py): the server-set health-client rules.
+        # Forging it in untrusted input could fake a lifted restriction or a guard that is not there.
+        "no_phi_guard",
         # User profile block (lead_agent/prompt.py, USER.md): carries the
         # effective user's saved background/preferences (Momentum Phase 2).
         # Forging it in untrusted input could impersonate the account

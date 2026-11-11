@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, DateTime, Index, String
+from sqlalchemy import JSON, Boolean, DateTime, Index, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from deerflow.persistence.base import Base
@@ -24,6 +24,10 @@ class OrganizationRow(Base):
 
     # Explicit server-owned customer binding. Agency and legacy workspaces stay NULL.
     customer_client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Health-sector workspace: no patient information, no uploads. Admin-set only; see app/gateway/no_phi.py.
+    # server_default only (no Python-side default): an INSERT then omits the column, so seeds written against
+    # a schema older than 0054 still work. Readers use bool(), which treats an unloaded value as unflagged.
+    no_phi: Mapped[bool] = mapped_column(Boolean, server_default=false())
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     slug: Mapped[str] = mapped_column(String(128), unique=True, index=True)

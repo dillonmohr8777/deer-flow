@@ -8,6 +8,7 @@ import { RetroResolve } from "@/components/workspace/command-center/retro-resolv
 import { CommandPalette } from "@/components/workspace/command-palette";
 import { GatewayOfflineBanner } from "@/components/workspace/gateway-offline-banner";
 import { ModelLoadErrorBanner } from "@/components/workspace/model-load-error-banner";
+import { NoPhiBanner } from "@/components/workspace/no-phi-banner";
 import { FirstLoginGate } from "@/components/workspace/onboarding-flow";
 import { RoleRouteGuard } from "@/components/workspace/role-route-guard";
 import { SettingsDialogHost } from "@/components/workspace/settings";
@@ -74,6 +75,7 @@ export async function WorkspaceContent({
               >
                 <GatewayOfflineBanner gatewayUnavailable={gatewayUnavailable} />
                 <ModelLoadErrorBanner gatewayUnavailable={gatewayUnavailable} />
+                <NoPhiBanner />
                 <RoleRouteGuard>{children}</RoleRouteGuard>
               </div>
             </SidebarInset>

@@ -447,6 +447,33 @@ def test_task_tool_forwards_the_run_extension_snapshot_to_executor(monkeypatch):
     assert assemble_tools.call_args.kwargs["extensions"] is loaded
 
 
+@pytest.mark.parametrize(("flag", "expected"), [(True, True), (None, False), ("true", False)])
+def test_task_tool_forwards_only_a_server_set_no_phi_flag_to_the_subagent(monkeypatch, flag, expected):
+    runtime = _make_runtime()
+    if flag is not None:
+        runtime.context["no_phi"] = flag
+    captured = {}
+
+    class DummyExecutor:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def execute_async(self, prompt, task_id=None):
+            return task_id or "generated-task-id"
+
+    monkeypatch.setattr(task_tool_module, "SubagentStatus", FakeSubagentStatus)
+    monkeypatch.setattr(task_tool_module, "SubagentExecutor", DummyExecutor)
+    monkeypatch.setattr(task_tool_module, "get_subagent_config", lambda _: _make_subagent_config())
+    monkeypatch.setattr(task_tool_module, "get_background_task_result", lambda _: _make_result(FakeSubagentStatus.COMPLETED, result="done"))
+    monkeypatch.setattr(task_tool_module, "get_stream_writer", lambda: lambda _event: None)
+    monkeypatch.setattr(task_tool_module.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr("deerflow.tools.get_available_tools", MagicMock(return_value=[]))
+
+    _run_task_tool(runtime=runtime, description="test", prompt="p", subagent_type="general-purpose", tool_call_id="tc-phi")
+
+    assert captured["no_phi"] is expected
+
+
 def test_task_tool_installs_and_closes_narrow_middleware_recorder(monkeypatch):
     journal = MagicMock()
     runtime = _make_runtime()

@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app.gateway.auth_disabled import AUTH_SOURCE_SESSION
 from app.gateway.auth_middleware import WORKSPACE_COOKIE_NAME
 from app.gateway.csrf_middleware import is_secure_request
+from app.gateway.no_phi import organization_is_no_phi
 from deerflow.persistence.engine import get_session_factory
 from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
@@ -32,6 +33,8 @@ class WorkspaceListResponse(BaseModel):
     active_workspace_id: str | None = None
     # The private workspace's own name once an operator has given it one; None keeps the default label.
     private_workspace_name: str | None = None
+    # The workspace this request runs in is a health-sector one: the client shows a no-patient-information banner.
+    active_no_phi: bool = False
 
 
 class WorkspaceCreateRequest(BaseModel):
@@ -132,6 +135,7 @@ async def list_workspaces(request: Request) -> WorkspaceListResponse:
         workspaces=workspaces,
         active_workspace_id=active_workspace_id,
         private_workspace_name=None if private_name == "Private organization" else private_name,
+        active_no_phi=await organization_is_no_phi(getattr(request.state, "organization_id", None)),
     )
 
 
