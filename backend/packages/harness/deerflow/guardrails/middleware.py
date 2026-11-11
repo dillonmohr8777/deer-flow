@@ -177,7 +177,6 @@ class GuardrailMiddleware(AgentMiddleware[AgentState]):
         except Exception:  # noqa: BLE001
             logger.warning("Failed to record middleware:guardrail event", exc_info=True)
 
-    @override
     def _audit_only_allow(self, context: dict, guardrail_request: GuardrailRequest, decision: GuardrailDecision) -> GuardrailDecision:
         """Audit-only mode: record the would-be denial, then let the call through.
 
@@ -200,6 +199,7 @@ class GuardrailMiddleware(AgentMiddleware[AgentState]):
             metadata=dict(decision.metadata),
         )
 
+    @override
     def wrap_tool_call(
         self,
         request: ToolCallRequest,

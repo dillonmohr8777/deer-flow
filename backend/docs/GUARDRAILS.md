@@ -76,7 +76,8 @@ The `GuardrailMiddleware` implements `wrap_tool_call` / `awrap_tool_call` (the s
 3. If **deny**: returns `ToolMessage(status="error")` with the reason -- agent sees the denial and adapts
 4. If **allow**: passes through to the actual tool handler
 5. If **provider error** and `fail_closed=true` (default): blocks the call
-6. `GraphBubbleUp` exceptions (LangGraph control signals) are always propagated, never caught
+6. If `audit_only=true`: nothing is blocked. A would-be denial is recorded to the run journal as `audit_would_deny_tool_call` (the event keeps `allow: false`; the action name is what marks it as not enforced), a provider error never fails closed, and the call proceeds. Use it to observe a policy on real traffic before enforcing it.
+7. `GraphBubbleUp` exceptions (LangGraph control signals) are always propagated, never caught
 
 ## Three Provider Options
 
@@ -525,6 +526,7 @@ guardrails:
 
   # Block tool calls if provider raises an exception (default: true)
   fail_closed: true
+  audit_only: false   # true: record each would-be denial as audit_would_deny_tool_call and let the call through
 
   # Passport reference -- passed as request.agent_id to the provider.
   # File path, hosted agent ID, or null (provider resolves from its config).

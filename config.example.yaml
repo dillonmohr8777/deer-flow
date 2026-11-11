@@ -3166,6 +3166,7 @@ authorization:
 entitlements:
   enabled: false
   # fail_closed: true
+  # audit_only: false        # true: evaluate and record would-be denials, block nothing (observe a policy before enforcing it)
   # grace_period_seconds: 300
   # default_limits:
   #   projects_max: null
