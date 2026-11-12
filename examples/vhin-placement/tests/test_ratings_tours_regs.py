@@ -245,6 +245,25 @@ def test_family_tour_reply_pauses_followups_and_keeps_plan_open(owner):
     assert confirmed.status_code == 200 and confirmed.json()["parties"]["family"]["status"] == "accepts"
 
 
+def test_plan_after_family_reply_stays_open_and_completes_three_party_flow(owner, coordinator):
+    referral = qualified(owner)
+    homes = tour_homes(owner)
+    assert post(owner, f"/referrals/{referral['id']}/contact-events", {"event": "reply"}).status_code == 200
+    state = owner.get("/api/vhin/state").json()
+    assert next(r for r in state["referrals"] if r["id"] == referral["id"])["contact_status"] == "paused"
+    plan = post(owner, "/tour-plans", plan_body(referral["id"], homes, 2, 3)).json()
+    assert plan["status"] == "awaiting_replies" and plan["drafts"]["family"] is None
+    assert plan["parties"]["family"]["status"] == "pending"
+    assert all(p["status"] == "pending" for p in plan["parties"]["communities"].values())
+    path = f"/tour-plans/{plan['id']}/responses"
+    assert post(coordinator, path, {"party": "family", "response": "accepts", "option": 1, "source_ref": "family text"}).status_code == 200
+    for home in homes:
+        result = post(coordinator, path, {"party": "community", "community_id": home["id"], "response": "accepts", "option": 1, "source_ref": "call"})
+        assert result.status_code == 200, result.text
+    done = post(owner, path, {"party": "owner", "response": "accepts", "option": 1, "source_ref": "owner in person"})
+    assert done.status_code == 200 and done.json()["status"] == "ready_to_book"
+
+
 def test_tour_plan_respects_stop_and_drops_conflicting_options(owner):
     referral = qualified(owner)
     homes = tour_homes(owner)
