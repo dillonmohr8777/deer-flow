@@ -1,0 +1,7 @@
+[Unit]
+Description=MomoBot backup freshness check (emails when the newest backup is older than 14 h)
+[Service]
+Type=oneshot
+ExecStart=/opt/momobot/ops/backup-fresh.sh
+# exit 1 means stale (already reported by email); do not mark the unit failed for that
+SuccessExitStatus=1

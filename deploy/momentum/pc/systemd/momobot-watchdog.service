@@ -1,0 +1,5 @@
+[Unit]
+Description=MomoBot health check and self-heal
+[Service]
+Type=oneshot
+ExecStart=/opt/momobot/ops/watchdog.sh
