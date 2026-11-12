@@ -65,9 +65,12 @@ class CodexWithFallback(CodexChatModel):
             logger.warning("Codex %s failed (%s: %s); falling back to %s", self.model, type(exc).__name__, str(exc)[:200], self.fallback_model)
             from deerflow.models.factory import create_chat_model
 
-            fb = create_chat_model(name=self.fallback_model, thinking_enabled=True)
+            fb = create_chat_model(name=self.fallback_model, thinking_enabled=True, attach_tracing=False)
             tools = _to_chat_tools(kwargs.get("tools"))
             runnable = fb.bind_tools(tools) if tools else fb
-            message = runnable.invoke(messages, stop=stop)
+            # Empty callbacks so the fallback call does not inherit the graph's handlers (e.g. the
+            # RunJournal); only the outer Codex run reports this turn. The fallback model's own
+            # spending-cap callback is attached to the model itself and still runs.
+            message = runnable.invoke(messages, stop=stop, config={"callbacks": []})
             message.response_metadata = {**(message.response_metadata or {}), "momo_fallback_from": self.model, "momo_fallback_reason": type(exc).__name__}
             return ChatResult(generations=[ChatGeneration(message=message)])

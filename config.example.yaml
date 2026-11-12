@@ -713,6 +713,10 @@ models:
   #   api_key: $OPENROUTER_API_KEY
   #   base_url: https://openrouter.ai/api/v1
   #   admission_route: openrouter
+  #   pricing:
+  #     currency: USD
+  #     input_per_million: 1.0   # adjust to the current OpenRouter price for this model
+  #     output_per_million: 5.0  # adjust to the current OpenRouter price for this model
   #   max_tokens: 16000
   #   timeout: 600.0
   #   max_retries: 2

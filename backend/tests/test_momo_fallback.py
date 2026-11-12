@@ -53,8 +53,9 @@ class _FakeFallback:
         self.bound_tools = tools
         return self
 
-    def invoke(self, messages, stop=None):
+    def invoke(self, messages, stop=None, config=None):
         self.invoked_with = messages
+        self.invoked_config = config
         return AIMessage(content="from fallback", tool_calls=[{"name": "lookup", "args": {"q": "x"}, "id": "call-1", "type": "tool_call"}])
 
 
@@ -90,11 +91,50 @@ def test_http_429_falls_back_with_tools_preserved(monkeypatch, factory):
 
     assert result.content == "from fallback"
     assert result.tool_calls[0]["name"] == "lookup"
-    assert calls == [{"name": "openrouter-haiku-5-5-max", "thinking_enabled": True}]
+    assert calls == [{"name": "openrouter-haiku-5-5-max", "thinking_enabled": True, "attach_tracing": False}]
+    assert fake.invoked_config == {"callbacks": []}
     assert [t["function"]["name"] for t in fake.bound_tools] == ["lookup"]
     assert fake.invoked_with[0].content == "hi"
     assert result.response_metadata["momo_fallback_from"] == "gpt-6.1-terra"
     assert result.response_metadata["momo_fallback_reason"] == "HTTPStatusError"
+
+
+def test_fallback_turn_reports_one_llm_end_to_parent_callbacks(monkeypatch):
+    from langchain_core.callbacks import BaseCallbackHandler
+    from langchain_core.language_models.chat_models import BaseChatModel
+    from langchain_core.outputs import ChatGeneration, ChatResult
+    from langchain_core.runnables import RunnableLambda
+
+    from deerflow.models.openai_codex_provider import CodexChatModel
+
+    class _RealFallback(BaseChatModel):
+        @property
+        def _llm_type(self) -> str:
+            return "fake-fallback"
+
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content="from fallback"))])
+
+    class _Counter(BaseCallbackHandler):
+        def __init__(self):
+            self.llm_ends = 0
+
+        def on_llm_end(self, response, **kwargs):
+            self.llm_ends += 1
+
+    monkeypatch.setattr("deerflow.models.factory.create_chat_model", lambda **kwargs: _RealFallback())
+    monkeypatch.setattr(CodexChatModel, "_call_codex_api", _raise(_http_error(429)))
+    model = _make_model()
+    counter = _Counter()
+
+    # RunnableLambda makes the parent config (with its callbacks) ambient, like a LangGraph node.
+    result = RunnableLambda(lambda msgs: model.invoke(msgs)).invoke([HumanMessage(content="hi")], config={"callbacks": [counter]})
+
+    assert result.content == "from fallback"
+    assert counter.llm_ends == 1
 
 
 def test_http_504_gateway_timeout_falls_back(monkeypatch, factory):
