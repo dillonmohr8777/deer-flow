@@ -7,8 +7,14 @@ services:
     volumes:
       # Private staff portraits survive image rebuilds and use the existing brand backup.
       - /opt/momobot/data/brand/daily-people:/app/frontend/public/momentum/daily/people:ro
+      # Verbatim state regulation pages (public law, built by examples/vhin-placement/scripts/
+      # build_regulations.py --mirror, kept out of Git) served at /regulations/<STATE>/ so the chat
+      # agent's web_fetch can read and cite them.
+      - /opt/momobot/data/regulations/mirror:/app/frontend/public/regulations:ro
   gateway:
     environment:
+      # Explicit origins only, for TLS proxies whose upstream scheme is HTTP.
+      - GATEWAY_CORS_ORIGINS=${GATEWAY_CORS_ORIGINS:-}
       - MOMO_ADMISSION_DIR=/var/momo-admission
       - MOMO_LOBBY_NOTES_DIR=/var/momo-lobby-notes
       # Per-person onboarding profiles (<email>.md), built outside Git. Empty folder = no pre-fill.
@@ -19,6 +25,8 @@ services:
       # MOMO_WSL_BRIDGE_ENABLED=true; the root lives in the persistent gateway data volume (0700).
       - MOMO_WSL_BRIDGE_ENABLED=${MOMO_WSL_BRIDGE_ENABLED:-false}
       - MOMO_WSL_BRIDGE_ROOT=/app/backend/.deer-flow/wsl-bridge
+      # Built regulation corpus for the placement extension (read-only; inert until it is enabled).
+      - VHIN_REGULATIONS_DIR=/var/momo-regulations
     volumes:
       - /opt/momobot/data/skills:/app/skills:ro
       - /opt/momobot/data/admission:/var/momo-admission
@@ -26,6 +34,7 @@ services:
       - /opt/momobot/data/people:/var/momo-people:ro
       - /opt/momobot/data/brand:/var/momobot-brand:ro
       - /opt/momobot/data/evals:/app/backend/.deer-flow/agency-evals:ro
+      - /opt/momobot/data/regulations/corpus:/var/momo-regulations:ro
       - /opt/momobot/code/momo_guard.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_guard.py:ro
       - /opt/momobot/code/momo_protocol.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_protocol.py:ro
       # Placement extension from a pinned git worktree (README "Operator extensions"). Inert until a

@@ -1,26 +1,28 @@
 """Synthetic HTTP acceptance; no real accounts, credentials, or network calls."""
 
 import asyncio
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 from deerflow_extension_api import EXTENSION_PRINCIPAL_RESOLVER_KEY, ExtensionPrincipal
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from vhin_placement import install
 from vhin_placement.api import Service, build_router
-from vhin_placement.store import Store, put
+from vhin_placement.store import Store, put, records
 
 BASE = datetime(2026, 10, 20, 20, tzinfo=UTC)
 
 
-def build_test_app(data_dir, user_id="justin", organization_id="vhin", auth_source="session", principal=True, csrf=False):
+def build_test_app(data_dir, user_id="owner", organization_id="vhin", auth_source="session", principal=True, csrf=False):
     """Test-only host adapter; never install this identity stub in a real Gateway."""
     service = Service(
-        {"data_dir": str(data_dir), "organization_id": "vhin", "allowed_user_ids": ["justin", "grace"], "placement_confirmer_user_ids": ["justin"]}
+        {"data_dir": str(data_dir), "organization_id": "vhin", "allowed_user_ids": ["owner", "coordinator"], "placement_confirmer_user_ids": ["owner"]}
     )
     asyncio.run(service.start(None))
     app = FastAPI()
@@ -141,26 +143,26 @@ def test_identity_isolation_and_restart(client, tmp_path):
             assert isolated.get("/api/vhin/state").status_code == 403
             assert isolated.get(f"/api/vhin/referrals/{referral['id']}").status_code == 403
             assert post(isolated, "/referrals", referral_data(), "import-001").status_code == 403
-    app, _ = build_test_app(tmp_path, user_id="grace")
-    with TestClient(app) as grace:
-        assert grace.get(f"/api/vhin/referrals/{referral['id']}").json()["name"] == "Synthetic Family"
-        grace_referral = post(
-            grace,
+    app, _ = build_test_app(tmp_path, user_id="coordinator")
+    with TestClient(app) as coordinator:
+        assert coordinator.get(f"/api/vhin/referrals/{referral['id']}").json()["name"] == "Synthetic Family"
+        coordinator_referral = post(
+            coordinator,
             "/referrals",
-            referral_data(source_ref="synthetic-form:grace", email="grace@example.test", phone="813-555-0199"),
+            referral_data(source_ref="synthetic-form:coordinator", email="coordinator@example.test", phone="813-555-0199"),
             "import-001",
         )
-        assert grace_referral.status_code == 201
-        assert grace_referral.json()["id"] != referral["id"]
-        response = grace.patch(
-            f"/api/vhin/referrals/{referral['id']}", json={"expected_version": 1, "name": "Synthetic Grace update"}, headers={"Idempotency-Key": "update"}
+        assert coordinator_referral.status_code == 201
+        assert coordinator_referral.json()["id"] != referral["id"]
+        response = coordinator.patch(
+            f"/api/vhin/referrals/{referral['id']}", json={"expected_version": 1, "name": "Synthetic coordinator update"}, headers={"Idempotency-Key": "update"}
         )
         assert response.status_code == 200
     app, _ = build_test_app(tmp_path)
     with TestClient(app) as restarted:
-        assert restarted.get(f"/api/vhin/referrals/{referral['id']}").json()["name"] == "Synthetic Grace update"
+        assert restarted.get(f"/api/vhin/referrals/{referral['id']}").json()["name"] == "Synthetic coordinator update"
         assert post(restarted, "/referrals", referral_data(), "import-001").json()["id"] == referral["id"]
-        assert restarted.get("/api/vhin/state").json()["audit"][0]["actor"] == "grace"
+        assert restarted.get("/api/vhin/state").json()["audit"][0]["actor"] == "coordinator"
 
 
 def test_source_replay_duplicate_contacts_and_conflicts(client):
@@ -335,7 +337,7 @@ def test_fees_exact_cents_receipts_and_separate_totals(client):
 
 
 def test_store_serializes_retries_and_separates_workspaces(tmp_path):
-    store = Store(tmp_path, "vhin", "workspace-a", "justin")
+    store = Store(tmp_path, "vhin", "workspace-a", "owner")
 
     def write_once():
         return store.mutate("same-key", "test.write", {"value": 1}, lambda connection: put(connection, "test", {"id": "record-1", "value": 1}))
@@ -344,13 +346,57 @@ def test_store_serializes_retries_and_separates_workspaces(tmp_path):
         assert list(pool.map(lambda _: write_once(), range(2))) == [{"id": "record-1", "value": 1}] * 2
     with store.transaction() as connection:
         assert connection.execute("SELECT COUNT(*) FROM audit").fetchone()[0] == 1
-    assert store.path != Store(tmp_path, "other", "workspace-a", "justin").path
-    assert store.path != Store(tmp_path, "vhin", "workspace-b", "justin").path
+    assert store.path != Store(tmp_path, "other", "workspace-a", "owner").path
+    assert store.path != Store(tmp_path, "vhin", "workspace-b", "owner").path
+
+
+def test_store_failed_mutation_rolls_back_every_write_and_frees_its_key(tmp_path):
+    store = Store(tmp_path, "vhin", "workspace-a", "owner")
+
+    def fails_after_writing(connection):
+        put(connection, "test", {"id": "first"})
+        put(connection, "test", {"id": "second"})
+        raise HTTPException(409, "late conflict")
+
+    with pytest.raises(HTTPException):
+        store.mutate("same-key", "test.write", {"value": 1}, fails_after_writing)
+    with store.transaction() as connection:
+        assert records(connection, "test") == []
+        assert [connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in ("retries", "audit")] == [0, 0]
+    # The failed attempt left no receipt, so the key is still free for the corrected request, then bound to it.
+    assert store.mutate("same-key", "test.write", {"value": 2}, lambda connection: put(connection, "test", {"id": "third"})) == {"id": "third"}
+    with pytest.raises(HTTPException) as reused:
+        store.mutate("same-key", "test.write", {"value": 3}, lambda connection: put(connection, "test", {"id": "fourth"}))
+    assert reused.value.status_code == 409
+
+
+def test_store_writer_waits_for_an_open_transaction_and_sees_its_commit(tmp_path):
+    store = Store(tmp_path, "vhin", "workspace-a", "owner")
+    holding, order = threading.Event(), []
+
+    def holder():
+        with store.transaction() as connection:
+            put(connection, "test", {"id": "first"})
+            holding.set()
+            time.sleep(0.3)  # give the writer below every chance to run early if the lock were missing
+            order.append("holder commits")
+
+    def writer(connection):
+        order.append("writer runs")
+        return put(connection, "test", {"id": "second", "saw": [r["id"] for r in records(connection, "test")]})
+
+    thread = threading.Thread(target=holder)
+    thread.start()
+    assert holding.wait(5)
+    result = store.mutate("writer-key", "test.write", {}, writer)
+    thread.join()
+    assert order == ["holder commits", "writer runs"]
+    assert result["saw"] == ["first"]
 
 
 def test_placement_requires_configured_confirmer_and_signed_terms(tmp_path, monkeypatch):
     monkeypatch.setattr("vhin_placement.api.now", lambda: BASE)
-    app, _ = build_test_app(tmp_path, user_id="grace")
+    app, _ = build_test_app(tmp_path, user_id="coordinator")
     with TestClient(app) as client:
         referral, place = qualified(client), community(client)
         payload = {
@@ -377,7 +423,7 @@ def test_extension_registration_and_stop(tmp_path):
             self.routes = routers
 
     registry = Registry()
-    install(registry, {"data_dir": str(tmp_path), "organization_id": "vhin", "allowed_user_ids": ["justin"]})
+    install(registry, {"data_dir": str(tmp_path), "organization_id": "vhin", "allowed_user_ids": ["owner"]})
     assert registry.routes[0].prefix == "/api/vhin"
     app, service = build_test_app(tmp_path)
     asyncio.run(service.stop())

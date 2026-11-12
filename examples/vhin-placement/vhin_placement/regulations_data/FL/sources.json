@@ -1,0 +1,199 @@
+{
+  "state": "FL",
+  "name": "Florida assisted living regulations (Rule Chapter 59A-36, F.A.C., and Part I of Chapter 429, F.S.)",
+  "sources": [
+    {
+      "id": "fac-59A-36",
+      "title": "Florida Administrative Code, Rule Chapter 59A-36, Assisted Living Facility",
+      "publisher": "Florida Department of State, flrules.org",
+      "parser": "fac_chapter_word",
+      "chapter": "59A-36",
+      "index_url": "https://www.flrules.org/gateway/ChapterHome.asp?Chapter=59A-36",
+      "section_url": "https://www.flrules.org/gateway/ruleNo.asp?id={section}"
+    },
+    {
+      "id": "fs-429-part-1",
+      "title": "Florida Statutes, Chapter 429, Part I, Assisted Living Facilities",
+      "publisher": "The Florida Legislature, leg.state.fl.us",
+      "parser": "fl_statute_section_html",
+      "edition": "2026 Florida Statutes",
+      "index_url": "https://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0429/0429PartIContentsIndex.html",
+      "section_url": "https://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0400-0499/0429/Sections/{file}.html"
+    }
+  ],
+  "lay_terms": {
+    "hoyer": [
+      "total body lift",
+      "sit-to-stand",
+      "assistance with transfer",
+      "total physical assistance",
+      "transfer",
+      "more than one person",
+      "assistive devices",
+      "bedridden"
+    ],
+    "lift": [
+      "transfer",
+      "assistive",
+      "devices"
+    ],
+    "wheelchair": [
+      "ambulate",
+      "mobility",
+      "assistive",
+      "devices",
+      "transfer"
+    ],
+    "walker": [
+      "assistive",
+      "devices",
+      "ambulate"
+    ],
+    "bedbound": [
+      "bedridden"
+    ],
+    "dementia": [
+      "alzheimer",
+      "memory",
+      "impairment",
+      "cognitive"
+    ],
+    "memory": [
+      "alzheimer",
+      "dementia"
+    ],
+    "feeding": [
+      "tube",
+      "dietary",
+      "nutrition"
+    ],
+    "insulin": [
+      "injections",
+      "medication",
+      "nurse"
+    ],
+    "shots": [
+      "injections",
+      "medication"
+    ],
+    "meds": [
+      "medication",
+      "self-administration"
+    ],
+    "pills": [
+      "medication",
+      "self-administration"
+    ],
+    "catheter": [
+      "catheter",
+      "nursing",
+      "services"
+    ],
+    "oxygen": [
+      "oxygen",
+      "nursing",
+      "services"
+    ],
+    "hospice": [
+      "hospice",
+      "terminally"
+    ],
+    "wandering": [
+      "elopement",
+      "wander"
+    ],
+    "wanders": [
+      "elopement",
+      "wander"
+    ],
+    "sore": [
+      "pressure",
+      "sores"
+    ],
+    "bedsore": [
+      "pressure",
+      "sores"
+    ],
+    "kick": [
+      "discharge",
+      "relocation",
+      "termination"
+    ],
+    "evict": [
+      "discharge",
+      "relocation",
+      "termination",
+      "notice"
+    ],
+    "evicted": [
+      "discharge",
+      "relocation",
+      "termination",
+      "notice"
+    ],
+    "nurse": [
+      "nursing",
+      "licensed",
+      "nurse"
+    ],
+    "staff": [
+      "staffing",
+      "staff"
+    ],
+    "ratio": [
+      "staffing",
+      "minimum",
+      "hours"
+    ],
+    "generator": [
+      "emergency",
+      "power",
+      "environmental",
+      "control"
+    ],
+    "hurricane": [
+      "emergency",
+      "management",
+      "evacuation"
+    ],
+    "medicaid": [
+      "optional",
+      "state",
+      "supplementation",
+      "medicaid"
+    ],
+    "ecc": [
+      "extended",
+      "congregate",
+      "care"
+    ],
+    "lns": [
+      "limited",
+      "nursing",
+      "services"
+    ],
+    "lmh": [
+      "limited",
+      "mental",
+      "health"
+    ],
+    "mental": [
+      "mental",
+      "illness",
+      "limited",
+      "health"
+    ],
+    "discharge": [
+      "relocation",
+      "termination",
+      "residency",
+      "notice"
+    ],
+    "discharging": [
+      "relocation",
+      "termination",
+      "residency",
+      "notice"
+    ]
+  }
+}
