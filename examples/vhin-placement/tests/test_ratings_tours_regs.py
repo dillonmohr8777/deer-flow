@@ -468,6 +468,38 @@ def test_one_open_plan_per_family_and_supersede(owner):
     assert [d["status"] for d in state["drafts"] if d.get("tour_plan_id") == first["id"]] == ["superseded"]
 
 
+def test_failed_supersede_rolls_back_and_keeps_the_open_plan(owner):
+    referral = qualified(owner)
+    homes = tour_homes(owner)
+    first = post(owner, "/tour-plans", plan_body(referral["id"], homes, 2)).json()
+    booked = {
+        "referral_id": referral["id"],
+        "community_id": homes[0]["id"],
+        "start_at": (BASE + timedelta(days=5)).isoformat(),
+        "end_at": (BASE + timedelta(days=5, hours=1)).isoformat(),
+    }
+    assert post(owner, "/tours", booked).status_code == 201
+    before = owner.get("/api/vhin/state").json()
+    # The replacement marks the open plan and its draft superseded, then finds every new time taken: the whole
+    # transaction must roll back, or the family would be left with no open plan and a dead draft.
+    replace = {**plan_body(referral["id"], homes, 5), "supersedes_plan_id": first["id"]}
+    failed = post(owner, "/tour-plans", replace, key="replace-plan")
+    assert failed.status_code == 409 and "overlaps" in failed.json()["detail"]
+    after = owner.get("/api/vhin/state").json()
+    for kind in ("tour_plans", "drafts", "tours", "referrals"):
+        assert after[kind] == before[kind]
+    assert [p["status"] for p in after["tour_plans"]] == ["awaiting_replies"]
+    assert [d["status"] for d in after["drafts"] if d.get("tour_plan_id") == first["id"]] == ["draft"]
+    # No retry receipt was stored for the failed attempt, so the same key with a free time goes through.
+    second = post(owner, "/tour-plans", {**replace, "options": [(BASE + timedelta(days=6)).isoformat()]}, key="replace-plan")
+    assert second.status_code == 201, second.text
+    state = owner.get("/api/vhin/state").json()
+    statuses = {p["id"]: p["status"] for p in state["tour_plans"]}
+    assert statuses == {first["id"]: "superseded", second.json()["id"]: "awaiting_replies"}
+    assert [d["status"] for d in state["drafts"] if d.get("tour_plan_id") == first["id"]] == ["superseded"]
+    assert [d["status"] for d in state["drafts"] if d.get("tour_plan_id") == second.json()["id"]] == ["draft"]
+
+
 def test_agreement_after_the_time_passed_is_refused(owner, monkeypatch):
     referral = qualified(owner)
     homes = tour_homes(owner)[:1]

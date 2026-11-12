@@ -1,18 +1,20 @@
 """Synthetic HTTP acceptance; no real accounts, credentials, or network calls."""
 
 import asyncio
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 from deerflow_extension_api import EXTENSION_PRINCIPAL_RESOLVER_KEY, ExtensionPrincipal
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from vhin_placement import install
 from vhin_placement.api import Service, build_router
-from vhin_placement.store import Store, put
+from vhin_placement.store import Store, put, records
 
 BASE = datetime(2026, 10, 20, 20, tzinfo=UTC)
 
@@ -346,6 +348,50 @@ def test_store_serializes_retries_and_separates_workspaces(tmp_path):
         assert connection.execute("SELECT COUNT(*) FROM audit").fetchone()[0] == 1
     assert store.path != Store(tmp_path, "other", "workspace-a", "owner").path
     assert store.path != Store(tmp_path, "vhin", "workspace-b", "owner").path
+
+
+def test_store_failed_mutation_rolls_back_every_write_and_frees_its_key(tmp_path):
+    store = Store(tmp_path, "vhin", "workspace-a", "owner")
+
+    def fails_after_writing(connection):
+        put(connection, "test", {"id": "first"})
+        put(connection, "test", {"id": "second"})
+        raise HTTPException(409, "late conflict")
+
+    with pytest.raises(HTTPException):
+        store.mutate("same-key", "test.write", {"value": 1}, fails_after_writing)
+    with store.transaction() as connection:
+        assert records(connection, "test") == []
+        assert [connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in ("retries", "audit")] == [0, 0]
+    # The failed attempt left no receipt, so the key is still free for the corrected request, then bound to it.
+    assert store.mutate("same-key", "test.write", {"value": 2}, lambda connection: put(connection, "test", {"id": "third"})) == {"id": "third"}
+    with pytest.raises(HTTPException) as reused:
+        store.mutate("same-key", "test.write", {"value": 3}, lambda connection: put(connection, "test", {"id": "fourth"}))
+    assert reused.value.status_code == 409
+
+
+def test_store_writer_waits_for_an_open_transaction_and_sees_its_commit(tmp_path):
+    store = Store(tmp_path, "vhin", "workspace-a", "owner")
+    holding, order = threading.Event(), []
+
+    def holder():
+        with store.transaction() as connection:
+            put(connection, "test", {"id": "first"})
+            holding.set()
+            time.sleep(0.3)  # give the writer below every chance to run early if the lock were missing
+            order.append("holder commits")
+
+    def writer(connection):
+        order.append("writer runs")
+        return put(connection, "test", {"id": "second", "saw": [r["id"] for r in records(connection, "test")]})
+
+    thread = threading.Thread(target=holder)
+    thread.start()
+    assert holding.wait(5)
+    result = store.mutate("writer-key", "test.write", {}, writer)
+    thread.join()
+    assert order == ["holder commits", "writer runs"]
+    assert result["saw"] == ["first"]
 
 
 def test_placement_requires_configured_confirmer_and_signed_terms(tmp_path, monkeypatch):

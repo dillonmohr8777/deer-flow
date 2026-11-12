@@ -1,0 +1,60 @@
+Excerpt for parser tests: verbatim lines of the publisher Word file https://www.flrules.org/gateway/readFile.asp?sid=0&tid=0&cno=59A-36&caid=1742525&type=4&file=59A-36.doc as converted by textutil (word_doc_text), retrieved 2026-11-12; whole lines were left out to keep it small.
+CHAPTER 59A-36
+ASSISTED LIVING FACILITY
+59A-36.001	Standards and Criteria for Determining Compliance with Facility Standards and Resident Rights (Repealed)
+59A-36.006	Admission Procedures, Appropriateness of Placement and Continued Residency Criteria
+59A-36.010	Staffing Standards
+ HYPERLINK "https://www.flrules.org/gateway/ruleNo.asp?id=58A-5.036" \t "ruleNo" 59A-36.025	Emergency Environmental Control for Assisted Living Facilities
+59A-36.001 Standards and Criteria for Determining Compliance with Facility Standards and Resident Rights.
+Rulemaking Authority 429.28(3)(a) FS. Law Implemented 429.28 FS. History–New 11-28-16, Repealed 7-12-21.
+59A-36.006 Admission Procedures, Appropriateness of Placement and Continued Residency Criteria.
+(1) ADMISSION CRITERIA.
+(a) An individual must meet the following minimum criteria in order to be admitted to a facility holding a standard, limited nursing services, or limited mental health license:
+1. Be at least 18 years of age.
+4. Be able to transfer, with assistance if necessary. The assistance of more than one person is permitted.
+10. Not have any stage 3 or 4 pressure sores. A resident requiring care of a stage 2 pressure sore may be admitted provided that:
+a. The resident either:
+(I) Resides in a standard or limited nursing services licensed facility and contracts directly with a licensed home health agency or a nurse to provide care; or
+(II) Resides in a limited nursing services licensed facility and care is provided by the facility pursuant to a plan of care issued by a health care practitioner;
+b. The condition is documented in the resident’s record and admission and discharge logs; and,
+11. Residents admitted to standard, limited nursing services, or limited mental health licensed facilities may not require any of the following nursing services:
+a. Artificial airway management of any kind, except that of continuous positive airway pressure may be provided through the use of a CPAP or bipap machine;
+b. Assistance with tube feeding,
+(5) DISCHARGE. If the resident no longer meets the criteria for continued residency, or the facility is unable to meet the resident’s needs, as determined by the facility administrator or health care practitioner, the resident must be discharged in accordance with Section 429.28, F.S.
+Rulemaking Authority 429.07, 429.41 FS. Law Implemented 381.00316, 429.07, 429.26, 429.28, 429.41 FS. History–New 9-17-84, Formerly 10A-5.181, Amended 10-20-86, 6-21-88, 8-15-90, 9-30-92, Formerly 10A-5.0181, Amended 10‑30‑95, 6‑2-96, 10-17-99, 7-30-06, 10-9-06, 4-15-10, 10-14-10, 4-17-14, 5-10-18, Formerly 58A-5.0181, 7-1-19, Amended 10-7-21, 6-11-25, 11-27-25, Technical Change 3-26-26.
+59A-36.010 Staffing Standards.
+(3) STAFFING STANDARDS.
+(a) Minimum staffing:
+1. Facilities must maintain the following minimum staff hours per week:
+Number of Residents, Day Care Participants, and Respite Care Residents
+Staff Hours/Week
+0-5
+168
+6-15
+212
+16- 25
+253
+26-35
+294
+36-45
+335
+46-55
+375
+56- 65
+416
+66-75
+457
+76-85
+498
+86-95
+539
+For every 20 total combined residents, day care participants, and respite care residents over 95 add 42 staff hours per week.
+2. Independent living residents, as referenced in subsection 59A-36.015(3), F.A.C., who occupy beds included within the licensed capacity of an assisted living facility but do not receive personal, limited nursing, or extended congregate care services, are not counted as residents for purposes of computing minimum staff hours.
+Rulemaking Authority 429.41, 429.52, 429.929 FS. Law Implemented 429.174, 429.176, 429.41, 429.52, 429.905 FS. History–New 5-14-81, Amended 1-6-82, 9-17-84, Formerly 10A-5.19, Amended 10-20-86, 6-21-88, 8-15-90, 9-30-92, Formerly 10A-5.019, Amended 10-30-95, 4-20-98, 11-2-98, 10-17-99, 7-30-06, 4-15-10, 4-17-14, 5-10-18, Formerly 58A-5.019.
+ HYPERLINK "https://www.flrules.org/gateway/ruleNo.asp?id=58A-5.036" \t "ruleNo" 59A-36.025 Emergency Environmental Control for Assisted Living Facilities.
+(1) DETAILED EMERGENCY ENVIRONMENTAL CONTROL PLAN. Each assisted living facility shall prepare a detailed plan (“plan”) to serve as a supplement to its Comprehensive Emergency Management Plan, to address emergency environmental control in the event of the loss of primary electrical power in that assisted living facility which includes the following information:
+(a) The acquisition of a sufficient alternate power source such as a generator(s), maintained at the assisted living facility, to ensure that current licensees of assisted living facilities will be equipped to ensure ambient air temperatures will be maintained at or below 81 degrees Fahrenheit for a minimum of ninety-six (96) hours in the event of the loss of primary electrical power.
+1. The required temperature must be maintained in an area or areas, determined by the assisted living facility, of sufficient size to maintain residents safely at all times and that is appropriate for resident care needs and life safety requirements. For planning purposes, no less than twenty (20) net square feet per resident must be provided. The assisted living facility may use eighty percent (80%) of its licensed bed capacity as the number of residents to be used in the calculation to determine the required square footage. This may include areas that are less than the entire assisted living facility if the assisted living facility’s comprehensive emergency management plan includes allowing a resident to congregate when he or she desires in portions of the building where temperatures will be maintained and includes procedures for monitoring residents for signs of heat related injury as required by this rule. This rule does not prohibit a facility from acting as a receiving provider for evacuees when the conditions stated in Section 408.821, F.S. and subsection 59A-36.019(5), F.A.C., are met. The plan shall include information regarding the area(s) within the assisted living facility where the required temperature will be maintained.
+3. Each assisted living facility is unique in size; the types of care provided; the physical and mental capabilities and needs of residents; the type, frequency, and amount of services and care offered; and staffing characteristics. Accordingly, this rule does not limit the types of systems or equipment that may be used to achieve ambient temperatures at or below 81 degrees Fahrenheit for a minimum of ninety-six (96) hours in the event of the loss of primary electrical power. The plan shall include information regarding the systems and equipment that will be used by the assisted living facility and the fuel required to operate the systems and equipment.
+a. An assisted living facility in an evacuation zone pursuant to Chapter 252, F, S. must maintain an alternative power source and fuel as required by this subsection at all times when the assisted living facility is occupied but is permitted to utilize a mobile generator(s) to enable portability if evacuation is necessary.
+Rulemaking Authority 429.41, FS. Law Implemented 429.19, 429.41, FS. History–New 3-26-18, Formerly 58A-5.036, Amended 7-1-19, 11-23-23.

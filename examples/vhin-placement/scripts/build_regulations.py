@@ -84,8 +84,12 @@ def clean(text: str) -> str:
 
 
 def parse_fac_chapter(source: dict, raw: bytes, meta: dict) -> list[dict]:
-    """Split a Florida Administrative Code chapter into labelled units."""
-    text = word_doc_text(raw)
+    """Split a Florida Administrative Code chapter (the publisher's Word file) into labelled units."""
+    return parse_fac_text(source, word_doc_text(raw), meta)
+
+
+def parse_fac_text(source: dict, text: str, meta: dict) -> list[dict]:
+    """Split the plain text of a FAC chapter, as ``word_doc_text`` returns it, into labelled units."""
     prefix = re.escape(source["chapter"])
     header = re.compile(rf"^({prefix}\.\d{{3}})\s+(.+?)\.?$")
     effective = meta.get("effective_dates", {})
