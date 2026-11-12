@@ -69,7 +69,7 @@ async function mockInternal(
       {
         id: "m1",
         channel_id: "c-general",
-        author_user_id: "u-jesse",
+        author_user_id: "u-designer",
         body: "Morning team",
         created_at: "2026-09-25T13:00:00Z",
       },
@@ -91,8 +91,8 @@ async function mockInternal(
         members: [
           { user_id: "default", email: "default@test.local", role: "member" },
           {
-            user_id: "u-jesse",
-            email: "jesse@momentum.example",
+            user_id: "u-designer",
+            email: "designer@momentum.example",
             role: "member",
           },
         ],
@@ -183,7 +183,7 @@ test.describe("Team channels", () => {
       board.getByRole("heading", { name: "Team", level: 1 }),
     ).toBeVisible();
     await expect(board.getByText("Morning team")).toBeVisible();
-    await expect(board.getByText("jesse", { exact: true })).toBeVisible();
+    await expect(board.getByText("designer", { exact: true })).toBeVisible();
 
     // Members don't see channel management; the API enforces the same rule.
     await expect(page.getByLabel("Add a channel")).toHaveCount(0);

@@ -23,7 +23,7 @@ def _doc(doc_id: str, name: str, text: str) -> dict:
 
 
 DOCS = {
-    AUTHORIZED_A: _doc(AUTHORIZED_A, "01-client-route.md", "Bar crawl route covers parking and wristband pickup."),
+    AUTHORIZED_A: _doc(AUTHORIZED_A, "01-client-route.md", "Event route covers parking and wristband pickup."),
     AUTHORIZED_B: _doc(AUTHORIZED_B, "02-draft.md", "Event date conflicts noted for October parking."),
     # Strongest match for the query, but it belongs to another client.
     OTHER_CLIENT_DOC: _doc(OTHER_CLIENT_DOC, "secret-other-client.md", "parking parking parking wristband route event October"),
@@ -58,11 +58,11 @@ def _settings(**namespaces) -> jevbox.JevboxSettings:
         base_url="http://jevbox.test",
         email="owner@example.test",
         password=PASSWORD,
-        namespaces=namespaces or {"bar-crawl-usa": [AUTHORIZED_A, AUTHORIZED_B], "other-client": [OTHER_CLIENT_DOC]},
+        namespaces=namespaces or {"northwind-events": [AUTHORIZED_A, AUTHORIZED_B], "other-client": [OTHER_CLIENT_DOC]},
     )
 
 
-def _retrieve(fake: FakeJevbox, client_id: str = "bar-crawl-usa", query: str = "parking route wristband October", **kwargs):
+def _retrieve(fake: FakeJevbox, client_id: str = "northwind-events", query: str = "parking route wristband October", **kwargs):
     return jevbox.retrieve_evidence(kwargs.pop("settings", _settings()), client_id, query, transport=httpx.MockTransport(fake), **kwargs)
 
 
@@ -73,14 +73,14 @@ def test_returns_cited_passages_for_the_client_namespace():
     assert {p.document_id for p in result.passages} == {AUTHORIZED_A, AUTHORIZED_B}
     assert all(p.locator.startswith(f"jevbox:{p.document_id}:") for p in result.passages)
     assert {doc for doc, verdict, _ in result.review if verdict == "accepted"} == {AUTHORIZED_A, AUTHORIZED_B}
-    text = jevbox.format_result(result, "bar-crawl-usa")
+    text = jevbox.format_result(result, "northwind-events")
     assert "[J1]" in text and "Evidence review:" in text
 
 
 def test_negative_unauthorized_document_is_never_returned_or_fetched():
     fake = FakeJevbox()
     result = _retrieve(fake)
-    text = jevbox.format_result(result, "bar-crawl-usa")
+    text = jevbox.format_result(result, "northwind-events")
     assert OTHER_CLIENT_DOC not in {p.document_id for p in result.passages}
     assert OTHER_CLIENT_DOC not in text and "secret-other-client" not in text
     assert not any(OTHER_CLIENT_DOC in path for path in fake.requests)
@@ -95,7 +95,7 @@ def test_negative_server_substituting_another_document_is_rejected():
 
 def test_agent_bound_to_another_client_is_denied_before_any_request():
     fake = FakeJevbox()
-    result = _retrieve(fake, client_id="other-client", bound_client_id="bar-crawl-usa")
+    result = _retrieve(fake, client_id="other-client", bound_client_id="northwind-events")
     assert result.status == "denied" and not result.passages
     assert fake.requests == []
 
@@ -119,7 +119,7 @@ def test_auth_failure_and_server_errors_degrade_to_unavailable():
     for fake in (FakeJevbox(login_status=401), FakeJevbox(fail=503)):
         result = _retrieve(fake)
         assert result.status == "unavailable"
-        text = jevbox.format_result(result, "bar-crawl-usa")
+        text = jevbox.format_result(result, "northwind-events")
         assert text.startswith(jevbox.UNAVAILABLE) and PASSWORD not in text
 
 
@@ -127,7 +127,7 @@ def test_connection_error_degrades_to_unavailable():
     def down(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("refused", request=request)
 
-    result = jevbox.retrieve_evidence(_settings(), "bar-crawl-usa", "parking", transport=httpx.MockTransport(down))
+    result = jevbox.retrieve_evidence(_settings(), "northwind-events", "parking", transport=httpx.MockTransport(down))
     assert result.status == "unavailable" and result.reason == "connection failed"
 
 
@@ -136,13 +136,13 @@ def test_tool_entrypoint_returns_library_unavailable_when_jevbox_is_down(monkeyp
     settings = _settings()
     settings.base_url = "http://127.0.0.1:9"
     monkeypatch.setattr(jevbox, "_settings", lambda: settings)
-    text = jevbox._run("bar-crawl-usa", "parking", None)
+    text = jevbox._run("northwind-events", "parking", None)
     assert text.startswith("Jevbox library unavailable")
 
 
 def test_tool_entrypoint_reports_unconfigured_as_unavailable(monkeypatch):
     monkeypatch.setattr(jevbox, "_settings", lambda: None)
-    assert jevbox._run("bar-crawl-usa", "parking", None).startswith("Jevbox library unavailable")
+    assert jevbox._run("northwind-events", "parking", None).startswith("Jevbox library unavailable")
 
 
 def test_agent_binding_load_failure_fails_closed(monkeypatch):
@@ -154,15 +154,15 @@ def test_agent_binding_load_failure_fails_closed(monkeypatch):
     monkeypatch.setattr(jevbox, "_settings", _settings)
     monkeypatch.setattr(agents_config, "load_agent_config", broken)
     runtime = type("R", (), {"context": {"agent_name": "client-agent"}})()
-    assert "agent client binding could not be verified" in jevbox._run("bar-crawl-usa", "parking", runtime)
+    assert "agent client binding could not be verified" in jevbox._run("northwind-events", "parking", runtime)
 
 
 def test_agent_stamped_client_id_is_enforced(monkeypatch):
     import deerflow.config.agents_config as agents_config
 
     monkeypatch.setattr(jevbox, "_settings", _settings)
-    monkeypatch.setattr(agents_config, "load_agent_config", lambda name, **kwargs: type("A", (), {"client_id": "bar-crawl-usa"})())
-    runtime = type("R", (), {"context": {"agent_name": "bar-crawl-agent"}})()
+    monkeypatch.setattr(agents_config, "load_agent_config", lambda name, **kwargs: type("A", (), {"client_id": "northwind-events"})())
+    runtime = type("R", (), {"context": {"agent_name": "northwind-events-agent"}})()
     assert "bound to a different client namespace" in jevbox._run("other-client", "parking", runtime)
 
 
@@ -172,7 +172,7 @@ def test_tool_assembles_from_config_with_only_model_safe_arguments():
     from deerflow.config.tool_config import ToolConfig
     from deerflow.tools.tools import get_available_tools
 
-    tool_config = ToolConfig(name="jevbox_evidence", group="research", use="deerflow.community.jevbox.tools:jevbox_evidence_tool", email="owner@example.test", password=PASSWORD, namespaces={"bar-crawl-usa": [AUTHORIZED_A]})
+    tool_config = ToolConfig(name="jevbox_evidence", group="research", use="deerflow.community.jevbox.tools:jevbox_evidence_tool", email="owner@example.test", password=PASSWORD, namespaces={"northwind-events": [AUTHORIZED_A]})
     config = SimpleNamespace(
         tools=[tool_config],
         knowledge_base=SimpleNamespace(enabled=False),

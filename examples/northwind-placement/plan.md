@@ -1,4 +1,4 @@
-# VHIN actual system implementation
+# Northwind actual system implementation
 
 Scope: one authenticated MomoBot extension for Hillsborough placement operations. Existing prototype and strategy owner remains unchanged. Synthetic-only acceptance; no sends or billing.
 

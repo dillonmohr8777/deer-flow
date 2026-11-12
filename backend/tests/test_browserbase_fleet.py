@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import hashlib
 import json
 import threading
 import time
@@ -8,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from deerflow.community.browser_automation import browserbase_fleet
 from deerflow.community.browser_automation.browserbase_fleet import Fleet, FleetBlocked, UsageLedger, scheduler_tick
 
 
@@ -183,6 +185,19 @@ def test_job_routing(tmp_path, mutation):
     cfg["jobs"][0].update(mutation)
     with pytest.raises((FleetBlocked, ValueError)):
         Fleet(cfg, {"clients": [{"id": "client-a"}]}, UsageLedger(tmp_path / "ledger.db"), tmp_path / "out")
+
+
+def test_a_historical_client_job_is_still_blocked_by_its_hashed_id(tmp_path, monkeypatch):
+    # Synthetic id with a monkeypatched hash set; the real id/hash mapping is verified outside this public repo.
+    historical = "synthetic-historical-client"
+    digest = hashlib.sha256(f"{browserbase_fleet._HISTORICAL_CLIENT_SALT}:{historical}".encode()).hexdigest()
+    monkeypatch.setattr(browserbase_fleet, "_HISTORICAL_CLIENT_HASHES", frozenset({digest}))
+    cfg = config()
+    cfg["jobs"][0]["client_id"] = historical
+    with pytest.raises(FleetBlocked, match="historical"):
+        Fleet(cfg, {"clients": [{"id": historical}]}, UsageLedger(tmp_path / "ledger.db"), tmp_path / "out")
+    cfg["jobs"][0]["client_id"] = "client-a"
+    Fleet(cfg, {"clients": [{"id": "client-a"}]}, UsageLedger(tmp_path / "ledger2.db"), tmp_path / "out")
 
 
 def test_scheduler_disabled(tmp_path):
