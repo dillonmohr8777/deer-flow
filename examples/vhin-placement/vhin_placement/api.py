@@ -573,9 +573,10 @@ def build_router(service):
             usable = [o for o in options if not o["conflicts_with_tours"]]
             plan_id = str(uuid4())
             # Only a stop, suppression, or no usable contact preference closes the family slot.
-            # A reply/booking pause withholds the family draft but keeps the plan open so every party's reply can be recorded.
+            # A reply/booking pause keeps the plan open so every party's reply can be recorded. It withholds a new family
+            # draft, except when this plan supersedes the family's open plan: the operator is continuing that conversation.
             blocked = is_suppressed(connection, referral) or referral["contact_preference"] == "none"
-            withhold_family = blocked or referral["contact_status"] == "paused"
+            withhold_family = blocked or (referral["contact_status"] == "paused" and not payload.supersedes_plan_id)
             family = None if withhold_family else coordination.family_drafts(referral, usable, service.advisor_name, service.business_line)
             if family:
                 channel = referral["contact_preference"]

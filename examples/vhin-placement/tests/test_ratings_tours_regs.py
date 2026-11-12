@@ -224,6 +224,9 @@ def test_tour_plan_decline_or_split_answers_need_new_times(owner):
     post(owner, path, {"party": "community", "community_id": homes[0]["id"], "response": "accepts", "option": 2, "source_ref": "b"})
     assert post(owner, path, {"party": "owner", "response": "accepts", "option": 1, "source_ref": "c"}).json()["status"] == "needs_new_times"
     other = post(owner, "/tour-plans", {**plan_body(referral["id"], homes, 4), "supersedes_plan_id": plan["id"]}).json()
+    # The family's reply paused contact, but new times for the same conversation still get a family draft.
+    assert other["status"] == "awaiting_replies" and other["parties"]["family"]["status"] == "pending"
+    assert "Option 1" in other["drafts"]["family"]["family_email"]
     declined = post(owner, f"/tour-plans/{other['id']}/responses", {"party": "family", "response": "declines", "source_ref": "text"})
     assert declined.json()["status"] == "needs_new_times"
 
