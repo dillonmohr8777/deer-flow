@@ -1,0 +1,57 @@
+{
+  "title": "Making lessons like this one",
+  "slug": "work-19-lessons-in-my-voice",
+  "description": "How an Academy lesson is produced: a reviewed script file, acceptance by hash, narration synthesized from an authorized voice reference, a speech recognition check, captions timed from the script, build, render and verification, with the holds that stop it.",
+  "chapters": [
+    {
+      "title": "A lesson is a file first",
+      "narration": "Every lesson, including this one, starts as a script file: a title, a description and 10 or 11 chapters, each with narration and a one line visual. The narration is 740 to 765 words, which plays in 5 to 6 minutes at a natural pace. Momo drafts; I rewrite until it sounds like me. The file is reviewed as text before any audio exists, because text is cheap to fix and audio is not. Each chapter is 60 to 80 words, which is one teaching board and about 30 seconds of audio.",
+      "visual": "A script file shown as cards: title, description, then 10 chapter cards each with narration and a visual line."
+    },
+    {
+      "title": "Acceptance before generation",
+      "narration": "Nothing generates until the script is accepted. Acceptance is a small file that lists each lesson by name with the exact hash of its script. A changed script needs new acceptance. A hold file stops everything before any model loads. This is the gate that keeps a draft from becoming my voice by accident. Acceptance can cover part of a course, but it always names exact files, never a folder.",
+      "visual": "Acceptance file listing lessons with hashes, next to a hold file that blocks the whole pipeline."
+    },
+    {
+      "title": "My voice, from a protected reference",
+      "narration": "Narration is synthesized from a short reference recording of my own voice. The reference never goes into Git, never leaves the machine and is checked by hash before use. One model process runs at a time. Sentences over 30 words are split at the comma nearest the middle so the model never has to voice a short tail. Each sentence is its own versioned clip. If the reference is swapped, the hash changes and every generated clip is marked as not mine.",
+      "visual": "Locked reference recording with a hash seal, feeding a single model process that writes one clip per sentence."
+    },
+    {
+      "title": "Listen back with a machine, then a person",
+      "narration": "After synthesis, speech recognition transcribes every clip and compares it word by word against the script. Missing numbers, negations and instruction words are protected: a dropped negation or a wrong digit fails the clip, no matter how small the difference looks. Harmless differences need a person who actually listened to sign off. Recognition proves the words, not the speaker. The comparison protects numbers, negations and instruction words first, because those are the words that change meaning.",
+      "visual": "Side by side script and transcript with a dropped not highlighted as a hard fail and a reviewer's signed judgment card."
+    },
+    {
+      "title": "Repairs are new versions",
+      "narration": "A failed sentence is regenerated, at most 2 targeted passes. Repairs write new versions with the same seed and sampler recorded, and a pointer picks the accepted one. Nothing is overwritten. If a check is interrupted, an incomplete marker stays on disk and blocks the lesson from being promoted until the check reruns clean. The seed and the sampler are recorded so a repair can be reproduced exactly.",
+      "visual": "Version stack for one sentence: v1 failed, v2 accepted with a pointer, settings recorded on each."
+    },
+    {
+      "title": "Captions come from the script",
+      "narration": "Caption text is the reviewed script, never the recognizer's guess. Each word takes its timing from the recognized word aligned to it. That is why names, numbers and punctuation in the captions are always right. Captions ship as a sidecar file by default; burned in captions are an explicit choice. Timing is checked word by word against the audio length. If a word has no aligned timing, the caption check fails instead of guessing.",
+      "visual": "Caption track where the words are the script's and the timestamps come from aligned recognition, sidecar file icon beside it."
+    },
+    {
+      "title": "Build the boards",
+      "narration": "The visual for each chapter is a teaching board: a heading, a few lines and a caption, set in the MomoBot Paper palette with the bouncing Momo mark, Fraunces headings and Nunito Sans text. The build lays each board under its chapter's narration and labels the chapter count from the accepted course, so lesson 7 of 16 says 7 of 16. The board never carries text that is not in the script, so the picture and the voice always agree.",
+      "visual": "A finished board in cream and ink with the bouncing Momo mark, Fraunces heading, Nunito Sans lines and a 7 of 16 label."
+    },
+    {
+      "title": "Render on the queue",
+      "narration": "Rendering is a finite job staged to one render queue, with a lock so two jobs never fight for the machine. The renderer refuses a project whose files do not match the accepted hashes before it changes a single directory. Four workers at 15 frames per second is enough for boards. The output is a master video, a poster, the captions and a transcript. The lock is a file, so a crashed job has to be reconciled by a person before another starts.",
+      "visual": "Render queue with one job holding the lock, a hash check gate in front of it and four worker lanes behind."
+    },
+    {
+      "title": "Verify before anyone watches",
+      "narration": "Verification reads the real duration and streams, decodes the audio, checks levels and silence, validates the captions, samples a frame from every chapter and hashes every output. Then a person spot plays it. The lesson is promoted only when both agree. A staged archive is never called a finished video. Hashes are written for the video, the poster, the captions and the transcript.",
+      "visual": "Verification report with duration, streams, audio levels, captions and chapter samples all passing, and a person pressing play."
+    },
+    {
+      "title": "What never leaves the machine",
+      "narration": "The voice reference, the narration audio, client data and model weights never enter Git. Public release, hosting and messaging are decisions the owner makes, not the pipeline. This is a lot of gates for a 5 minute video. That is the point. My voice goes out only on words I approved, from files I can prove. That is also why a lesson takes a day to produce and not an hour.",
+      "visual": "Four locked cards: voice reference, narration audio, client data, model weights, with an owner key beside a release switch."
+    }
+  ]
+}

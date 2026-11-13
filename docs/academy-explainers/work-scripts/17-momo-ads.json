@@ -1,0 +1,57 @@
+{
+  "title": "Momo ads that stop a thumb",
+  "slug": "work-17-momo-ads",
+  "description": "Synthetic 20 second Momo ad for a sample HVAC company: the 2 second hook, one problem, the full-body Momo character in the scrapbook world, display type, voice and music, variants and the thumb-stop review.",
+  "chapters": [
+    {
+      "title": "An ad is not a demo",
+      "narration": "A demo shows features. An ad stops a thumb and earns one action. Our ads star Momo, the full-body character, moving through a paper scrapbook world. This lesson builds a synthetic 20 second ad for Sample HVAC Co that sells a maintenance plan. Nothing in it is a real client. Momo drafts the beats and the copy. The editor and the designer judge whether it actually stops anyone. An ad has about 20 seconds to do that, so every second has a job.",
+      "visual": "Split board: a demo screen full of feature bullets on the left, a single paper frame with Momo mid stride on the right."
+    },
+    {
+      "title": "The first 2 seconds",
+      "narration": "The hook lands inside 2 seconds, before the viewer decides to keep scrolling. It is one image and one line. For the example, the hook is a paper furnace coughing paper smoke with the line Your furnace picked January. No logo, no intro card, no slow fade. If the hook needs the brand to make sense, it is not a hook yet. We test the hook alone as a 2 second clip.",
+      "visual": "Two frame strip: frame 1 the paper furnace coughing smoke, frame 2 the line Your furnace picked January in display type."
+    },
+    {
+      "title": "One problem, said once",
+      "narration": "An ad carries one problem. The maintenance plan solves 6 things, and the ad picks the one the audience feels: the surprise breakdown in the cold. The second beat shows it plainly, a paper family in coats on a paper couch. Every other benefit waits for the landing page. When a draft tries to say 2 things, Momo flags it and we cut the second one. One problem per ad also makes the results readable: if it does not convert, we know what to change.",
+      "visual": "Paper family in coats on a couch, breath visible, with six benefit cards pushed off the edge of the frame except one."
+    },
+    {
+      "title": "Full-body Momo solves it",
+      "narration": "Momo is never a head in a circle or a card stack. Momo walks in, reaches, reacts, carries the paper toolkit and fixes the furnace. Full body, in motion, with weight. The solve beat is 6 to 8 seconds, the longest in the ad, because it is the part people remember. The reference for movement is the walking scrapbook short; we reuse its rig and its pacing rather than animating from zero.",
+      "visual": "Four pose sheet of full-body Momo: walking in, reaching, reacting, fixing, each cut from paper with a drop shadow."
+    },
+    {
+      "title": "The scrapbook world",
+      "narration": "Everything sits in the paper world: warm cream and tan grounds, kraft edges, cut paper shadows, a navy ink line and a gold accent. It is the same world as the AI division films, so an ad and a film feel like one brand. New props are cut from the same paper, never rendered glossy. A dark void background, neon glow or a floating gradient orb fails review on sight. The paper world is also cheap to extend, since a new prop is a cutout, not a 3D build.",
+      "visual": "Palette board of cream, tan, kraft, navy and gold swatches with a cut paper furnace prop and its shadow."
+    },
+    {
+      "title": "Type that reads like a poster",
+      "narration": "The on-screen line uses a characterful display face, big, 2 lines at most, high contrast on the paper. Default interface fonts are banned in ads because they read like a settings screen. For the example: Fixed before it breaks. Then the plan price in digits. The type is checked at phone size first, because that is where it will be seen.",
+      "visual": "Phone frame with the line Fixed before it breaks set in Dela Gothic One over paper, beside the same line in a default interface font crossed out."
+    },
+    {
+      "title": "Voice and music",
+      "narration": "Every ad has a voiceover and a track. The voice reads the hook, the problem and the one line, about 40 words total, warm and plain. Music carries the energy and sits under the voice, never fighting it. The beats of the cut land on the track. Loudness is normalized for social so the ad is not quieter than the post before it. The voice reads at a conversational pace, never the announcer voice.",
+      "visual": "Waveform board: voice track on top, music underneath at a lower level, cut points marked on the beats."
+    },
+    {
+      "title": "The ask",
+      "narration": "The last 3 seconds are the call to action: one verb, one place. Book your tune up at the sample link. The logo appears here, transparent on paper, with Momo pointing at the line. No phone number and no second offer. If the audience has to choose, they choose nothing. The link is short enough to read out loud.",
+      "visual": "End frame: transparent logo on paper, Momo pointing at the line Book your tune up, a single link beneath."
+    },
+    {
+      "title": "Variants",
+      "narration": "From one approved cut we make the variants: a 9 by 16 vertical for Reels, a 1 by 1 for feed, a 6 second bumper that is just the hook and the ask, and a pixel art cut when the brand can take it. Each variant is a different row set in the same cut plan, so copy and timing stay consistent. Momo renders all of them from the master plan. The bumper is the one that runs most, so it gets its own review.",
+      "visual": "Four frames at different aspects: 9 by 16, 1 by 1, the 6 second bumper strip and a pixel art Momo."
+    },
+    {
+      "title": "Would this stop a thumb",
+      "narration": "The review is a contact sheet, one frame per second, judged honestly. We ask: do frames 1 and 2 make me stop, is the problem obvious with the sound off, does Momo move like a character or sit like a sticker, is the line readable on a phone. A cut that fails any of those goes back to the plan. We do not ship an ad because it is finished. We ship it because it stops a thumb.",
+      "visual": "Contact sheet of 20 frames with four review questions down the side, one frame circled and sent back to the plan."
+    }
+  ]
+}

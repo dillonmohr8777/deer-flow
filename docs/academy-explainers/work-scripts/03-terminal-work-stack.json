@@ -1,0 +1,62 @@
+{
+  "title": "The terminal and your work stack",
+  "slug": "work-03-terminal-work-stack",
+  "description": "Foundations lesson for everyone, developers go deeper. Learners read files and run a small read-only check in an isolated practice folder with safe commands, covering working directory, paths, output, exit status, scripts and logs. No install, destructive command, credentials or production shell.",
+  "chapters": [
+    {
+      "title": "What the terminal is for",
+      "narration": "Your terminal is a text window that runs commands on your own computer. Developers live in it, but so do analysts and operators who want exact control over files. In this lesson we stay in one isolated practice folder. We'll read files, run a small check, and read the output. Nothing here installs software, deletes anything, or touches credentials or a production system.",
+      "visual": "Terminal window open to an empty practice folder with a label reading isolated practice folder only."
+    },
+    {
+      "title": "Where you are: cwd and paths",
+      "narration": "Start by finding where you are. The command pwd prints your current working directory, the folder where commands run. A relative path like notes/week.txt starts there. An absolute path starts at the file system root, a slash on Unix-style systems. Windows paths can include a drive letter. If a file is missing, first check the working directory. These practice commands use a Unix-style shell, such as the Mac terminal.",
+      "visual": "Terminal output of pwd showing the practice folder path, with a relative and absolute path side by side below."
+    },
+    {
+      "title": "List and read first",
+      "narration": "Next, list what's in the folder with ls. The practice folder holds a short notes file, a sample sheet, and a read-only check script. I read the notes with cat and look at only the first lines with head, so I don't dump everything at once. Reading first is a habit. Before I run any script, I open it and read it, the same way I'd read a formula before trusting a spreadsheet.",
+      "visual": "Directory listing of the practice folder showing the notes file, sample sheet, and check script, followed by a head command on the notes."
+    },
+    {
+      "title": "Output and exit status",
+      "narration": "Running a command prints output, and it also returns an exit status. Zero means the command finished without error. Anything else means something went wrong. After running the check script, I type echo followed by dollar question mark to see the status. Output tells me what happened. The exit status tells a script or a person whether to keep going.",
+      "visual": "Terminal showing a command followed by its output lines and then an echo line that prints the exit status."
+    },
+    {
+      "title": "Run the small check",
+      "narration": "Now the small check. From inside the practice folder, I run the script with sh check.sh. It counts the rows in the sample sheet and confirms the required header is present. It writes its result to the screen only, so nothing in the folder changes. If the header is missing, it prints a message and exits with a status other than zero. That is exactly the behavior I want from a check.",
+      "visual": "Check script result printed to the screen with a row count line and a header present line, and a second run showing a nonzero exit status."
+    },
+    {
+      "title": "Logs you can read later",
+      "narration": "Scripts often write logs, so you can see history later. I redirect the output into a log file with a greater-than sign, then check the file with cat. Use the single sign only on a new practice log, because it overwrites the file it points at. Appending with two signs adds to the end instead. Keep logs inside the practice folder and never point them at a production location.",
+      "visual": "Practice log file contents shown after a redirected run, with a note marking the single sign as overwrite and the double sign as append."
+    },
+    {
+      "title": "Developers go deeper",
+      "narration": "If you're a developer, read the script line by line before you trust it, then check how it handles bad input, missing files, and exit codes. Look for any command that writes, deletes, or calls the network, because those need their own review. Analysts and operators can skip the code, but keep the habit of reading what the script says it does. Developers are the ones who should review any script before it touches shared data.",
+      "visual": "Annotated script view with comments marking read-only lines, exit code handling, and a flag on any write or network line."
+    },
+    {
+      "title": "How this fits your work stack",
+      "narration": "Your work stack is the set of tools and steps you use for a job. The terminal is one layer. A paid media analyst can check an export, a web developer can run a form test, and operations can count delivered assets. A team lead can ask for the same check each time. Keep the output and exit status beside the file version. Repeatable verification is more useful than memorizing commands.",
+      "visual": "Stack diagram with the terminal check as one layer between the source file and the report draft."
+    },
+    {
+      "title": "What this lesson does not do",
+      "narration": "Here's what this lesson does not do. It doesn't install anything, use credentials, change permissions, or run commands against a live system. A practice folder is a safe place to learn exit codes because a mistake there stays contained. Real folders with client files follow your organization's rules. If a command looks like it would delete or overwrite something, stop and ask a developer before you run it.",
+      "visual": "Boundary panel listing the excluded actions: install, credentials, permission changes, live system commands."
+    },
+    {
+      "title": "Write down what you saw",
+      "narration": "Write down what you saw. Keep a short run note: folder, command, output line, exit status. That note is what makes the check repeatable. Without it, the next person has to take your word for it. With it, they can rerun the same steps and compare.",
+      "visual": "Run note template with folder, command, output line, and exit status fields filled in."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Try this in Momo. Input: the run note from your practice folder, with the folder path, the commands, the output line, and the exit status. Paste it into a MomoBot chat and ask for a short handoff summary, then check it against your note line by line. External acceptance check: a developer or second operator reruns the same commands in their own practice folder and confirms the same exit status and row count.",
+      "visual": "Run note pasted into a chat with the drafted summary beside it, and a reviewer checklist for the rerun."
+    }
+  ]
+}

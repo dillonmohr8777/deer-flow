@@ -1,0 +1,57 @@
+{
+  "title": "My personal AI stack",
+  "slug": "04-daily-stack",
+  "description": "Connect notes, browser, email, and calendar without losing track of what matters.",
+  "chapters": [
+    {
+      "title": "Start with the job",
+      "narration": "I think about my stack as a few places with clear jobs. My calendar tells me when something happens. My notes hold what I learned. Email holds conversations. The browser lets me reach the services behind those conversations. AI helps me move between them. I do not need every app connected on day one. I need one useful path that makes an ordinary task easier, and I need to understand where the answer came from.",
+      "visual": "Four labeled boxes: Calendar = time; Notes = context; Email = conversations; Browser = services. Place AI between the boxes with arrows labeled Find, Compare, Draft."
+    },
+    {
+      "title": "Give each place one job",
+      "narration": "Here is a simple example. I am booking a dentist appointment. The confirmed appointment belongs on my calendar. Instructions from the office stay in the original email. Questions I want to ask can live in a note. I do not copy the entire email into every app. I keep a short note with a link back to it. That way, when the office changes something, I know which original source to check again.",
+      "visual": "Appointment map: Calendar: confirmed date and time. Email: office instructions. Note: questions plus source link. Highlight the email as the source for instructions."
+    },
+    {
+      "title": "Choose one capture inbox",
+      "narration": "Before connecting anything, I pick one capture inbox. It might be a note called Inbox, a task list, or a folder I already use. When an idea arrives, I put it there quickly. Later, I decide whether it becomes a task, reference material, or nothing. This is a habit, not a special AI feature. Three competing inboxes make it harder to find things. One familiar landing spot gives me a starting point every day.",
+      "visual": "Show one Inbox feeding three destinations: Do, Keep, Discard. Example capture: Ask about appointment paperwork. Put a single star beside the chosen inbox."
+    },
+    {
+      "title": "Use an API when it fits",
+      "narration": "An API is a direct connection that lets software request a specific piece of information or perform a supported action. If my calendar app offers an approved connection, AI may be able to read tomorrow’s events through it. That is often simpler than opening pages and clicking around. I check what the connection can actually read or change. Connecting a calendar does not automatically mean it can access my email, notes, or every other account.",
+      "visual": "Two routes: Calendar API → structured event details; Browser → visible calendar page. Scope checklist: account, read events, create events. Shade only the permissions actually granted."
+    },
+    {
+      "title": "Use the browser when needed",
+      "narration": "The browser is useful when the job requires a page or a form that the direct connection cannot handle. For my appointment, that might be a scheduling page with available times. I can ask AI to compare the choices against my calendar, then show me a recommendation. I still review the office, location, date, and time before confirming. A page being open is not proof that an appointment was booked. I look for the confirmation.",
+      "visual": "Scheduling sequence: Open available times → compare calendar → recommend one slot → review → confirm → read confirmation. Distinguish Available from Booked with clear text labels."
+    },
+    {
+      "title": "Make the source visible",
+      "narration": "When I ask a question about my life, I want the answer tied to a source I recognize. Try this: What do I need before my appointment? Use the office email, and link it. If AI only has my old notes, I want it to say that. A remembered preference can help, but it cannot replace a current instruction. I keep the source date nearby so I can tell whether the information is still useful.",
+      "visual": "Answer card: Bring completed form. Source: office email, received Tuesday. Secondary note: preference for morning appointments. Label Current instruction versus Saved preference."
+    },
+    {
+      "title": "Keep memory small and useful",
+      "narration": "I treat memory as a few useful facts, not an endless copy of everything I say. A preference like mornings work better for appointments can save time. A password or a full personal conversation does not belong in an ordinary note. I decide what gets saved, where it goes, and how to correct it. If a tool supports memory, I check its controls. If it does not, a short maintained note works just fine.",
+      "visual": "Memory card with fields: Preference; Source; Updated; Correction. Example: Prefer morning appointments, confirmed today. Separate locked credential store icon from ordinary notes."
+    },
+    {
+      "title": "Review the draft before action",
+      "narration": "Now I can ask for a complete little package: summarize the instructions, draft my reply, and suggest a calendar entry. Those are three reviewable outputs. I read the reply for tone and facts. I check the calendar’s time zone, location, and reminders. Then I choose which actions to take. I do not assume that asking for a draft sent the message. The tool should make the difference between prepared, approved, and completed easy to see.",
+      "visual": "Three panels: Summary with source; Reply draft; Calendar proposal. Status strip: Prepared → Reviewed → Action chosen → Confirmed. Show Send as a separate explicit choice."
+    },
+    {
+      "title": "Handle changes once",
+      "narration": "Suppose the office moves my appointment. I start with the latest email, compare it with the existing calendar entry, and update that entry if I choose to. I do not create another event just because AI suggested a new one. Afterward, I open the calendar and check the new time. My note can point to the updated confirmation. This is how the pieces stay useful together: each has a job, and changes have one clear home.",
+      "visual": "Before: Calendar Tuesday 10 AM. Latest email: Wednesday 11 AM. Action: update existing event. After: one Wednesday event. Counter remains One appointment."
+    },
+    {
+      "title": "Build one working path",
+      "narration": "My first setup would be small. I would choose one capture inbox, identify my calendar and email accounts, and try one appointment from start to finish. I would keep the links that helped and remove unnecessary copying. Once that works, I can use the same approach for a trip or another personal task. The point is not to collect connections. It is to spend less time hunting for information and more time making the actual decision.",
+      "visual": "Starter checklist: Choose inbox; identify accounts; try one appointment; check confirmation; keep useful links. Final diagram connects the same four boxes around one completed task."
+    }
+  ]
+}

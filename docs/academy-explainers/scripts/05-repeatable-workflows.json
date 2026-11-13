@@ -1,0 +1,57 @@
+{
+  "title": "Build a workflow you can repeat",
+  "slug": "05-repeatable-workflows",
+  "description": "Turn one personal task into a clear process with a goal, sources, checkpoints, and a finish line.",
+  "chapters": [
+    {
+      "title": "Choose a repeatable result",
+      "narration": "A workflow is a task I can do again without figuring out the whole process from scratch. It does not have to run automatically. A short checklist that I use every Sunday counts. I start with a result I can recognize: a meal plan for five dinners and a grocery list that matches it. That is much easier to evaluate than help me eat better. A clear result tells me what the process needs to produce.",
+      "visual": "Goal card: Five dinners + matching grocery list. Cross out vague goal Help me eat better. Underline Recognizable output."
+    },
+    {
+      "title": "Write the finish line first",
+      "narration": "Before asking AI to plan anything, I define done. For this example, dinner needs to feed two people, use the equipment I have, and fit my chosen grocery budget. I also want two meals that use leftovers. These are constraints I provide, not details AI should invent about me. I can change them next week. For now, they give the plan a boundary and give me a fair way to check the result afterward.",
+      "visual": "Done when: 5 dinners; serves 2; uses available equipment; fits chosen budget; 2 leftover meals. Label each as a user supplied constraint."
+    },
+    {
+      "title": "Name the sources",
+      "narration": "Next I gather the sources the task actually needs. That might be a note listing what is in my kitchen, a few recipes I already like, and my own spending target. If I want current grocery prices, I need a current store listing and the right store location. Without that, AI can help estimate, but it cannot verify the checkout total. I label estimates clearly in my planning notes so I do not confuse them with prices.",
+      "visual": "Sources tray: Pantry note updated today; saved recipes; user budget; optional current store prices. Price badge: Estimate until checked against the store."
+    },
+    {
+      "title": "Make a short plan",
+      "narration": "Then I ask for the steps before the full result. For example: check the pantry, choose five dinners, combine ingredients, and review the list. I keep the plan short enough to understand at a glance. If AI starts adding a nutrition dashboard or a delivery subscription, I bring it back to the task. Those might be separate choices another day. Right now, I want dinner handled with a process I can repeat next week.",
+      "visual": "Four numbered steps: 1 Check pantry. 2 Choose dinners. 3 Combine ingredients. 4 Review list. Put unrelated dashboard and subscription ideas outside the workflow boundary."
+    },
+    {
+      "title": "Place one useful checkpoint",
+      "narration": "A checkpoint is a place to pause before more work builds on a bad choice. Here, I review the five dinners before AI creates the grocery list. Maybe Thursday needs a quick meal, or I already know I will be eating out Friday. Catching that now saves another round of ingredient changes. I do not need to approve every carrot. I want one review where my judgment changes the direction of the remaining work.",
+      "visual": "Checkpoint between Choose dinners and Combine ingredients. Review questions: Does this fit my week? Is anything unavailable? Do I actually want these meals?"
+    },
+    {
+      "title": "Limit access and cost",
+      "narration": "I give the workflow only the access it needs. Reading my pantry note does not require permission to order groceries. Looking up prices does not require a payment card. If a tool has a usage charge, I set a limit I am comfortable with before running it. A small task should have a small budget. I also decide what happens when access is missing: return a useful draft and name the specific information still needed.",
+      "visual": "Access ladder: Read pantry; read prices; draft list. Separate locked action: Place order, requires user choice. Cost box: chosen run limit and stop at limit."
+    },
+    {
+      "title": "Shape the output for use",
+      "narration": "The output should help me do the next real thing. I want a simple dinner schedule and a shopping list grouped by store section. Ingredients already in my pantry should be marked as on hand, not purchased again. Quantities should match the recipes and serving count. A beautiful paragraph is less useful when I am standing in a grocery aisle. I ask for the format I will actually use, whether that is a note or a printable list.",
+      "visual": "Output preview: Mon: chili; Tue: pasta; remaining days. Grocery sections: Produce, Pantry, Chilled. Beside each ingredient show quantity and Buy or On hand."
+    },
+    {
+      "title": "Check the result mechanically",
+      "narration": "I check the finished list against the plan. Are there five dinners? Do the ingredients cover each recipe? Did shared ingredients get combined? Are the two leftover meals tied to something that actually makes leftovers? A small checklist catches more than asking whether the plan looks good. If prices are available, I compare the total with my target. If they are not, I leave the total as an estimate and review it at the store.",
+      "visual": "Check matrix: Dinner count = 5; every recipe covered; duplicate ingredients combined; leftovers connected; price status visible. Use Pass or Needs fix, never a decorative score."
+    },
+    {
+      "title": "Define when the workflow stops",
+      "narration": "A useful workflow also knows when to stop. Mine stops when the schedule and list pass the checks, when my chosen time or cost limit is reached, or when a required source is unavailable. It should not keep searching for the perfect recipe forever. If something fails, I fix that piece and check it again. I keep the last useful draft so a missing price does not erase the meal choices I already reviewed.",
+      "visual": "Stop paths: Checks pass → finish. Limit reached → save draft. Required source missing → report missing source. Fix arrow returns only to the failed step."
+    },
+    {
+      "title": "Repeat the checklist first",
+      "narration": "For the next week, I reuse the same checklist and refresh the inputs. I do not reuse last week’s pantry list without checking it. Once the manual version works a few times, I can consider a reminder or a supported automation. I would verify that setup separately before saying it runs on its own. The workflow already has value without that. I have a clear start, a useful output, and a finish line I can trust.",
+      "visual": "Reusable template: Goal → Sources → Plan → Checkpoint → Output → Check → Stop. Add Refresh inputs each run. Automation is an optional later step, labeled Not installed by this lesson."
+    }
+  ]
+}

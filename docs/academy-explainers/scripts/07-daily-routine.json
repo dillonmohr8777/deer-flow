@@ -1,0 +1,57 @@
+{
+  "title": "A practical day with AI",
+  "slug": "07-daily-routine",
+  "description": "Use a small morning, midday, and evening routine to turn context into one completed outcome.",
+  "chapters": [
+    {
+      "title": "Start with today",
+      "narration": "My day does not need to start with ten dashboards. I open my calendar and the notes where I captured unfinished things. I want to know what is fixed, what needs attention, and what can wait. AI can help organize that information, but I decide what today is for. A useful morning result might be three priorities and one first action. If the routine takes longer than the work, I make the routine smaller again.",
+      "visual": "Morning screen: Calendar; capture inbox; unfinished notes. Output: 3 priorities + 1 first action. Label Fixed commitments and Flexible work with different shapes."
+    },
+    {
+      "title": "Collect without chasing everything",
+      "narration": "I spend a few minutes collecting what arrived since yesterday. Maybe there is an appointment email, an idea for a weekend trip, and a reminder to renew something. I put each item in my chosen inbox or link to its original source. I do not have to solve each one as I capture it. That separation matters. Otherwise, checking one email becomes an hour of unrelated browsing, and I never choose the work I intended to do.",
+      "visual": "Intake cards: Appointment email; trip idea; renewal reminder. Arrow to one Inbox. Keep Capture and Do as two distinct stages with a pause between them."
+    },
+    {
+      "title": "Choose one outcome",
+      "narration": "Then I choose one outcome that would make the day feel useful. For a personal example, I might want a realistic weekend trip plan I can review tonight. I define the output: two travel options, one place to stay, and the costs I can verify. I also write the limits, including my dates and spending target. AI can suggest priorities, but it should show its reasoning. I choose the outcome because I know what matters to me.",
+      "visual": "Daily outcome card: Reviewable weekend plan. Needs: 2 travel options; 1 lodging option; current costs. Constraints: user dates, budget, starting location. Mark No booking yet."
+    },
+    {
+      "title": "Give a clear first request",
+      "narration": "My first request includes the result, the sources, the limits, and the format. I might say: Compare these two routes for my dates. Use the operator pages. Show travel time, current price, and any detail you could not confirm. Keep it to one page. That gives AI a job it can finish. I avoid asking it to plan my entire life in one prompt. A focused request gives me something concrete to improve.",
+      "visual": "Prompt template: Result; Sources; Constraints; Output format. Fill with Compare two routes, official operator pages, selected dates and budget, one page with unknowns visible."
+    },
+    {
+      "title": "Protect a focus block",
+      "narration": "Once the first step is clear, I give it a focus block. I close the intake habit for a while and work on the chosen outcome. AI can compare details, help write, or explain something I do not understand. I keep the source links beside the work so I can check them without starting over. If a new idea appears, I capture it quickly and return. The block ends with a useful draft, not necessarily a perfect result.",
+      "visual": "Focus timeline: Start with one task → work from sources → park new ideas in Inbox → save draft. Show a timer as a chosen boundary, without prescribing a fixed duration."
+    },
+    {
+      "title": "Review before making it real",
+      "narration": "When the draft is ready, I review it as the person who will use it. Does the trip fit my actual dates? Does the travel time include the transfer? Is the price current, and what does it include? I can ask AI to fix a gap, but I do not let polished wording hide a missing detail. Once I understand the options, I choose the next action. Researching a trip and booking it are separate steps.",
+      "visual": "Draft review: Dates; transfers; total travel time; included fees; source freshness. Decision below the draft: Keep researching, choose option, or stop. Booking remains an explicit later action."
+    },
+    {
+      "title": "Do a midday reset",
+      "narration": "Around midday, I check whether the plan still fits reality. I look at the calendar, the progress on my one outcome, and anything genuinely time sensitive that arrived. I do not rebuild the whole day because a small interruption happened. If I need to change direction, I save what is done and name the next step. A quick reset keeps the morning’s work usable. It also stops yesterday’s priorities from quietly running the rest of today.",
+      "visual": "Midday check: What changed? What is done? What remains? What comes next? Show one saved draft and one updated next action, with unchanged commitments retained."
+    },
+    {
+      "title": "Finish with evidence",
+      "narration": "Before I call the outcome finished, I check the result where it belongs. For the trip plan, I open the linked sources and verify the details I will base a decision on. If I chose to add a reminder, I look for it in my calendar. If I only prepared a draft, I label it prepared. This takes a little attention now, but it saves the confusion of tomorrow’s question: did I actually do that, or just discuss it?",
+      "visual": "Outcome status: Plan prepared and sources checked. Optional reminder: created and read back. Separate labels for Discussed, Drafted, and Completed, each with its matching evidence."
+    },
+    {
+      "title": "Capture the evening handoff",
+      "narration": "At the end of the day, I leave a short handoff for myself. I write what I finished, what decision I made, and the first step still open. I include the useful source links and remove any guess that turned out wrong. This is not a diary of every click. It is enough context to restart without rereading a long conversation. Tomorrow, AI can help from that note, and I can see exactly what I meant.",
+      "visual": "Evening note: Finished; Decision; Still open; Next first step; source links. Example: Compared routes. Prefer option B. Check lodging cancellation terms tomorrow."
+    },
+    {
+      "title": "Make one small habit repeat",
+      "narration": "If I were starting tomorrow, I would repeat just three things: check the calendar and inbox in the morning, review my chosen outcome midday, and leave a short note at night. I would do that manually until it felt useful. Then I could add a reminder if I wanted one. I do not need an elaborate system to begin. I need a routine small enough to keep, with one clear outcome and a record of what actually happened.",
+      "visual": "Three anchors: Morning: choose. Midday: adjust. Evening: capture. Small loop returns to next morning. Starter habit checklist has only these three items, with optional reminder clearly labeled."
+    }
+  ]
+}
