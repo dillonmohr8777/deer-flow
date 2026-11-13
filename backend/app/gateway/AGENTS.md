@@ -272,3 +272,7 @@ single-attempt and unclaimable until org owner/admin approval (`approval_state`)
 See [contract](../../docs/FLEET_PROJECT_JOBS.md) for routes and tests.
 
 Private brand projection and staff work-plan rules: [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md).
+
+Client workspace references use the separate default-off `client-references` projection with explicit backend actor/org/project/document/hash bindings. Staff `/api/projects` routes remain closed to clients. Task list/detail admission retains existing router permissions and server-resolved organization/storage ownership. Client writes, project thread inventories and scheduler run history remain denied even when RBAC is disabled. `test_client_workspace_read_access.py` exercises the real task middleware/routers and preserves staff-project denial; the scoped reference policy has its own HTTP and original-byte checks.
+
+Customer scheduled-task list/detail responses are projected on the server to id, title, status, next_run_at, last_run_at and timezone only. Prompts, assistant/thread/run IDs, schedule specifications, ownership fields and internal errors stay out of the customer API response; staff responses retain their existing management fields. Project operator configuration remains staff-only.

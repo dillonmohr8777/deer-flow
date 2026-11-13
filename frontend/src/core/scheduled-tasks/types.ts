@@ -46,3 +46,9 @@ export type ScheduledTaskRun = {
   finished_at: string | null;
   created_at: string;
 };
+
+/** Strict customer status response, excluding execution and internal run data. */
+export type ClientScheduledTaskStatus = Pick<
+  ScheduledTask,
+  "id" | "title" | "status" | "next_run_at" | "last_run_at" | "timezone"
+>;
