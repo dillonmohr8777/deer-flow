@@ -29,6 +29,12 @@ while handing off to the wait queue.
 - Designed for configs that enable thinking through `extra_body.chat_template_kwargs.enable_thinking` on vLLM 0.19.0 Qwen reasoning models, while accepting the older `thinking` alias
 - `cumulative_stream_usage` is an opt-in model setting (default `false`) for endpoints that repeat cumulative token totals on each streaming chunk. The provider converts snapshots to deltas only when a stable completion id is present, isolates interleaved streams by id, and leaves the original usage untouched otherwise. Per-model tracking is lock-protected and cleared on the trailing empty-`choices` frame whether or not that frame carries usage. A soft cap of 1024 ids evicts only entries idle for at least one hour; active streams may temporarily exceed the cap so eviction cannot corrupt their deltas. Regression coverage lives in `tests/test_vllm_provider.py`.
 
+### Codex with automatic fallback (`packages/harness/deerflow/models/momo_fallback.py`)
+
+- `CodexWithFallback` subclasses `CodexChatModel`. On a usage limit, rate limit (429), auth failure, 5xx or transport error it replays the same turn, bound tools included, on `fallback_model` (a configured model `name`, built through `create_chat_model` so admission caps still apply). Any other error is re-raised unchanged; an empty `fallback_model` disables the fallback. The fallback message carries `momo_fallback_from` and `momo_fallback_reason` in `response_metadata`.
+- Codex binds tools in the flat Responses format; `_to_chat_tools` converts them to the chat-completions shape before `bind_tools` on the fallback. Keep that conversion or the fallback turn loses its tools.
+- Pinned by `tests/test_momo_fallback.py` (no network). Example entries are commented in `config.example.yaml`.
+
 ### Managed shared models (`config/managed_models.py`)
 
 `ManagedModelStore` persists a Fernet-encrypted catalog plus its generated local key
