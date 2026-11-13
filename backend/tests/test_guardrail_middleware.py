@@ -809,3 +809,66 @@ class TestGuardrailWritesAuthorizationOutcome:
         assert len(store) == _MAX_TRACKED_OUTCOMES
         assert "call-0" not in store
         assert f"call-{_MAX_TRACKED_OUTCOMES + 9}" in store
+
+
+class TestAuditOnly:
+    """audit_only: evaluate and record, never block."""
+
+    def test_denied_call_runs_and_the_would_be_denial_is_recorded(self):
+        journal = _FakeJournal()
+        mw = GuardrailMiddleware(_DenyAllProvider(), audit_only=True)
+        req = _make_tool_call_request("bash", context={"__run_journal": journal})
+        handler = MagicMock(return_value="ran")
+
+        assert mw.wrap_tool_call(req, handler) == "ran"
+
+        handler.assert_called_once_with(req)
+        assert len(journal.calls) == 1
+        event = journal.calls[0]
+        assert event["action"] == "audit_would_deny_tool_call"
+        assert event["changes"]["allow"] is False
+        assert event["changes"]["audit_only"] is True
+        assert event["changes"]["reason_codes"] == ["oap.denied"]
+
+    def test_async_denied_call_runs_and_is_recorded(self):
+        journal = _FakeJournal()
+        mw = GuardrailMiddleware(_DenyAllProvider(), audit_only=True)
+        req = _make_tool_call_request("bash", context={"__run_journal": journal})
+
+        async def handler(request):
+            return "ran"
+
+        assert asyncio.run(mw.awrap_tool_call(req, handler)) == "ran"
+        assert [c["action"] for c in journal.calls] == ["audit_would_deny_tool_call"]
+
+    def test_provider_error_never_fails_closed(self):
+        journal = _FakeJournal()
+        mw = GuardrailMiddleware(_ExplodingProvider(), fail_closed=True, audit_only=True)
+        req = _make_tool_call_request("bash", context={"__run_journal": journal})
+        handler = MagicMock(return_value="ran")
+
+        assert mw.wrap_tool_call(req, handler) == "ran"
+        assert [c["action"] for c in journal.calls] == ["allow_tool_call_after_provider_error"]
+
+    def test_allowed_call_records_nothing(self):
+        journal = _FakeJournal()
+        mw = GuardrailMiddleware(_AllowAllProvider(), audit_only=True)
+        req = _make_tool_call_request("web_search", context={"__run_journal": journal})
+
+        assert mw.wrap_tool_call(req, MagicMock(return_value="ran")) == "ran"
+        assert journal.calls == []
+
+    def test_default_still_blocks_and_parameters_are_unchanged(self):
+        enforcing = GuardrailMiddleware(_DenyAllProvider())
+        handler = MagicMock(return_value="ran")
+        result = enforcing.wrap_tool_call(_make_tool_call_request("bash"), handler)
+        handler.assert_not_called()
+        assert result != "ran"
+        assert "audit_only" not in enforcing.release_policy_parameters()
+        assert GuardrailMiddleware(_DenyAllProvider(), audit_only=True).release_policy_parameters()["audit_only"] is True
+
+    def test_config_field_defaults_off(self):
+        from deerflow.config.guardrails_config import GuardrailsConfig
+
+        assert GuardrailsConfig().audit_only is False
+        assert GuardrailsConfig(audit_only=True).audit_only is True

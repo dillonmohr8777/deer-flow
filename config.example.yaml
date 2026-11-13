@@ -3070,6 +3070,8 @@ run_ownership:
 # --- Option 1: Built-in AllowlistProvider (zero external deps) ---
 # guardrails:
 #   enabled: true
+#   fail_closed: true            # block tool calls if the provider errors
+#   audit_only: false            # true: evaluate and record would-be denials, block nothing (observe a policy before enforcing it)
 #   provider:
 #     use: deerflow.guardrails.builtin:AllowlistProvider
 #     config:

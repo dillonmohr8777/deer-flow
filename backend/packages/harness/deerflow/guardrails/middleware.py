@@ -29,12 +29,18 @@ class GuardrailMiddleware(AgentMiddleware[AgentState]):
     If the provider raises, behavior depends on fail_closed:
       - True (default): block the call
       - False: allow it through with a warning
+
+    With ``audit_only=True`` nothing is blocked: the provider is still evaluated,
+    a would-be denial is recorded as ``audit_would_deny_tool_call`` and the call
+    proceeds, and a provider error never fails closed. It exists so a policy can be
+    observed on real traffic before it is enforced.
     """
 
-    def __init__(self, provider: GuardrailProvider, *, fail_closed: bool = True, passport: str | None = None):
+    def __init__(self, provider: GuardrailProvider, *, fail_closed: bool = True, passport: str | None = None, audit_only: bool = False):
         self.provider = provider
         self.fail_closed = fail_closed
         self.passport = passport
+        self.audit_only = audit_only
 
     def _resolve_policy_identity(self) -> tuple[str, str]:
         """Return ``(policy_id, policy_version)`` without the provider's full declaration.
@@ -60,12 +66,16 @@ class GuardrailMiddleware(AgentMiddleware[AgentState]):
             if isinstance(declared, dict):
                 provider_parameters = declared
         policy_id, policy_version = self._resolve_policy_identity()
-        return {
+        parameters: dict[str, object] = {
             "fail_closed": self.fail_closed,
             "passport": self.passport,
             "policy": {"id": policy_id, "version": policy_version},
             "provider_parameters": provider_parameters,
         }
+        if self.audit_only:
+            # Only present when set, so the released parameters of an enforcing policy are unchanged.
+            parameters["audit_only"] = True
+        return parameters
 
     @staticmethod
     def _resolve_context(request: ToolCallRequest) -> dict:
@@ -153,6 +163,8 @@ class GuardrailMiddleware(AgentMiddleware[AgentState]):
             "fail_closed": self.fail_closed,
             "provider_error": provider_error,
         }
+        if self.audit_only:
+            changes["audit_only"] = True
 
         try:
             journal.record_middleware(
@@ -164,6 +176,28 @@ class GuardrailMiddleware(AgentMiddleware[AgentState]):
             )
         except Exception:  # noqa: BLE001
             logger.warning("Failed to record middleware:guardrail event", exc_info=True)
+
+    def _audit_only_allow(self, context: dict, guardrail_request: GuardrailRequest, decision: GuardrailDecision) -> GuardrailDecision:
+        """Audit-only mode: record the would-be denial, then let the call through.
+
+        The recorded event keeps the provider's real verdict (``allow=False``) so an
+        operator can read what enforcement would have blocked. The returned decision
+        is an explicit allow, so the authorization outcome matches what actually
+        happened to the tool call.
+        """
+        logger.info(
+            "Guardrail audit-only: would deny tool=%s policy=%s code=%s",
+            guardrail_request.tool_name,
+            decision.policy_id,
+            decision.reasons[0].code if decision.reasons else "unknown",
+        )
+        self._record_guardrail_event(context, guardrail_request, decision, action="audit_would_deny_tool_call", provider_error=False)
+        return GuardrailDecision(
+            allow=True,
+            reasons=[GuardrailReason(code="oap.audit_only", message="audit-only mode: the policy would deny this call")],
+            policy_id=decision.policy_id,
+            metadata=dict(decision.metadata),
+        )
 
     @override
     def wrap_tool_call(
@@ -180,7 +214,7 @@ class GuardrailMiddleware(AgentMiddleware[AgentState]):
             raise
         except Exception:
             logger.exception("Guardrail provider error (sync)")
-            if self.fail_closed:
+            if self.fail_closed and not self.audit_only:
                 decision = GuardrailDecision(allow=False, reasons=[GuardrailReason(code="oap.evaluator_error", message="guardrail provider error (fail-closed)")])
                 self._record_guardrail_event(
                     context,
@@ -202,6 +236,8 @@ class GuardrailMiddleware(AgentMiddleware[AgentState]):
                 )
                 put_authorization_outcome(context, request.tool_call.get("id"), self._build_authorization_outcome(decision))
                 return handler(request)
+        if not decision.allow and self.audit_only:
+            decision = self._audit_only_allow(context, gr, decision)
         put_authorization_outcome(context, request.tool_call.get("id"), self._build_authorization_outcome(decision))
         if not decision.allow:
             logger.warning("Guardrail denied: tool=%s policy=%s code=%s", gr.tool_name, decision.policy_id, decision.reasons[0].code if decision.reasons else "unknown")
@@ -230,7 +266,7 @@ class GuardrailMiddleware(AgentMiddleware[AgentState]):
             raise
         except Exception:
             logger.exception("Guardrail provider error (async)")
-            if self.fail_closed:
+            if self.fail_closed and not self.audit_only:
                 decision = GuardrailDecision(allow=False, reasons=[GuardrailReason(code="oap.evaluator_error", message="guardrail provider error (fail-closed)")])
                 self._record_guardrail_event(
                     context,
@@ -252,6 +288,8 @@ class GuardrailMiddleware(AgentMiddleware[AgentState]):
                 )
                 put_authorization_outcome(context, request.tool_call.get("id"), self._build_authorization_outcome(decision))
                 return await handler(request)
+        if not decision.allow and self.audit_only:
+            decision = self._audit_only_allow(context, gr, decision)
         put_authorization_outcome(context, request.tool_call.get("id"), self._build_authorization_outcome(decision))
         if not decision.allow:
             logger.warning("Guardrail denied: tool=%s policy=%s code=%s", gr.tool_name, decision.policy_id, decision.reasons[0].code if decision.reasons else "unknown")
