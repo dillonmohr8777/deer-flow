@@ -25,7 +25,9 @@ posted, then the session goes to ``active`` (or ``suspended`` when the agent ask
 Only a reply that carries the request's ``message_id`` settles it; notices such as approval
 prompts carry none and leave the session alone. Stop marks the in-flight requests so their answers
 are dropped (also when the answer is already on its way to Slack), confirms in the thread and
-returns the session to ``active``. The Gateway run itself is not cancelled here.
+returns the session to ``active``. A dropped reply is recorded as ``metadata.slack_delivery``
+state ``dropped`` (nothing was posted) and ``send_file`` skips its files. The Gateway run itself
+is not cancelled here.
 """
 
 from __future__ import annotations
