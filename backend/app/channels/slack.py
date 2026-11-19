@@ -18,6 +18,7 @@ from app.channels.commands import is_known_channel_command
 from app.channels.connection_identity import attach_connection_identity
 from app.channels.desktop_jobs import as_command as desktop_as_command
 from app.channels.message_bus import InboundMessageType, InboundReservation, MessageBus, OutboundMessage, ResolvedAttachment
+from app.channels.slack_agent import AGENT_EVENTS, SlackAgentSessions, scopes_from_response
 from app.channels.slack_approvals import ActionResult as ApprovalActionResult
 from app.channels.slack_approvals import DbApprovalStore, parse_block_action
 from app.channels.slack_approvals import build_message as build_approval_message
@@ -121,6 +122,8 @@ class SlackChannel(Channel):
           Conversation continuity still keys on the originating thread/message.
         - ``trusted_app_ids``: (optional) Slack app IDs (A...) allowed to post as an
           allowlisted user via a user token (e.g. Composio). Empty = any app.
+        - ``agent``: (optional) Slack agent sessions (Agents & tools). Inert until the app
+          manifest declares the app an agent; see ``app.channels.slack_agent``.
     """
 
     def __init__(self, bus: MessageBus, config: dict[str, Any]) -> None:
@@ -148,6 +151,7 @@ class SlackChannel(Channel):
         self._brainforge_recovery_timer: asyncio.TimerHandle | None = None
         self._approvals_dm = parse_approvals_dm_config(config.get("approvals_dm"))
         self._approvals_store = None
+        self._agent = SlackAgentSessions(config.get("agent"))
 
     async def start(self) -> None:
         if self._running:
@@ -278,6 +282,7 @@ class SlackChannel(Channel):
                 raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
             msg.metadata["slack_delivery"]["state"] = "failed"
             await self._mark_thread_failed(web_client, msg)
+            await self._finish_agent_session(msg)
             raise
         except Exception as exc:
             raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
@@ -288,6 +293,18 @@ class SlackChannel(Channel):
         msg.metadata["slack_delivery"] = {"state": "sent", "channel": channel, "ts": timestamp}
         if msg.thread_ts:
             await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "white_check_mark")
+        await self._finish_agent_session(msg)
+
+    async def _on_outbound(self, msg: OutboundMessage) -> None:
+        # A reply to a request the user stopped from the agent session is dropped, files included.
+        if msg.channel_name == self.name and self._agent.should_drop(msg):
+            logger.info("[Slack agent] dropped the reply to a stopped request in channel=%s", msg.chat_id)
+            return
+        await super()._on_outbound(msg)
+
+    async def _finish_agent_session(self, msg: OutboundMessage) -> None:
+        if msg.thread_ts and self._agent.has_session(msg.chat_id, str(msg.thread_ts)):
+            await asyncio.to_thread(self._agent.finish, self._web_client, msg)
 
     async def _mark_thread_failed(self, web_client, msg: OutboundMessage) -> None:
         """Best-effort failure mark for a definite rejection; an unknown outcome may be live, so it gets none."""
@@ -327,6 +344,7 @@ class SlackChannel(Channel):
             return
         try:
             auth_info = await asyncio.to_thread(self._web_client.auth_test)
+            self._agent.note_scopes(scopes_from_response(auth_info))
             user_id = auth_info.get("user_id") if isinstance(auth_info, dict) else None
             if user_id is None:
                 auth_get = getattr(auth_info, "get", None)
@@ -466,6 +484,11 @@ class SlackChannel(Channel):
             event = req.payload.get("event", {})
             etype = event.get("type", "")
 
+            # Agent sessions (Agents & tools): only sent once the manifest opts in.
+            if etype in AGENT_EVENTS:
+                self._handle_agent_event(event, etype)
+                return
+
             # Handle message events (DM or @mention)
             if etype in ("message", "app_mention"):
                 self._handle_message_event(
@@ -475,6 +498,21 @@ class SlackChannel(Channel):
 
         except Exception:
             logger.exception("Error processing Slack event")
+
+    def _handle_agent_event(self, event: dict, etype: str) -> None:
+        """Route an agent-session event (called from the SDK thread)."""
+        self._agent.note_event(etype)
+        user_id = str(event.get("user") or "")
+        if etype == "agent_session_title_changed":
+            self._agent.title_changed(event)
+        elif etype == "app_context_changed":
+            self._agent.context_changed(event)
+        elif self._allowed_users and user_id not in self._allowed_users:
+            logger.debug("Ignoring %s from non-allowed user: %s", etype, user_id)
+        elif etype == "agent_session_stopped":
+            self._agent.stopped(self._web_client, event)
+        elif etype == "app_home_opened":
+            self._agent.home_opened(self._web_client, event)
 
     # -- approvals DM (channels.slack.approvals_dm) --------------------------
 
@@ -647,6 +685,8 @@ class SlackChannel(Channel):
             msg_type = InboundMessageType.COMMAND
         else:
             msg_type = InboundMessageType.CHAT
+        # Agent sessions cover chat requests in the app's DM; commands keep the plain acknowledgement.
+        agent_session = msg_type == InboundMessageType.CHAT and event.get("channel_type") == "im" and self._agent.active
 
         # topic_id: use thread_ts as the topic identifier.
         # For threaded messages, thread_ts is the root message ts (shared topic).
@@ -672,7 +712,7 @@ class SlackChannel(Channel):
             if reservation is None:
                 return
             if globally_allowed:
-                self._acknowledge_inbound(inbound)
+                self._acknowledge_inbound(inbound, agent_session=agent_session)
             try:
                 if self._connection_repo is None:
                     # Reservation bounds callbacks scheduled from the SDK
@@ -710,8 +750,12 @@ class SlackChannel(Channel):
         finally:
             reservation.release()
 
-    def _acknowledge_inbound(self, inbound) -> None:
-        """Acknowledge only after expanded participants have a personal binding."""
+    def _acknowledge_inbound(self, inbound, *, agent_session: bool = False) -> None:
+        """Acknowledge only after expanded participants have a personal binding.
+
+        In an agent session the thread's status goes to ``processing`` (Slack shows its own
+        working state and Stop button) instead of the "Working on it..." post.
+        """
         team_id = str(inbound.metadata.get("team_id") or "")
         policy = self._channel_policies.get(f"{team_id}:{inbound.chat_id}", {}) if isinstance(self._channel_policies, dict) else {}
         if isinstance(policy, dict) and policy.get("mentions_and_threads_only") is True:
@@ -720,6 +764,15 @@ class SlackChannel(Channel):
             if len(self._engaged_threads) > 256:
                 self._engaged_threads.pop(next(iter(self._engaged_threads)))
         self._add_reaction(inbound.chat_id, inbound.metadata.get("message_id") or inbound.thread_ts, "eyes")
+        if agent_session and self._agent.begin(
+            self._web_client,
+            channel_id=inbound.chat_id,
+            thread_ts=str(inbound.thread_ts),
+            message_id=str(inbound.metadata.get("message_id") or ""),
+            user_id=str(inbound.user_id or ""),
+            text=inbound.text,
+        ):
+            return
         self._send_running_reply(inbound.chat_id, inbound.thread_ts)
 
     async def _attach_connection_identity(self, inbound, *, team_id: str | None = None):
