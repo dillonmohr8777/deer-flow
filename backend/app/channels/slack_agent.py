@@ -6,10 +6,14 @@ events handled here and direct messages keep the plain eyes + "Working on it..."
 
 Configuration keys (``channels.slack.agent``):
     - ``enabled``: ``"auto"`` (default), ``true`` or ``false``. ``auto`` switches agent sessions on
-      the first time Slack shows the app is an agent: an agent-only event arrives
-      (``app_context_changed``, ``agent_session_stopped``, ``agent_session_title_changed``) or the
-      startup ``auth.test`` reports the ``assistant:write`` scope. A failed ``processing`` status
-      call switches ``auto`` back off and falls back to the plain acknowledgement.
+      the first time an agent-only event arrives (``app_context_changed``,
+      ``agent_session_stopped``, ``agent_session_title_changed``); Slack sends those only to apps
+      declared as agents. The ``assistant:write`` scope alone is not a signal, because apps built
+      for the older assistant view hold it too. Set ``true`` to switch sessions on from startup.
+      In ``auto``, a ``processing`` call refused because the app is not an agent
+      (``not_allowed_token_type``, ``not_agent_app``, ``missing_scope``, ``feature_disabled``)
+      switches sessions back off; any other failure (rate limit, timeout, network) only falls
+      back to the plain acknowledgement for that one message.
     - ``suggested_prompts``: up to 4 ``{"title", "message"}`` items shown at the top of the DM.
     - ``prompts_title``: heading over the suggested prompts.
     - ``welcome_text``: posted once in an empty DM with the agent (blank = no welcome).
@@ -18,8 +22,10 @@ Configuration keys (``channels.slack.agent``):
 Session lifecycle (https://docs.slack.dev/ai/agent-sessions): a direct message sets the thread's
 session to ``processing`` (Slack shows its own "Working..." state and a Stop button), the reply is
 posted, then the session goes to ``active`` (or ``suspended`` when the agent asked a question).
-Stop marks the in-flight request so its answer is dropped when it arrives, confirms in the thread
-and returns the session to ``active``. The Gateway run itself is not cancelled here.
+Only a reply that carries the request's ``message_id`` settles it; notices such as approval
+prompts carry none and leave the session alone. Stop marks the in-flight requests so their answers
+are dropped (also when the answer is already on its way to Slack), confirms in the thread and
+returns the session to ``active``. The Gateway run itself is not cancelled here.
 """
 
 from __future__ import annotations
@@ -35,7 +41,8 @@ logger = logging.getLogger(__name__)
 
 AGENT_ONLY_EVENTS = frozenset({"app_context_changed", "agent_session_stopped", "agent_session_title_changed"})
 AGENT_EVENTS = AGENT_ONLY_EVENTS | {"app_home_opened"}
-AGENT_SCOPE = "assistant:write"
+# setStatus errors that mean "this app is not an agent here"; anything else is treated as transient.
+NOT_AN_AGENT_ERRORS = frozenset({"not_allowed_token_type", "not_agent_app", "missing_scope", "feature_disabled"})
 
 DEFAULT_PROMPTS_TITLE = "Try asking"
 DEFAULT_SUGGESTED_PROMPTS: tuple[dict[str, str], ...] = (
@@ -97,23 +104,13 @@ def session_title(text: str) -> str:
     return first_line[: _TITLE_LIMIT - 3].rstrip() + "..."
 
 
-def scopes_from_response(response: Any) -> set[str]:
-    """Read the token's scopes from a Slack response's ``x-oauth-scopes`` header, if present."""
-    headers = getattr(response, "headers", None)
-    if not isinstance(headers, dict):
-        return set()
-    for name, value in headers.items():
-        if str(name).lower() == "x-oauth-scopes" and value:
-            raw = value[0] if isinstance(value, list | tuple) and value else value
-            return {scope.strip() for scope in str(raw).split(",") if scope.strip()}
-    return set()
-
-
 class SlackAgentSessions:
     """Agent-session state and Slack calls for one Slack channel adapter.
 
     Socket Mode events arrive on the slack-sdk thread while replies are sent from the event
-    loop, so every state change takes ``_lock``. Every Slack call is best-effort: a failure is
+    loop, so state changes take ``_lock``. Status changes for one thread are serialized by that
+    thread's own lock (taken before ``_lock``, held across the Slack call), so ``processing`` can
+    never land after the ``active`` of a fast reply. Every Slack call is best-effort: a failure is
     logged and never raised into the message path.
     """
 
@@ -127,6 +124,8 @@ class SlackAgentSessions:
         self.welcome_text = str(welcome).strip() if welcome else ""
         self.stopped_text = str(config.get("stopped_text") or DEFAULT_STOPPED_TEXT)
         self._lock = threading.Lock()
+        # (channel, thread_ts) -> lock serializing that thread's status calls.
+        self._thread_locks: OrderedDict[tuple[str, str], threading.Lock] = OrderedDict()
         # (channel, thread_ts) -> message ids still waiting for a final reply in that session.
         self._in_flight: OrderedDict[tuple[str, str], list[str]] = OrderedDict()
         # (channel, message_id) of requests the user stopped; their replies are dropped.
@@ -150,11 +149,6 @@ class SlackAgentSessions:
             return False
         return self._detected
 
-    def note_scopes(self, scopes: set[str]) -> None:
-        if self._mode == "auto" and AGENT_SCOPE in scopes and not self._detected:
-            self._detected = True
-            logger.info("[Slack agent] bot token has %s; agent sessions on", AGENT_SCOPE)
-
     def note_event(self, event_type: str) -> None:
         if self._mode == "auto" and event_type in AGENT_ONLY_EVENTS and not self._detected:
             self._detected = True
@@ -162,27 +156,46 @@ class SlackAgentSessions:
 
     # -- session lifecycle ----------------------------------------------------
 
+    def _thread_lock(self, key: tuple[str, str]) -> threading.Lock:
+        with self._lock:
+            lock = self._thread_locks.get(key) or threading.Lock()
+            _bounded_set(self._thread_locks, key, lock)
+            return lock
+
     def begin(self, web_client, *, channel_id: str, thread_ts: str, message_id: str, user_id: str, text: str) -> bool:
         """Set the thread's session to ``processing``. False means fall back to the plain acknowledgement."""
-        if not web_client or not channel_id or not thread_ts:
+        # Without a request id the reply could never settle the session, so none is opened.
+        if not web_client or not channel_id or not thread_ts or not message_id:
             return False
+        key = (channel_id, thread_ts)
         payload: dict[str, Any] = {"channel_id": channel_id, "thread_ts": thread_ts, "status": "processing"}
         title = session_title(text)
         if title:
             payload["title"] = title
         if user_id:
             payload["initiator_user_id"] = user_id
-        if not self._set_status(web_client, payload):
-            if self._mode == "auto" and self._detected:
-                self._detected = False
-                logger.warning("[Slack agent] processing status refused; agent sessions off until Slack shows the app is an agent again")
-            return False
-        with self._lock:
-            ids = self._in_flight.get((channel_id, thread_ts), [])
-            if message_id and message_id not in ids:
-                ids.append(message_id)
-            _bounded_set(self._in_flight, (channel_id, thread_ts), ids)
-        return True
+        with self._thread_lock(key):
+            # Registered before the call, so a Stop or a reply racing the call finds the request.
+            with self._lock:
+                ids = self._in_flight.get(key, [])
+                added = message_id not in ids
+                if added:
+                    ids.append(message_id)
+                _bounded_set(self._in_flight, key, ids)
+            ok, error = self._set_status(web_client, payload)
+            if ok:
+                return True
+            with self._lock:
+                ids = self._in_flight.get(key)
+                if ids is not None:
+                    if added and message_id in ids:
+                        ids.remove(message_id)
+                    if not ids:
+                        self._in_flight.pop(key, None)
+        if self._mode == "auto" and self._detected and error in NOT_AN_AGENT_ERRORS:
+            self._detected = False
+            logger.warning("[Slack agent] processing status refused (%s); agent sessions off until Slack shows the app is an agent again", error)
+        return False
 
     def has_session(self, channel_id: str, thread_ts: str) -> bool:
         """True while this process has a request in flight in the thread's session."""
@@ -203,45 +216,48 @@ class SlackAgentSessions:
         return True
 
     def finish(self, web_client, msg: OutboundMessage) -> None:
-        """After a final reply posts, move the session to ``active`` (``suspended`` if the agent asked a question)."""
+        """After a final reply, move the session to ``active`` (``suspended`` if the agent asked a question).
+
+        Only a reply carrying the request's ``message_id`` settles it: a late reply to an earlier
+        request, or a notice without an id (approval prompts), leaves a newer request processing.
+        """
         if not msg.is_final or not msg.thread_ts:
             return
-        key = (msg.chat_id, str(msg.thread_ts))
         message_id = str(msg.metadata.get("message_id") or "")
-        with self._lock:
-            ids = self._in_flight.get(key)
-            if ids is None:
-                return
-            if message_id in ids:
+        if not message_id:
+            return
+        key = (msg.chat_id, str(msg.thread_ts))
+        with self._thread_lock(key):
+            with self._lock:
+                ids = self._in_flight.get(key)
+                if ids is None or message_id not in ids:
+                    return
                 ids.remove(message_id)
-            elif not message_id and ids:
-                # A reply that carries no request id settles the oldest request.
-                ids.pop(0)
-            else:
-                # A late reply to an earlier request (e.g. a follow-up) must not end a newer one.
-                return
-            if ids:
-                return
-            self._in_flight.pop(key, None)
-        status = "suspended" if msg.metadata.get(PENDING_CLARIFICATION_METADATA_KEY) else "active"
-        self._set_status(web_client, {"channel_id": key[0], "thread_ts": key[1], "status": status})
+                if ids:
+                    return
+                self._in_flight.pop(key, None)
+            status = "suspended" if msg.metadata.get(PENDING_CLARIFICATION_METADATA_KEY) else "active"
+            self._set_status(web_client, {"channel_id": key[0], "thread_ts": key[1], "status": status})
 
     def stopped(self, web_client, event: dict) -> None:
-        """Handle ``agent_session_stopped``: drop in-flight answers, confirm, return the session to active."""
+        """Handle ``agent_session_stopped``: drop in-flight answers, return the session to active, confirm."""
         channel_id = str(event.get("channel") or "")
         thread_ts = str(event.get("thread_ts") or "")
         if not channel_id or not thread_ts:
             return
-        with self._lock:
-            ids = self._in_flight.pop((channel_id, thread_ts), None)
-            if ids is None:
-                # Not a session this process opened (or it already finished); never create one here.
-                logger.info("[Slack agent] stop for an idle thread channel=%s thread_ts=%s", channel_id, thread_ts)
-                return
-            for message_id in ids:
-                _bounded_set(self._stopped, (channel_id, message_id))
-        logger.info("[Slack agent] user stopped %d request(s) in channel=%s thread_ts=%s", len(ids), channel_id, thread_ts)
-        self._set_status(web_client, {"channel_id": channel_id, "thread_ts": thread_ts, "status": "active"})
+        key = (channel_id, thread_ts)
+        with self._thread_lock(key):
+            with self._lock:
+                ids = self._in_flight.pop(key, None) or []
+                for message_id in ids:
+                    _bounded_set(self._stopped, (channel_id, message_id))
+            if ids:
+                logger.info("[Slack agent] user stopped %d request(s) in channel=%s thread_ts=%s", len(ids), channel_id, thread_ts)
+            else:
+                # Slack only shows Stop while the session is processing; after a restart this process
+                # may not know the request, but the session must still leave processing.
+                logger.info("[Slack agent] stop for a thread with no tracked request channel=%s thread_ts=%s", channel_id, thread_ts)
+            self._set_status(web_client, {"channel_id": channel_id, "thread_ts": thread_ts, "status": "active"})
         try:
             web_client.chat_postMessage(channel=channel_id, text=self.stopped_text, thread_ts=thread_ts)
         except Exception:
@@ -271,8 +287,12 @@ class SlackAgentSessions:
     # -- welcome and suggested prompts ---------------------------------------
 
     def home_opened(self, web_client, event: dict) -> None:
-        """Handle ``app_home_opened`` on the Messages tab: suggested prompts, then a one-time welcome."""
-        if self._mode == "off" or not web_client:
+        """Handle ``app_home_opened`` on the Messages tab: suggested prompts, then a one-time welcome.
+
+        ``app_home_opened`` also reaches apps that are not agents, so nothing happens until
+        sessions are active (``enabled: true``, or ``auto`` after an agent-only event).
+        """
+        if not self.active or not web_client:
             return
         if event.get("tab") != "messages":
             return
@@ -306,25 +326,32 @@ class SlackAgentSessions:
 
     # -- Slack calls ------------------------------------------------------------
 
-    def _set_status(self, web_client, payload: dict[str, Any]) -> bool:
-        response = self._api_call(web_client, "agents.sessions.setStatus", payload)
+    def _set_status(self, web_client, payload: dict[str, Any]) -> tuple[bool, str]:
+        """Call ``agents.sessions.setStatus``. Returns (ok, Slack error code or "")."""
+        response, error = self._api_call(web_client, "agents.sessions.setStatus", payload)
         if response is None:
-            return False
+            return False, error
         warning = str(_response_get(response, "warning") or "")
         if "missing_agent_session_stopped_event_subscription" in warning and not self._warned_no_stop_subscription:
             self._warned_no_stop_subscription = True
             logger.warning("[Slack agent] app is not subscribed to agent_session_stopped; users get no Stop button")
-        return True
+        return True, ""
 
     @staticmethod
-    def _api_call(web_client, method: str, payload: dict[str, Any]):
-        """POST a JSON Web API call (slack-sdk 3.41 has no typed wrapper for the agent methods)."""
+    def _api_call(web_client, method: str, payload: dict[str, Any]) -> tuple[Any, str]:
+        """POST a JSON Web API call (slack-sdk 3.41 has no typed wrapper for the agent methods).
+
+        Returns (response, "") on success, or (None, error code) on failure. slack-sdk raises
+        ``SlackApiError`` for ``ok: false``; its response carries the code.
+        """
         try:
             response = web_client.api_call(method, json=payload)
         except Exception as exc:
-            logger.warning("[Slack agent] %s failed: %s", method, exc)
-            return None
+            error = str(_response_get(getattr(exc, "response", None), "error") or "")
+            logger.warning("[Slack agent] %s failed: %s", method, error or type(exc).__name__)
+            return None, error
         if _response_get(response, "ok") is not True:
-            logger.warning("[Slack agent] %s returned error=%s", method, _response_get(response, "error"))
-            return None
-        return response
+            error = str(_response_get(response, "error") or "")
+            logger.warning("[Slack agent] %s returned error=%s", method, error)
+            return None, error
+        return response, ""

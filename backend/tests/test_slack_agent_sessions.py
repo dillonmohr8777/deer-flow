@@ -1,30 +1,39 @@
 """Slack agent sessions (Agents & tools): inert by default, then processing -> reply -> active."""
 
 import asyncio
+import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from slack_sdk.errors import SlackApiError
 
 from app.channels.message_bus import MessageBus, OutboundMessage
-from app.channels.slack import SlackChannel
-from app.channels.slack_agent import DEFAULT_STOPPED_TEXT, SlackAgentSessions, scopes_from_response, session_title
+from app.channels.slack import SlackChannel, SlackSendOutcomeUnknown
+from app.channels.slack_agent import DEFAULT_STOPPED_TEXT, SlackAgentSessions, session_title
 
 WORKING = ":hourglass_flowing_sand: Working on it..."
 
 
 class FakeWebClient:
-    """Records Slack Web API calls. ``agent=False`` answers the agent methods like a non-agent app."""
+    """Records Slack Web API calls.
 
-    def __init__(self, *, agent: bool = True, history: list | None = None) -> None:
+    ``agent=False`` answers the agent methods like a non-agent app; ``errors`` are returned, in
+    order, by the next agent-method calls (e.g. a transient ``ratelimited``).
+    """
+
+    def __init__(self, *, agent: bool = True, history: list | None = None, errors: list[str] | None = None) -> None:
         self.agent = agent
         self.history = [] if history is None else history
+        self.errors = list(errors or [])
         self.api_calls: list[tuple[str, dict]] = []
         self.posts: list[dict] = []
         self.reactions: list[dict] = []
 
     def api_call(self, method, json=None):
         self.api_calls.append((method, dict(json or {})))
+        if self.errors:
+            return {"ok": False, "error": self.errors.pop(0)}
         if not self.agent:
             return {"ok": False, "error": "not_allowed_token_type"}
         return {"ok": True}
@@ -79,6 +88,14 @@ def _reply(text="answer", *, thread_ts="1.1", message_id="1.1", **metadata):
     return OutboundMessage(channel_name="slack", chat_id="D1", thread_id="t1", thread_ts=thread_ts, text=text, metadata={"message_id": message_id, **metadata})
 
 
+def _stop(thread_ts="1.1", user="U1"):
+    return {"type": "agent_session_stopped", "channel": "D1", "thread_ts": thread_ts, "user": user, "streaming_message_ts": []}
+
+
+def _context_changed():
+    return {"type": "app_context_changed", "context": {"entities": [{"type": "slack#/types/channel_id", "value": "C1"}]}}
+
+
 # -- inert by default ---------------------------------------------------------
 
 
@@ -108,7 +125,7 @@ async def test_reply_today_makes_no_agent_calls():
 
 def test_enabled_false_ignores_agent_events():
     bus, channel = _channel({"enabled": False})
-    _socket(channel, {"type": "app_context_changed", "context": {}})
+    _socket(channel, _context_changed())
     channel._handle_message_event(_dm())
     assert channel._agent.active is False
     assert channel._web_client.api_calls == []
@@ -121,17 +138,18 @@ def test_enabled_false_ignores_agent_events():
 
 def test_agent_only_event_switches_auto_on():
     _, channel = _channel()
-    _socket(channel, {"type": "app_context_changed", "context": {"entities": [{"type": "slack#/types/channel_id", "value": "C1"}]}})
+    _socket(channel, _context_changed())
     assert channel._agent.active is True
 
 
 def test_app_home_opened_alone_does_not_switch_auto_on():
     _, channel = _channel()
-    _socket(channel, {"type": "app_home_opened", "user": "U1", "channel": "D1", "tab": "home"})
+    _socket(channel, {"type": "app_home_opened", "user": "U1", "channel": "D1", "tab": "messages"})
     assert channel._agent.active is False
 
 
-def test_assistant_write_scope_on_startup_auth_test_switches_auto_on():
+def test_assistant_write_scope_alone_does_not_switch_auto_on():
+    # Apps built for the older assistant view hold assistant:write too; only agent-only events count.
     class AuthResponse(dict):
         headers = {"X-OAuth-Scopes": "chat:write,im:history,assistant:write"}
 
@@ -140,13 +158,7 @@ def test_assistant_write_scope_on_startup_auth_test_switches_auto_on():
     channel = SlackChannel(bus=MessageBus(), config={"web_client_factory": lambda **_kwargs: web})
     asyncio.run(channel._initialize_operator_web_client("xoxb-synthetic"))
     assert channel._bot_user_id == "UBOT"
-    assert channel._agent.active is True
-
-
-def test_scopes_from_response_reads_list_or_string_headers():
-    assert "assistant:write" in scopes_from_response(SimpleNamespace(headers={"x-oauth-scopes": ["chat:write, assistant:write"]}))
-    assert scopes_from_response(SimpleNamespace(headers={"x-oauth-scopes": "chat:write"})) == {"chat:write"}
-    assert scopes_from_response(MagicMock()) == set()
+    assert channel._agent.active is False
 
 
 # -- processing -> reply -> active -------------------------------------------
@@ -204,6 +216,34 @@ async def test_late_reply_to_an_earlier_request_does_not_end_a_newer_one():
     assert channel._agent.has_session("D1", "1.1") is True
 
 
+@pytest.mark.asyncio
+async def test_notice_without_a_request_id_leaves_the_session_processing():
+    # Shaped like the approvals adapter's message: no metadata, so no message_id.
+    _, channel = _channel({"enabled": True})
+    channel._handle_message_event(_dm())
+    notice = OutboundMessage(channel_name="slack", chat_id="D1", thread_id="t1", thread_ts="1.1", text="Approve this action?")
+    await channel.send(notice)
+    assert notice.metadata["slack_delivery"]["state"] == "sent"
+    assert [status["status"] for status in channel._web_client.statuses()] == ["processing"]
+    assert channel._agent.has_session("D1", "1.1") is True
+
+
+@pytest.mark.asyncio
+async def test_unknown_post_outcome_still_settles_the_session():
+    class TimeoutWeb(FakeWebClient):
+        def chat_postMessage(self, **kwargs):
+            raise TimeoutError("read timed out")
+
+    _, channel = _channel({"enabled": True}, web=TimeoutWeb())
+    channel._handle_message_event(_dm())
+    reply = _reply()
+    with pytest.raises(SlackSendOutcomeUnknown):
+        await channel.send(reply)
+    assert reply.metadata["slack_delivery"]["state"] == "outcome_unknown"
+    assert [status["status"] for status in channel._web_client.statuses()] == ["processing", "active"]
+    assert channel._agent.has_session("D1", "1.1") is False
+
+
 def test_command_in_dm_keeps_plain_acknowledgement():
     _, channel = _channel({"enabled": True})
     channel._handle_message_event(_dm("what is momobot?"))
@@ -220,12 +260,80 @@ def test_channel_mention_is_not_an_agent_session():
 
 def test_refused_processing_falls_back_and_turns_auto_off():
     bus, channel = _channel(web=FakeWebClient(agent=False))
-    _socket(channel, {"type": "app_context_changed", "context": {}})
+    _socket(channel, _context_changed())
     assert channel._agent.active is True
     channel._handle_message_event(_dm())
     assert [post["text"] for post in channel._web_client.posts] == [WORKING]
     assert channel._agent.active is False
+    assert channel._agent.has_session("D1", "1.1") is False
     assert _queued(bus) is not None
+
+
+def test_not_an_agent_error_raised_by_the_sdk_turns_auto_off():
+    class RaisingWeb(FakeWebClient):
+        def api_call(self, method, json=None):
+            self.api_calls.append((method, dict(json or {})))
+            raise SlackApiError("refused", {"ok": False, "error": "missing_scope"})
+
+    _, channel = _channel(web=RaisingWeb())
+    _socket(channel, _context_changed())
+    channel._handle_message_event(_dm())
+    assert [post["text"] for post in channel._web_client.posts] == [WORKING]
+    assert channel._agent.active is False
+
+
+def test_transient_failure_falls_back_once_and_keeps_sessions_on():
+    web = FakeWebClient(errors=["ratelimited"])
+    _, channel = _channel(web=web)
+    _socket(channel, _context_changed())
+    channel._handle_message_event(_dm())
+    assert [post["text"] for post in web.posts] == [WORKING]
+    assert channel._agent.active is True
+    assert channel._agent.has_session("D1", "1.1") is False
+
+    channel._handle_message_event(_dm("plan the launch week", ts="2.1"))
+    assert [status["status"] for status in web.statuses()] == ["processing", "processing"]
+    assert [post["text"] for post in web.posts] == [WORKING]
+    assert channel._agent.has_session("D1", "2.1") is True
+
+
+def test_request_is_registered_before_the_processing_call():
+    seen: list[bool] = []
+    sessions = SlackAgentSessions({"enabled": True})
+
+    class WatchingWeb(FakeWebClient):
+        def api_call(self, method, json=None):
+            seen.append(sessions.has_session("D1", "1.1"))
+            return super().api_call(method, json=json)
+
+    assert sessions.begin(WatchingWeb(), channel_id="D1", thread_ts="1.1", message_id="1.1", user_id="U1", text="hi") is True
+    assert seen == [True]
+
+
+def test_status_calls_for_one_thread_are_serialized():
+    entered, release = threading.Event(), threading.Event()
+
+    class SlowWeb(FakeWebClient):
+        def api_call(self, method, json=None):
+            if (json or {}).get("status") == "processing":
+                entered.set()
+                release.wait(5)
+            return super().api_call(method, json=json)
+
+    web = SlowWeb()
+    sessions = SlackAgentSessions({"enabled": True})
+    begin = threading.Thread(target=sessions.begin, args=(web,), kwargs={"channel_id": "D1", "thread_ts": "1.1", "message_id": "1.1", "user_id": "U1", "text": "hi"})
+    begin.start()
+    assert entered.wait(5)
+    # A fast reply finishing while the processing call is still out must wait for it.
+    finisher = threading.Thread(target=sessions.finish, args=(web, _reply()))
+    finisher.start()
+    finisher.join(0.2)
+    assert finisher.is_alive()
+    release.set()
+    begin.join(5)
+    finisher.join(5)
+    assert [status["status"] for status in web.statuses()] == ["processing", "active"]
 
 
 # -- stop and title --------------------------------------------------------------
@@ -235,7 +343,7 @@ def test_refused_processing_falls_back_and_turns_auto_off():
 async def test_stop_drops_the_answer_confirms_and_sets_active():
     _, channel = _channel({"enabled": True})
     channel._handle_message_event(_dm())
-    _socket(channel, {"type": "agent_session_stopped", "channel": "D1", "thread_ts": "1.1", "user": "U1", "streaming_message_ts": []})
+    _socket(channel, _stop())
     web = channel._web_client
     assert [status["status"] for status in web.statuses()] == ["processing", "active"]
     assert web.posts == [{"channel": "D1", "text": DEFAULT_STOPPED_TEXT, "thread_ts": "1.1"}]
@@ -250,17 +358,34 @@ async def test_stop_drops_the_answer_confirms_and_sets_active():
     assert [status["status"] for status in web.statuses()] == ["processing", "active", "processing", "active"]
 
 
-def test_stop_for_an_idle_thread_creates_nothing():
+@pytest.mark.asyncio
+async def test_stop_after_the_reply_left_the_bus_still_drops_it_and_its_files():
     _, channel = _channel({"enabled": True})
-    _socket(channel, {"type": "agent_session_stopped", "channel": "D1", "thread_ts": "5.5", "user": "U1", "streaming_message_ts": []})
-    assert channel._web_client.api_calls == []
-    assert channel._web_client.posts == []
+    channel._handle_message_event(_dm())
+    reply = _reply("late answer")
+    # The outbound check already passed; Stop lands before the post.
+    _socket(channel, _stop())
+    await channel.send(reply)
+    web = channel._web_client
+    assert [post["text"] for post in web.posts] == [DEFAULT_STOPPED_TEXT]
+    assert reply.metadata["slack_delivery"] == {"state": "dropped", "channel": "D1"}
+    assert await channel.send_file(reply, MagicMock()) is False
+    # The final reply cleared the mark.
+    assert channel._agent.should_drop(_reply("again")) is False
+
+
+def test_stop_for_an_untracked_thread_still_returns_it_to_active():
+    # e.g. after a restart: Slack shows Stop only while processing, so the session must leave it.
+    _, channel = _channel({"enabled": True})
+    _socket(channel, _stop(thread_ts="5.5"))
+    assert channel._web_client.statuses() == [{"channel_id": "D1", "thread_ts": "5.5", "status": "active"}]
+    assert channel._web_client.posts == [{"channel": "D1", "text": DEFAULT_STOPPED_TEXT, "thread_ts": "5.5"}]
 
 
 def test_stop_from_a_non_allowed_user_is_ignored():
     _, channel = _channel({"enabled": True})
     channel._handle_message_event(_dm())
-    _socket(channel, {"type": "agent_session_stopped", "channel": "D1", "thread_ts": "1.1", "user": "U_OTHER", "streaming_message_ts": []})
+    _socket(channel, _stop(user="U_OTHER"))
     assert [status["status"] for status in channel._web_client.statuses()] == ["processing"]
     assert channel._agent.has_session("D1", "1.1") is True
 
@@ -276,8 +401,18 @@ def test_title_change_is_recorded_without_posting():
 # -- welcome and suggested prompts ------------------------------------------------
 
 
-def test_messages_tab_sets_prompts_without_thread_ts_and_welcomes_once():
+def test_messages_tab_does_nothing_until_sessions_are_active():
     _, channel = _channel()
+    _socket(channel, {"type": "app_home_opened", "user": "U1", "channel": "D1", "tab": "messages"})
+    assert channel._web_client.api_calls == []
+    assert channel._web_client.posts == []
+
+
+@pytest.mark.parametrize("agent_config", [None, {"enabled": True}])
+def test_messages_tab_sets_prompts_without_thread_ts_and_welcomes_once(agent_config):
+    _, channel = _channel(agent_config)
+    if agent_config is None:
+        _socket(channel, _context_changed())
     event = {"type": "app_home_opened", "user": "U1", "channel": "D1", "tab": "messages", "event_ts": "7.7"}
     _socket(channel, event)
     _socket(channel, event)
@@ -291,13 +426,13 @@ def test_messages_tab_sets_prompts_without_thread_ts_and_welcomes_once():
 
 
 def test_no_welcome_when_the_dm_already_has_messages():
-    _, channel = _channel(web=FakeWebClient(history=[{"ts": "1.0", "text": "earlier"}]))
+    _, channel = _channel({"enabled": True}, web=FakeWebClient(history=[{"ts": "1.0", "text": "earlier"}]))
     _socket(channel, {"type": "app_home_opened", "user": "U1", "channel": "D1", "tab": "messages"})
     assert channel._web_client.posts == []
 
 
 def test_home_tab_and_non_allowed_users_get_nothing():
-    _, channel = _channel()
+    _, channel = _channel({"enabled": True})
     _socket(channel, {"type": "app_home_opened", "user": "U1", "channel": "D1", "tab": "home"})
     _socket(channel, {"type": "app_home_opened", "user": "U_OTHER", "channel": "D2", "tab": "messages"})
     assert channel._web_client.api_calls == []

@@ -18,7 +18,7 @@ from app.channels.commands import is_known_channel_command
 from app.channels.connection_identity import attach_connection_identity
 from app.channels.desktop_jobs import as_command as desktop_as_command
 from app.channels.message_bus import InboundMessageType, InboundReservation, MessageBus, OutboundMessage, ResolvedAttachment
-from app.channels.slack_agent import AGENT_EVENTS, SlackAgentSessions, scopes_from_response
+from app.channels.slack_agent import AGENT_EVENTS, SlackAgentSessions
 from app.channels.slack_approvals import ActionResult as ApprovalActionResult
 from app.channels.slack_approvals import DbApprovalStore, parse_block_action
 from app.channels.slack_approvals import build_message as build_approval_message
@@ -256,44 +256,53 @@ class SlackChannel(Channel):
         # Keep the legacy argument, but never replay a possibly committed post.
         if _max_retries <= 0:
             raise RuntimeError("Slack send exhausted retries without an exception")
-        web_client = await self._get_web_client_for_message(msg)
-        if not web_client:
-            return
-        delivery = msg.metadata.get("slack_delivery", {})
-        if delivery.get("state") == "outcome_unknown":
-            raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying")
-        if delivery.get("state") == "sent":
-            return
-        kwargs: dict[str, Any] = {
-            "channel": msg.chat_id,
-            "text": _slack_md_converter.convert(_escape_slack_text(msg.text)),
-        }
-        reply_ts = msg.thread_ts if self._reply_in_thread else None
-        if reply_ts:
-            kwargs["thread_ts"] = reply_ts
-
-        # Cancellation cannot stop the synchronous HTTP worker after submission.
-        msg.metadata["slack_delivery"] = {"state": "outcome_unknown", "channel": msg.chat_id}
         try:
-            response = await asyncio.to_thread(web_client.chat_postMessage, **kwargs)
-        except SlackApiError as exc:
-            response = exc.response
-            if response.status_code >= 500 or response.status_code == 408 or response.get("error") in {"internal_error", "fatal_error", "request_timeout", "service_unavailable"}:
-                raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
-            msg.metadata["slack_delivery"]["state"] = "failed"
-            await self._mark_thread_failed(web_client, msg)
-            await self._finish_agent_session(msg)
-            raise
-        except Exception as exc:
-            raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
+            web_client = await self._get_web_client_for_message(msg)
+            if not web_client:
+                return
+            delivery = msg.metadata.get("slack_delivery", {})
+            if delivery.get("state") == "outcome_unknown":
+                raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying")
+            if delivery.get("state") in {"sent", "dropped"}:
+                return
+            kwargs: dict[str, Any] = {
+                "channel": msg.chat_id,
+                "text": _slack_md_converter.convert(_escape_slack_text(msg.text)),
+            }
+            reply_ts = msg.thread_ts if self._reply_in_thread else None
+            if reply_ts:
+                kwargs["thread_ts"] = reply_ts
 
-        channel, timestamp = response.get("channel"), response.get("ts")
-        if response.get("ok") is not True or not isinstance(channel, str) or not channel or not isinstance(timestamp, str) or not timestamp:
-            raise SlackSendOutcomeUnknown("outcome_unknown: Slack returned no delivery receipt; reconcile before retrying")
-        msg.metadata["slack_delivery"] = {"state": "sent", "channel": channel, "ts": timestamp}
-        if msg.thread_ts:
-            await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "white_check_mark")
-        await self._finish_agent_session(msg)
+            # Checked again right before the post: Stop can land after the reply left the bus.
+            if self._agent.should_drop(msg):
+                msg.metadata["slack_delivery"] = {"state": "dropped", "channel": msg.chat_id}
+                logger.info("[Slack agent] dropped the reply to a stopped request in channel=%s", msg.chat_id)
+                return
+
+            # Cancellation cannot stop the synchronous HTTP worker after submission.
+            msg.metadata["slack_delivery"] = {"state": "outcome_unknown", "channel": msg.chat_id}
+            try:
+                response = await asyncio.to_thread(web_client.chat_postMessage, **kwargs)
+            except SlackApiError as exc:
+                response = exc.response
+                if response.status_code >= 500 or response.status_code == 408 or response.get("error") in {"internal_error", "fatal_error", "request_timeout", "service_unavailable"}:
+                    raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
+                msg.metadata["slack_delivery"]["state"] = "failed"
+                await self._mark_thread_failed(web_client, msg)
+                raise
+            except Exception as exc:
+                raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
+
+            channel, timestamp = response.get("channel"), response.get("ts")
+            if response.get("ok") is not True or not isinstance(channel, str) or not channel or not isinstance(timestamp, str) or not timestamp:
+                raise SlackSendOutcomeUnknown("outcome_unknown: Slack returned no delivery receipt; reconcile before retrying")
+            msg.metadata["slack_delivery"] = {"state": "sent", "channel": channel, "ts": timestamp}
+            if msg.thread_ts:
+                await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "white_check_mark")
+        finally:
+            # Whatever the outcome (sent, failed, unknown, dropped), a final reply must not leave the
+            # thread's agent session processing.
+            await self._finish_agent_session(msg)
 
     async def _on_outbound(self, msg: OutboundMessage) -> None:
         # A reply to a request the user stopped from the agent session is dropped, files included.
@@ -303,8 +312,12 @@ class SlackChannel(Channel):
         await super()._on_outbound(msg)
 
     async def _finish_agent_session(self, msg: OutboundMessage) -> None:
-        if msg.thread_ts and self._agent.has_session(msg.chat_id, str(msg.thread_ts)):
+        if not msg.thread_ts or not self._agent.has_session(msg.chat_id, str(msg.thread_ts)):
+            return
+        try:
             await asyncio.to_thread(self._agent.finish, self._web_client, msg)
+        except Exception:
+            logger.exception("[Slack agent] failed to settle the agent session in channel=%s", msg.chat_id)
 
     async def _mark_thread_failed(self, web_client, msg: OutboundMessage) -> None:
         """Best-effort failure mark for a definite rejection; an unknown outcome may be live, so it gets none."""
@@ -312,6 +325,9 @@ class SlackChannel(Channel):
             await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "x")
 
     async def send_file(self, msg: OutboundMessage, attachment: ResolvedAttachment) -> bool:
+        if (msg.metadata.get("slack_delivery") or {}).get("state") == "dropped":
+            # The text was dropped because the user stopped the request; its files go with it.
+            return False
         web_client = await self._get_web_client_for_message(msg)
         if not web_client:
             return False
@@ -344,7 +360,6 @@ class SlackChannel(Channel):
             return
         try:
             auth_info = await asyncio.to_thread(self._web_client.auth_test)
-            self._agent.note_scopes(scopes_from_response(auth_info))
             user_id = auth_info.get("user_id") if isinstance(auth_info, dict) else None
             if user_id is None:
                 auth_get = getattr(auth_info, "get", None)
