@@ -1,0 +1,57 @@
+{
+  "title": "Editors, designers and creative production",
+  "slug": "work-07-editing-design",
+  "description": "Synthetic social video walkthrough: asset manifest, cut plan, versioned review, permissions, technical QA and a delivery draft, with the specialist judging picture, color, audio and craft.",
+  "chapters": [
+    {
+      "title": "Organize before you cut",
+      "narration": "Editing goes faster when the material is sorted before anyone touches a timeline. This lesson uses a synthetic social video brief for Sample Dental Group, a forty-five second cut about a new front desk process. Nothing here is a real client asset. Momo organizes the files, builds the cut plan and checks the paperwork. The editor and the designer still judge picture, color, audio and craft.",
+      "visual": "Project folder view with the synthetic brief, the clip folder, the music folder and the license folder, sorted before any timeline opens."
+    },
+    {
+      "title": "Build the asset manifest",
+      "narration": "The asset manifest is one table. Each row has a file name, a type, a duration, the rights status and the scene it supports. For the example, there are six clips, two logo files and one music track. The rights column says owned, licensed or missing. A missing right is a blocker, not a footnote. Momo builds the table from the folder names and the metadata I supply, then flags duplicates and empty fields.",
+      "visual": "Asset manifest table with file name, type, duration, rights status and scene columns, with a duplicate row and an empty rights cell highlighted."
+    },
+    {
+      "title": "Write the cut plan",
+      "narration": "The cut plan is a timeline written in words before it becomes a timeline. Each beat gets a start time, an end time, the clip used and the on-screen text, if any. For the example, the opening is four seconds on the front entrance, then the check-in counter, then a close on the logo. Total runtime has to land at forty-five seconds, or I say why it does not. Momo sums the beats for me. I decide whether the pacing feels right.",
+      "visual": "Beat list with start time, end time, clip and on-screen text, totaling 0:45 with the target shown beside it."
+    },
+    {
+      "title": "Judge the picture and color",
+      "narration": "Now I watch the cut on the device the client will use, with the sound on. I check exposure in the reception shots, because bright windows can wash out a room. I check color on the chair upholstery and the logo, since a shift there looks wrong fast. Momo cannot judge any of this. I write my notes as timecodes, such as 0:12, so the next version is easy to review.",
+      "visual": "Review notes list with timecodes, such as 0:12 for exposure in reception shots, and a separate line for chair upholstery color."
+    },
+    {
+      "title": "Judge the audio",
+      "narration": "I listen for the music level under the voice, for hiss in the room tone and for any distortion at the peaks. The music track is licensed for social use in this example, and the license file sits next to it in the folder. If the license file is missing, the track is out. Momo can check that the license file exists and that the row is filled in. Whether the mix sounds right is my decision.",
+      "visual": "Audio checklist showing music level under voice, room tone and peak checks, with the license file row beside the music track."
+    },
+    {
+      "title": "Set up the review versions",
+      "narration": "Versions keep feedback honest. I name each export with the project, the version and the date, for example SampleDental_v2_0415, so nobody reviews the wrong file. The review log records what changed in each version and who asked for it. Momo keeps the log and points to the open notes. A note gets closed only when the version that answers it is exported and checked.",
+      "visual": "Versioned review log table with version name, date, change summary, requested by and open or closed status for each note."
+    },
+    {
+      "title": "Check permissions and technical QA",
+      "narration": "Permissions come before delivery. Anyone who appears on camera needs a signed release in the folder, or that shot is cut. Momo checks that every person named in the shot list has a release row. The technical pass covers the export format the client asked for, the resolution, the frame rate, the caption file and the audio channels. I confirm those values in the export settings, since the manifest only holds what I type.",
+      "visual": "Release log matched to the shot list, plus an export settings panel showing format, resolution, frame rate, caption file and audio channels."
+    },
+    {
+      "title": "Draft the delivery note",
+      "narration": "The delivery draft is a short note for the client or account team. It lists the final version name, the runtime, the format, the caption file and the open rights items, if any. It says what changed since the last review. Momo drafts it from the log. I read it as the editor and designer would, then send it to approval. Nothing goes to the client without a person approving the send.",
+      "visual": "Short delivery note with final version name, runtime, format, caption file, open rights items and a pending approval label."
+    },
+    {
+      "title": "Acceptance check for the cut",
+      "narration": "Here is how I decide the cut is accepted. The manifest has no missing rights and no duplicate files. The beats add up to forty-five seconds. The picture and color hold on the target device, the mix sits right with the sound on, and the captions match the spoken words. Every review note is either closed by a version or listed as open. If any of those fails, the version goes back to review, and the log says which check failed.",
+      "visual": "Checklist of cut acceptance items with a failed line marked and a note explaining which check failed."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Your exercise is to take the synthetic Sample Dental Group brief, with six clip names and a music file name, and ask Momo for an asset manifest and a cut plan. Then do your own picture and audio pass with the sound on. The external acceptance check is a human sign-off. A person who edits or designs for the client watches the cut on the delivery device and approves it in writing before any export leaves the team. Until that approval exists, the status stays in review.",
+      "visual": "Synthetic brief input with six clip names and a music file name beside the generated asset manifest and cut plan, awaiting sign-off."
+    }
+  ]
+}

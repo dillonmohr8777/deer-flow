@@ -1,0 +1,57 @@
+{
+  "title": "Check what AI actually did",
+  "slug": "06-verification",
+  "description": "Use sources, fresh evidence, destination readback, and clear action choices to verify useful results.",
+  "chapters": [
+    {
+      "title": "Ask what proves it",
+      "narration": "When AI says done, I ask what would prove that in the place where it matters. A well written answer can still describe something that never happened. If I asked for a calendar draft, the draft is the result. If I chose to create an event, I should be able to open my calendar and find it. Verification starts by naming the result precisely. Then I pick a check that matches that result instead of trusting the wording.",
+      "visual": "Claim → matching evidence. Draft prepared → visible draft. Event created → event in calendar. Message sent → sent record. Highlight the destination for each action."
+    },
+    {
+      "title": "Separate evidence from confidence",
+      "narration": "Confidence is how certain an answer sounds. Evidence is something I can inspect. For a train trip, an answer might confidently say the last train leaves at nine. I still want the operator’s current timetable for the right route and date. If the source says something different, the source wins. I can ask AI to show the specific detail it used. That lets me correct one assumption without throwing away every useful part of the plan.",
+      "visual": "Two columns: Confidence: sounds certain. Evidence: operator, route, travel date, departure time. Highlight a source detail and connect it to the corresponding claim."
+    },
+    {
+      "title": "Check freshness and scope",
+      "narration": "A source can be real and still be wrong for today’s question. A timetable from last year is not enough for next Friday. A price from one location might not apply to another. I check the date, account, location, and relevant time window. I do not need a research project for every little fact. I just want the check to match how much the answer could have changed and what happens if it is wrong.",
+      "visual": "Freshness card: Published or checked when? Applies to which date? Which location? Which account? Example: Friday timetable for the selected station, checked today."
+    },
+    {
+      "title": "Read back the destination",
+      "narration": "After an action, I read back the destination. If I create a reminder, I check its title, date, time, and list. A success notice tells me the request was accepted; the readback tells me what is actually there. Sometimes those differ because of a time zone or a default setting. Catching that immediately is easy. Later, when I miss the reminder, it is much harder to understand. One quick look closes the loop.",
+      "visual": "Reminder readback: Call office; Wednesday; 10 AM; correct time zone; Personal list. Compare Requested with Saved using the same fields side by side."
+    },
+    {
+      "title": "Understand permission boundaries",
+      "narration": "Permissions describe what a tool is allowed to reach. They do not prove it reached the right thing, and they do not choose the action for me. I might allow calendar reading so AI can help plan my week, while choosing to review new events myself. Before connecting something, I check the account and the requested scope. Afterward, I confirm the connection works on a small example. I can keep the useful access without assuming unlimited control.",
+      "visual": "Three separate questions: Allowed? Permission scope. Correct? Account and content check. Chosen? User action decision. Example: Read calendar allowed; create event reviewed separately."
+    },
+    {
+      "title": "Make consequential choices explicit",
+      "narration": "Sending, spending, and deleting deserve a clear user choice. A message draft should show its recipient and final wording before I send it. A purchase should show the item and total. A deletion should identify the actual files. This is not about turning every small step into a permission ceremony. It is about putting my decision at the point where the action affects someone else, costs money, or removes something I may want back.",
+      "visual": "Three review cards: Send: recipient + text. Spend: item + total. Delete: named files + scope. Each has a separate Choose action control after review."
+    },
+    {
+      "title": "Verify cost as part of success",
+      "narration": "Cost is part of whether a result worked. A useful summary that unexpectedly uses an expensive service may be a poor fit for a daily habit. I check the service’s usage or billing record when there is a charge, and compare it with the limit I chose. An estimated cost should be called an estimate. For recurring tasks, I care about the cost of repeating it, not just whether the first run happened to succeed.",
+      "visual": "Cost comparison: Chosen limit; estimated run cost; recorded charge; expected frequency. Example arithmetic: per run × runs per month. Leave values blank until supplied or verified."
+    },
+    {
+      "title": "Avoid duplicate actions",
+      "narration": "If an action times out, I do not immediately repeat it. It might have succeeded before the response got lost. I check the original destination first: is the event there, is the message in Sent, did the order appear? If it exists, I continue from that result. If it does not, I can decide to retry. This little habit prevents duplicate appointments and orders. The uncertainty belongs in the status until I have evidence either way.",
+      "visual": "Timeout → inspect original destination → Exists? Yes: use existing result. No: consider retry. Unknown: keep unresolved. Draw one event and one order throughout the sequence."
+    },
+    {
+      "title": "Check that I understand it",
+      "narration": "For everyday learning, verification includes my own understanding. After AI explains a process, I try one small example without copying every step. If I cannot explain why a step exists, I ask about that step. For a budget formula, I can plug in simple numbers and check the result myself. For a recipe, I can compare the servings and ingredients. The goal is useful comprehension, not collecting explanations that I cannot apply the next time.",
+      "visual": "Learning check: Explain it back → try a small example → compare result → ask about the gap. Formula example: 3 items at 4 each gives 12 before other charges."
+    },
+    {
+      "title": "Use a short finishing check",
+      "narration": "My finishing check is short: what was requested, what evidence supports it, how fresh is that evidence, and what still needs my choice? I can keep those answers in a few lines. A routine note needs less checking than a payment, but both benefit from clear status. If a check fails, I fix the specific problem and check again. That is how I get practical value from AI while staying involved in the decisions that matter.",
+      "visual": "Finish card: Requested; Evidence; Checked when; Completed or unresolved; Next user choice. Final loop: Work → check → fix if needed → check → finish."
+    }
+  ]
+}
