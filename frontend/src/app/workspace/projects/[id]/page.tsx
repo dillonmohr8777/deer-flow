@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { ClientProjectReference } from "@/components/workspace/client-workspace-references";
 import {
   ErrorState,
   pageStyles,
@@ -32,6 +33,7 @@ import {
   WorkspaceContainer,
   WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
+import { useIsClient, useIsRoleUnresolved } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   PROJECTS_CONFIG_DEFAULT,
@@ -57,6 +59,18 @@ function newProjectChatPath(projectId: string): string {
 }
 
 export default function ProjectPage() {
+  const client = useIsClient();
+  const unresolved = useIsRoleUnresolved();
+  const { id } = useParams<{ id: string }>();
+  if (unresolved) return null;
+  return client ? (
+    <ClientProjectReference projectId={id} />
+  ) : (
+    <StaffProjectPage />
+  );
+}
+
+function StaffProjectPage() {
   const { t } = useI18n();
   const { id: projectId } = useParams<{ id: string }>();
   const projectQuery = useProject(projectId);

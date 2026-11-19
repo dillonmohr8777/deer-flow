@@ -52,6 +52,9 @@ describe("client pages", () => {
       `/workspace/agents/${CLIENT_AGENT_NAME}/chats/abc-123`,
       "/workspace/lineup",
       "/workspace/about",
+      "/workspace/projects",
+      "/workspace/projects/p1",
+      "/workspace/scheduled-tasks",
     ]) {
       expect(isClientPath(path), path).toBe(true);
     }
@@ -74,9 +77,9 @@ describe("client pages", () => {
       "/workspace/agents",
       "/workspace/agents/new",
       "/workspace/agents/momobot-max",
-      "/workspace/scheduled-tasks",
+      "/workspace/projects/p1/settings",
+      "/workspace/scheduled-tasks/task1/runs",
       "/workspace/capabilities",
-      "/workspace/projects/p1",
       "/workspace/trash",
       "/workspace/extensions/anything",
       "/daily",

@@ -158,3 +158,27 @@ it("says loading, empty and failed plainly", () => {
   fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
   expect(mocks.tasks.refetch).toHaveBeenCalledTimes(1);
 });
+
+const customerRole = rs.hoisted(() => ({ client: false, unresolved: false }));
+rs.mock("@/core/auth/AuthProvider", () => ({
+  useIsClient: () => customerRole.client,
+  useIsRoleUnresolved: () => customerRole.unresolved,
+}));
+rs.mock("@/components/workspace/client-workspace-references", () => ({
+  ClientScheduleList: () => <div>Customer reference view</div>,
+}));
+afterEach(() => {
+  customerRole.client = false;
+  customerRole.unresolved = false;
+});
+it("uses the customer reference page instead of staff management", () => {
+  customerRole.client = true;
+  render(<ScheduledTasksPage />);
+  expect(screen.getByText("Customer reference view")).toBeTruthy();
+  expect(screen.queryByRole("button")).toBeNull();
+});
+it("waits for the account role before mounting either page", () => {
+  customerRole.unresolved = true;
+  const { container } = render(<ScheduledTasksPage />);
+  expect(container.textContent).toBe("");
+});

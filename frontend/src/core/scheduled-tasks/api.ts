@@ -2,7 +2,11 @@ import { throwGatewayApiError } from "@/core/api/errors";
 import { fetch } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
 
-import type { ScheduledTask, ScheduledTaskRun } from "./types";
+import type {
+  ClientScheduledTaskStatus,
+  ScheduledTask,
+  ScheduledTaskRun,
+} from "./types";
 
 function scheduledTasksUrl(path: string): string {
   return `${getBackendBaseURL()}/api/scheduled-tasks${path}`;
@@ -167,4 +171,11 @@ export async function deleteScheduledTask(
     );
   }
   return response.json();
+}
+
+/** The Gateway projects client list responses to this status-only schema. */
+export async function fetchScheduledTaskStatuses(): Promise<
+  ClientScheduledTaskStatus[]
+> {
+  return fetchScheduledTasks();
 }

@@ -14,6 +14,7 @@ import { useIsClient, useIsRoleUnresolved } from "@/core/auth/AuthProvider";
 import { cn } from "@/lib/utils";
 
 import { WorkspaceChannelsList } from "./channels/workspace-channels-list";
+import { ClientReferenceNavigation } from "./client-workspace-references";
 import { BackgroundJobs } from "./command-center/background-jobs";
 import { BrandSignature } from "./command-center/brand-signature";
 import { PluginNavigation } from "./plugin-navigation";
@@ -90,6 +91,7 @@ export function WorkspaceSidebar({
           onClickCapture={closeMobileSidebarForWorkspaceLink}
         >
           <WorkspaceNavChatList />
+          {isClient && !unresolved && <ClientReferenceNavigation />}
           {showInternal && <PluginNavigation />}
           {showInternal && <WorkspaceChannelsList />}
           {isSidebarOpen && (

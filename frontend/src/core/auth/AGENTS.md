@@ -34,7 +34,7 @@ contractions.
 `system_role` is `admin | exec | user | client`; an unknown value fails the zod
 parse, so it never signs in. A `client` (external customer) gets the client
 version of MomoBot: the sidebar shows New chat, Chats, MomoBot Agents and About
-only (`ClientNavList`), Settings keeps account, security, appearance,
+plus read-only Projects and Scheduled tasks (`ClientReferenceNavigation`), Settings keeps account, security, appearance,
 notifications and About, the composer hides model, mode, effort, skills and
 polish controls, and every new chat starts at `/workspace/chats/new`
 (`CLIENT_NEW_CHAT_PATH`). `RoleRouteGuard` shows other pages a polite "not
@@ -45,3 +45,12 @@ Gateway's client route boundary and role policy answer 403 to anything else, so
 add a new client page to `isClientPath` and the Gateway table together. The
 OpenAI crew link shows for nobody until `/api/features` reports
 `openai_agents.configured`.
+
+Client project and schedule pages render dedicated reference-only components. They never mount staff mutation/history hooks. The Gateway admits only project metadata/document reads and schedule list/detail reads; routers retain RBAC and workspace storage isolation. No client project chats, scheduler history, task mutations or membership changes are enabled.
+
+Customer scheduled-task list/detail responses are projected on the server to id, title, status, next_run_at, last_run_at and timezone only. Prompts, assistant/thread/run IDs, schedule specifications, ownership fields and internal errors stay out of the customer API response; staff responses retain their existing management fields. Project operator configuration remains staff-only.
+
+Client project/reference components use only `core/client-references/api.ts` and
+the server's explicit reference projection. Never fall back to staff project
+APIs after a refusal, infer a binding in the browser, or expose approval IDs,
+role changes or operator configuration in the customer flow.
