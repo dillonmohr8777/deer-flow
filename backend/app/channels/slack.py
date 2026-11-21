@@ -17,8 +17,8 @@ from app.channels.brainforge_runtime import BrainForgeRuntime
 from app.channels.commands import is_known_channel_command
 from app.channels.connection_identity import attach_connection_identity
 from app.channels.desktop_jobs import as_command as desktop_as_command
-from app.channels.message_bus import InboundMessageType, InboundReservation, MessageBus, OutboundMessage, ResolvedAttachment
-from app.channels.slack_agent import AGENT_EVENTS, SlackAgentSessions
+from app.channels.message_bus import InboundMessage, InboundMessageType, InboundReservation, MessageBus, OutboundMessage, ResolvedAttachment
+from app.channels.slack_agent import AGENT_EVENTS, SlackAgentSessions, StopPlan
 from app.channels.slack_approvals import ActionResult as ApprovalActionResult
 from app.channels.slack_approvals import DbApprovalStore, parse_block_action
 from app.channels.slack_approvals import build_message as build_approval_message
@@ -151,6 +151,7 @@ class SlackChannel(Channel):
         self._brainforge_recovery_timer: asyncio.TimerHandle | None = None
         self._approvals_dm = parse_approvals_dm_config(config.get("approvals_dm"))
         self._approvals_store = None
+        self._channel_manager = config.get("channel_manager")
         self._agent = SlackAgentSessions(config.get("agent"))
 
     async def start(self) -> None:
@@ -324,12 +325,57 @@ class SlackChannel(Channel):
         if msg.thread_ts:
             await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "x")
 
+    async def on_inbound_accepted(self, msg: InboundMessage) -> bool:
+        """Start a Slack agent session only after the dispatcher accepts *msg* past dedupe.
+
+        Returns False if the user already stopped this request while it waited in the queue.
+        """
+        if not msg.metadata.get("slack_agent_session"):
+            return True
+        channel_id = msg.chat_id
+        thread_ts = str(msg.thread_ts or "")
+        message_id = str(msg.metadata.get("message_id") or "")
+        if self._agent.is_stopped_or_covered(channel_id, thread_ts, message_id):
+            logger.info(
+                "[Slack agent] skipping queued message covered by Stop in channel=%s thread_ts=%s message_id=%s",
+                channel_id,
+                thread_ts,
+                message_id,
+            )
+            return False
+        if not self._agent.active:
+            await asyncio.to_thread(self._send_running_reply, msg.chat_id, msg.thread_ts)
+            return True
+        started = await asyncio.to_thread(
+            self._agent.begin,
+            self._web_client,
+            channel_id=channel_id,
+            thread_ts=thread_ts,
+            message_id=message_id,
+            user_id=str(msg.user_id or ""),
+            text=msg.text,
+        )
+        if self._agent.is_stopped_or_covered(channel_id, thread_ts, message_id):
+            logger.info(
+                "[Slack agent] dropping message stopped during session start in channel=%s thread_ts=%s message_id=%s",
+                channel_id,
+                thread_ts,
+                message_id,
+            )
+            return False
+        if not started:
+            await asyncio.to_thread(self._send_running_reply, msg.chat_id, msg.thread_ts)
+        return True
+
     async def send_file(self, msg: OutboundMessage, attachment: ResolvedAttachment) -> bool:
-        if (msg.metadata.get("slack_delivery") or {}).get("state") == "dropped":
-            # The text was dropped because the user stopped the request; its files go with it.
+        if (msg.metadata.get("slack_delivery") or {}).get("state") == "dropped" or self._agent.should_drop(msg):
+            # The request was stopped before or during outbound delivery; its files go with it.
             return False
         web_client = await self._get_web_client_for_message(msg)
         if not web_client:
+            return False
+        # Re-check immediately before the upload in case Stop arrived while resolving credentials.
+        if self._agent.should_drop(msg):
             return False
 
         try:
@@ -501,7 +547,12 @@ class SlackChannel(Channel):
 
             # Agent sessions (Agents & tools): only sent once the manifest opts in.
             if etype in AGENT_EVENTS:
-                self._handle_agent_event(event, etype)
+                self._handle_agent_event(
+                    event,
+                    etype,
+                    event_id=req.payload.get("event_id"),
+                    event_time=req.payload.get("event_time"),
+                )
                 return
 
             # Handle message events (DM or @mention)
@@ -514,8 +565,21 @@ class SlackChannel(Channel):
         except Exception:
             logger.exception("Error processing Slack event")
 
-    def _handle_agent_event(self, event: dict, etype: str) -> None:
+    def _resolve_channel_manager(self):
+        if self._channel_manager is not None:
+            return self._channel_manager
+        try:
+            from app.channels.service import get_channel_service
+
+            service = get_channel_service()
+            return service.manager if service is not None else None
+        except Exception:
+            return None
+
+    def _handle_agent_event(self, event: dict, etype: str, *, event_id: str | None = None, event_time: Any = None) -> None:
         """Route an agent-session event (called from the SDK thread)."""
+        if self._agent.mode == "off":
+            return
         self._agent.note_event(etype)
         user_id = str(event.get("user") or "")
         if etype == "agent_session_title_changed":
@@ -525,9 +589,52 @@ class SlackChannel(Channel):
         elif self._allowed_users and user_id not in self._allowed_users:
             logger.debug("Ignoring %s from non-allowed user: %s", etype, user_id)
         elif etype == "agent_session_stopped":
-            self._agent.stopped(self._web_client, event)
+            self._handle_agent_stop(event, event_id=event_id, event_time=event_time)
         elif etype == "app_home_opened":
             self._agent.home_opened(self._web_client, event)
+
+    def _handle_agent_stop(self, event: dict, *, event_id: str | None = None, event_time: Any = None) -> None:
+        """Route ``agent_session_stopped`` to Gateway cancellation before confirming in Slack."""
+        plan = self._agent.prepare_stop(event, event_id=event_id, event_time=event_time)
+        if plan is None:
+            return
+        manager = self._resolve_channel_manager()
+        if manager is not None:
+            if not isinstance(self._loop, asyncio.AbstractEventLoop) or not self._loop.is_running():
+                self._agent.complete_stop(self._web_client, plan, accepted=False)
+                return
+            scheduled = self._submit_threadsafe_coroutine(
+                self._process_agent_stop(plan, manager),
+                self._loop,
+                name="agent_stop",
+                msg_id=f"{plan.channel_id}:{plan.thread_ts}",
+            )
+            if not scheduled:
+                self._agent.complete_stop(self._web_client, plan, accepted=False)
+            return
+        self._agent.complete_stop(self._web_client, plan, accepted=True)
+
+    async def _process_agent_stop(self, plan: StopPlan, manager: Any) -> None:
+        accepted = False
+        try:
+            accepted = await manager.cancel_channel_runs(
+                channel_name=self.name,
+                chat_id=plan.channel_id,
+                thread_ts=plan.thread_ts,
+                message_ids=plan.covered_ids,
+                stop_ts=plan.stop_ts,
+            )
+        except asyncio.CancelledError:
+            await asyncio.to_thread(self._agent.complete_stop, self._web_client, plan, accepted=False)
+            raise
+        except Exception:
+            logger.exception(
+                "[Slack agent] failed cancelling Gateway runs for channel=%s thread_ts=%s",
+                plan.channel_id,
+                plan.thread_ts,
+            )
+            accepted = False
+        await asyncio.to_thread(self._agent.complete_stop, self._web_client, plan, accepted=accepted)
 
     # -- approvals DM (channels.slack.approvals_dm) --------------------------
 
@@ -706,19 +813,22 @@ class SlackChannel(Channel):
         # topic_id: use thread_ts as the topic identifier.
         # For threaded messages, thread_ts is the root message ts (shared topic).
         # For non-threaded messages, thread_ts is the message's own ts (new topic).
+        metadata: dict[str, Any] = {
+            # team_id is already resolved (payload team_id/team, else event team) by the caller.
+            "team_id": team_id,
+            "requires_personal_connection": not globally_allowed,
+            "message_id": event.get("ts"),
+            "client_msg_id": event.get("client_msg_id"),
+        }
+        if agent_session:
+            metadata["slack_agent_session"] = True
         inbound = self._make_inbound(
             chat_id=channel_id,
             user_id=user_id,
             text=text,
             msg_type=msg_type,
             thread_ts=thread_ts,
-            metadata={
-                # team_id is already resolved (payload team_id/team, else event team) by the caller.
-                "team_id": team_id,
-                "requires_personal_connection": not globally_allowed,
-                "message_id": event.get("ts"),
-                "client_msg_id": event.get("client_msg_id"),
-            },
+            metadata=metadata,
         )
         inbound.topic_id = thread_ts
 
@@ -760,7 +870,7 @@ class SlackChannel(Channel):
                 logger.warning("Slack channel member has no personal workspace binding")
                 return
             if inbound.metadata.get("requires_personal_connection"):
-                self._acknowledge_inbound(inbound)
+                self._acknowledge_inbound(inbound, agent_session=bool(inbound.metadata.get("slack_agent_session")))
             self._commit_reserved_inbound(reservation, inbound)
         finally:
             reservation.release()
@@ -768,8 +878,9 @@ class SlackChannel(Channel):
     def _acknowledge_inbound(self, inbound, *, agent_session: bool = False) -> None:
         """Acknowledge only after expanded participants have a personal binding.
 
-        In an agent session the thread's status goes to ``processing`` (Slack shows its own
-        working state and Stop button) instead of the "Working on it..." post.
+        In an agent session the thread's status goes to ``processing`` only after the
+        dispatcher accepts the request through its dedupe gate (see ``on_inbound_accepted``),
+        so redelivered DMs cannot reopen a settled session.
         """
         team_id = str(inbound.metadata.get("team_id") or "")
         policy = self._channel_policies.get(f"{team_id}:{inbound.chat_id}", {}) if isinstance(self._channel_policies, dict) else {}
@@ -779,14 +890,7 @@ class SlackChannel(Channel):
             if len(self._engaged_threads) > 256:
                 self._engaged_threads.pop(next(iter(self._engaged_threads)))
         self._add_reaction(inbound.chat_id, inbound.metadata.get("message_id") or inbound.thread_ts, "eyes")
-        if agent_session and self._agent.begin(
-            self._web_client,
-            channel_id=inbound.chat_id,
-            thread_ts=str(inbound.thread_ts),
-            message_id=str(inbound.metadata.get("message_id") or ""),
-            user_id=str(inbound.user_id or ""),
-            text=inbound.text,
-        ):
+        if agent_session:
             return
         self._send_running_reply(inbound.chat_id, inbound.thread_ts)
 

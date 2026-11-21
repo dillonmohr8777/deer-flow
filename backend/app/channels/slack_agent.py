@@ -19,22 +19,27 @@ Configuration keys (``channels.slack.agent``):
     - ``welcome_text``: posted once in an empty DM with the agent (blank = no welcome).
     - ``stopped_text``: posted in the thread when a user presses Stop.
 
-Session lifecycle (https://docs.slack.dev/ai/agent-sessions): a direct message sets the thread's
-session to ``processing`` (Slack shows its own "Working..." state and a Stop button), the reply is
-posted, then the session goes to ``active`` (or ``suspended`` when the agent asked a question).
-Only a reply that carries the request's ``message_id`` settles it; notices such as approval
-prompts carry none and leave the session alone. Stop marks the in-flight requests so their answers
-are dropped (also when the answer is already on its way to Slack), confirms in the thread and
-returns the session to ``active``. A dropped reply is recorded as ``metadata.slack_delivery``
-state ``dropped`` (nothing was posted) and ``send_file`` skips its files. The Gateway run itself
-is not cancelled here.
+Session lifecycle (https://docs.slack.dev/ai/agent-sessions): a direct message accepted past the
+dispatcher's dedupe gate sets the thread's session to ``processing`` (Slack shows its own
+"Working..." state and a Stop button), the reply is posted, then the session goes to ``active``
+(or ``suspended`` when the agent asked a question). Terminal transitions stay pending until Slack
+accepts them and retry transient failures without overwriting a newer request. Only a reply that
+carries the request's ``message_id`` settles it; notices such as approval prompts carry none and
+leave the session alone. Stop is deduplicated, scoped by event timestamp to requests already
+present when the user clicked Stop, routes cancellation to the specific Gateway runs and queued
+requests, and confirms in the thread only after cancellation is accepted. Stopped request markers
+stay recorded through outbound delivery so both text posts and attachment uploads drop them.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections import OrderedDict
+from collections.abc import Callable
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from app.channels.message_bus import PENDING_CLARIFICATION_METADATA_KEY, OutboundMessage
@@ -55,6 +60,7 @@ DEFAULT_SUGGESTED_PROMPTS: tuple[dict[str, str], ...] = (
 )
 DEFAULT_WELCOME_TEXT = "Hi! Ask me anything here, or start from one of the suggested prompts above. Each thread is its own session, and you can stop me while I work."
 DEFAULT_STOPPED_TEXT = "Stopped. I won't post the answer I was working on. Send a new message when you're ready."
+DEFAULT_FINISH_RETRY_DELAYS: tuple[float, ...] = (0.25, 0.75)
 
 _MAX_TRACKED = 512
 _MAX_PROMPTS = 4
@@ -66,6 +72,20 @@ def _bounded_set(store: OrderedDict, key: Any, value: Any = None) -> None:
     store.move_to_end(key)
     while len(store) > _MAX_TRACKED:
         store.popitem(last=False)
+
+
+def parse_slack_ts(value: Any) -> Decimal | None:
+    """Parse a Slack timestamp (e.g. ``1700000001.000100``) without float rounding."""
+    if value is None or isinstance(value, bool):
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        parsed = Decimal(raw)
+    except InvalidOperation:
+        return None
+    return parsed if parsed.is_finite() else None
 
 
 def _parse_enabled(raw: Any) -> str:
@@ -106,6 +126,19 @@ def session_title(text: str) -> str:
     return first_line[: _TITLE_LIMIT - 3].rstrip() + "..."
 
 
+@dataclass(frozen=True, slots=True)
+class StopPlan:
+    """Snapshot of one deduplicated, timestamp-scoped ``agent_session_stopped`` event."""
+
+    channel_id: str
+    thread_ts: str
+    stop_ts: Decimal | None
+    covered_ids: tuple[str, ...]
+    remaining_ids: tuple[str, ...]
+    dedupe_keys: tuple[tuple[str, ...], ...]
+    token: object
+
+
 class SlackAgentSessions:
     """Agent-session state and Slack calls for one Slack channel adapter.
 
@@ -116,7 +149,13 @@ class SlackAgentSessions:
     logged and never raised into the message path.
     """
 
-    def __init__(self, config: Any) -> None:
+    def __init__(
+        self,
+        config: Any,
+        *,
+        finish_retry_delays: tuple[float, ...] = DEFAULT_FINISH_RETRY_DELAYS,
+        sleep_fn: Callable[[float], None] = time.sleep,
+    ) -> None:
         config = config if isinstance(config, dict) else {}
         self._mode = _parse_enabled(config.get("enabled", "auto"))
         self._detected = False
@@ -125,13 +164,26 @@ class SlackAgentSessions:
         welcome = config.get("welcome_text", DEFAULT_WELCOME_TEXT)
         self.welcome_text = str(welcome).strip() if welcome else ""
         self.stopped_text = str(config.get("stopped_text") or DEFAULT_STOPPED_TEXT)
+        self._finish_retry_delays = tuple(finish_retry_delays)
+        self._sleep = sleep_fn
         self._lock = threading.Lock()
         # (channel, thread_ts) -> lock serializing that thread's status calls.
         self._thread_locks: OrderedDict[tuple[str, str], threading.Lock] = OrderedDict()
         # (channel, thread_ts) -> message ids still waiting for a final reply in that session.
         self._in_flight: OrderedDict[tuple[str, str], list[str]] = OrderedDict()
-        # (channel, message_id) of requests the user stopped; their replies are dropped.
+        # (channel, thread_ts) -> (owner_id, terminal_status) pending Slack acceptance.
+        self._pending_finish: OrderedDict[tuple[str, str], tuple[str, str]] = OrderedDict()
+        # (channel, message_id) of requests the user stopped; retained through outbound delivery.
         self._stopped: OrderedDict[tuple[str, str], None] = OrderedDict()
+        # (channel, message_id) -> active cancellation refcount while Gateway cancel is in flight.
+        self._stopping_counts: dict[tuple[str, str], int] = {}
+        # (channel, thread_ts) -> highest accepted Stop event timestamp.
+        self._stop_watermarks: OrderedDict[tuple[str, str], Decimal] = OrderedDict()
+        # (channel, thread_ts) -> in-flight (token, stop_ts) pairs awaiting Gateway acceptance.
+        self._pending_stop_watermarks: dict[tuple[str, str], list[tuple[object, Decimal]]] = {}
+        # Deduplication keys for accepted and currently-cancelling Stop deliveries.
+        self._seen_stops: OrderedDict[tuple[str, ...], None] = OrderedDict()
+        self._in_progress_stops: set[tuple[str, ...]] = set()
         self._titles: OrderedDict[tuple[str, str], str] = OrderedDict()
         self._welcomed: OrderedDict[str, None] = OrderedDict()
         self._warned_no_stop_subscription = False
@@ -164,10 +216,32 @@ class SlackAgentSessions:
             _bounded_set(self._thread_locks, key, lock)
             return lock
 
+    def _is_covered_by_stop_locked(self, channel_id: str, thread_ts: str, message_id: str) -> bool:
+        if not channel_id or not message_id:
+            return False
+        msg_key = (channel_id, message_id)
+        if msg_key in self._stopped or msg_key in self._stopping_counts:
+            return True
+        if not thread_ts:
+            return False
+        msg_ts = parse_slack_ts(message_id)
+        if msg_ts is None:
+            return False
+        thread_key = (channel_id, thread_ts)
+        watermark = self._stop_watermarks.get(thread_key)
+        if watermark is not None and msg_ts <= watermark:
+            return True
+        return any(msg_ts <= pending_ts for _, pending_ts in self._pending_stop_watermarks.get(thread_key, ()))
+
+    def is_stopped_or_covered(self, channel_id: str, thread_ts: str, message_id: str) -> bool:
+        """True when *message_id* was stopped directly or falls at/before an accepted/in-flight Stop."""
+        with self._lock:
+            return self._is_covered_by_stop_locked(channel_id, thread_ts, message_id)
+
     def begin(self, web_client, *, channel_id: str, thread_ts: str, message_id: str, user_id: str, text: str) -> bool:
         """Set the thread's session to ``processing``. False means fall back to the plain acknowledgement."""
         # Without a request id the reply could never settle the session, so none is opened.
-        if not web_client or not channel_id or not thread_ts or not message_id:
+        if self._mode == "off" or not web_client or not channel_id or not thread_ts or not message_id:
             return False
         key = (channel_id, thread_ts)
         payload: dict[str, Any] = {"channel_id": channel_id, "thread_ts": thread_ts, "status": "processing"}
@@ -179,6 +253,8 @@ class SlackAgentSessions:
         with self._thread_lock(key):
             # Registered before the call, so a Stop or a reply racing the call finds the request.
             with self._lock:
+                if self._is_covered_by_stop_locked(channel_id, thread_ts, message_id):
+                    return False
                 ids = self._in_flight.get(key, [])
                 added = message_id not in ids
                 if added:
@@ -186,6 +262,8 @@ class SlackAgentSessions:
                 _bounded_set(self._in_flight, key, ids)
             ok, error = self._set_status(web_client, payload)
             if ok:
+                with self._lock:
+                    self._pending_finish.pop(key, None)
                 return True
             with self._lock:
                 ids = self._in_flight.get(key)
@@ -200,73 +278,309 @@ class SlackAgentSessions:
         return False
 
     def has_session(self, channel_id: str, thread_ts: str) -> bool:
-        """True while this process has a request in flight in the thread's session."""
+        """True while this process has a request in flight or a terminal status pending in the thread."""
+        key = (channel_id, thread_ts)
         with self._lock:
-            return (channel_id, thread_ts) in self._in_flight
+            return key in self._in_flight or key in self._pending_finish
 
     def should_drop(self, msg: OutboundMessage) -> bool:
-        """True for a reply to a request the user stopped. The final reply clears the mark."""
+        """True for a reply to a request the user stopped.
+
+        The marker stays recorded in the bounded LRU through the entire outbound
+        delivery so attachment uploads after the text post see it too.
+        """
         message_id = str(msg.metadata.get("message_id") or "")
         if not message_id:
             return False
-        key = (msg.chat_id, message_id)
-        with self._lock:
-            if key not in self._stopped:
-                return False
-            if msg.is_final:
-                self._stopped.pop(key, None)
-        return True
+        return self.is_stopped_or_covered(msg.chat_id, str(msg.thread_ts or ""), message_id)
 
-    def finish(self, web_client, msg: OutboundMessage) -> None:
+    def _attempt_terminal_status_locked(
+        self,
+        web_client,
+        key: tuple[str, str],
+        *,
+        pending_token: tuple[str, str],
+        status: str,
+    ) -> str:
+        """Attempt one ``setStatus`` call while ``_thread_lock(key)`` is already held.
+
+        Returns ``"accepted"``, ``"superseded"``, ``"permanent_error"``, or ``"retry"``.
+        """
+        with self._lock:
+            if self._in_flight.get(key) or self._pending_finish.get(key) != pending_token:
+                return "superseded"
+        ok, error = self._set_status(web_client, {"channel_id": key[0], "thread_ts": key[1], "status": status})
+        if ok:
+            with self._lock:
+                if self._pending_finish.get(key) == pending_token:
+                    self._pending_finish.pop(key, None)
+            return "accepted"
+        if error in NOT_AN_AGENT_ERRORS:
+            with self._lock:
+                if self._pending_finish.get(key) == pending_token:
+                    self._pending_finish.pop(key, None)
+            if self._mode == "auto" and self._detected:
+                self._detected = False
+                logger.warning("[Slack agent] %s status refused (%s); agent sessions off until Slack shows the app is an agent again", status, error)
+            return "permanent_error"
+        return "retry"
+
+    def _retry_terminal_status(
+        self,
+        web_client,
+        key: tuple[str, str],
+        *,
+        pending_token: tuple[str, str],
+        status: str,
+    ) -> bool:
+        """Retry a transient terminal-status failure without blocking newer requests during backoff."""
+        for delay in self._finish_retry_delays:
+            if delay > 0:
+                self._sleep(delay)
+            with self._thread_lock(key):
+                outcome = self._attempt_terminal_status_locked(web_client, key, pending_token=pending_token, status=status)
+            if outcome == "accepted":
+                return True
+            if outcome in {"superseded", "permanent_error"}:
+                return False
+        return False
+
+    def finish(self, web_client, msg: OutboundMessage) -> bool:
         """After a final reply, move the session to ``active`` (``suspended`` if the agent asked a question).
 
         Only a reply carrying the request's ``message_id`` settles it: a late reply to an earlier
         request, or a notice without an id (approval prompts), leaves a newer request processing.
+        A transient failure leaves the transition pending and retries without overwriting a newer
+        request that started in the meantime.
         """
-        if not msg.is_final or not msg.thread_ts:
-            return
+        if not web_client or not msg.is_final or not msg.thread_ts:
+            return False
         message_id = str(msg.metadata.get("message_id") or "")
         if not message_id:
-            return
+            return False
         key = (msg.chat_id, str(msg.thread_ts))
+        desired_status = "suspended" if msg.metadata.get(PENDING_CLARIFICATION_METADATA_KEY) else "active"
+        pending_token: tuple[str, str] | None = None
         with self._thread_lock(key):
             with self._lock:
                 ids = self._in_flight.get(key)
-                if ids is None or message_id not in ids:
-                    return
-                ids.remove(message_id)
-                if ids:
-                    return
-                self._in_flight.pop(key, None)
-            status = "suspended" if msg.metadata.get(PENDING_CLARIFICATION_METADATA_KEY) else "active"
-            self._set_status(web_client, {"channel_id": key[0], "thread_ts": key[1], "status": status})
+                if ids is not None and message_id in ids:
+                    ids.remove(message_id)
+                    if ids:
+                        return True
+                    self._in_flight.pop(key, None)
+                    pending_token = (message_id, desired_status)
+                    _bounded_set(self._pending_finish, key, pending_token)
+                else:
+                    existing = self._pending_finish.get(key)
+                    if self._in_flight.get(key) or existing is None or existing[0] != message_id:
+                        return False
+                    pending_token = existing
+                    desired_status = existing[1]
+            outcome = self._attempt_terminal_status_locked(web_client, key, pending_token=pending_token, status=desired_status)
+        if outcome == "accepted":
+            return True
+        if outcome == "retry":
+            return self._retry_terminal_status(web_client, key, pending_token=pending_token, status=desired_status)
+        return False
 
-    def stopped(self, web_client, event: dict) -> None:
-        """Handle ``agent_session_stopped``: drop in-flight answers, return the session to active, confirm."""
+    def prepare_stop(
+        self,
+        event: dict,
+        *,
+        event_id: str | None = None,
+        event_time: Any = None,
+    ) -> StopPlan | None:
+        """Deduplicate an ``agent_session_stopped`` event and select requests covered by its timestamp.
+
+        Returns ``None`` when agent sessions are explicitly off, the event is missing channel/thread,
+        or this Stop delivery was already processed or is currently cancelling.
+        """
+        if self._mode == "off":
+            return None
         channel_id = str(event.get("channel") or "")
         thread_ts = str(event.get("thread_ts") or "")
         if not channel_id or not thread_ts:
-            return
+            return None
+
+        raw_event_ts = str(event.get("event_ts") or event.get("ts") or "").strip()
+        stop_ts = parse_slack_ts(raw_event_ts)
+        if stop_ts is None and event_time is not None:
+            stop_ts = parse_slack_ts(event_time)
+
+        dedupe_keys_list: list[tuple[str, ...]] = []
+        clean_event_id = str(event_id or "").strip()
+        if clean_event_id:
+            dedupe_keys_list.append(("event_id", clean_event_id))
+        if raw_event_ts:
+            dedupe_keys_list.append(("event_ts", channel_id, thread_ts, raw_event_ts))
+        dedupe_keys = tuple(dedupe_keys_list)
+
         key = (channel_id, thread_ts)
+        token = object()
+        with self._lock:
+            if any(dk in self._seen_stops or dk in self._in_progress_stops for dk in dedupe_keys):
+                logger.debug("[Slack agent] ignoring duplicate stop event channel=%s thread_ts=%s", channel_id, thread_ts)
+                return None
+
+            ids = list(self._in_flight.get(key, ()))
+            covered: list[str] = []
+            remaining: list[str] = []
+            for message_id in ids:
+                if self._request_covered_by_stop(message_id, stop_ts):
+                    covered.append(message_id)
+                else:
+                    remaining.append(message_id)
+
+            for dk in dedupe_keys:
+                self._in_progress_stops.add(dk)
+            for message_id in covered:
+                msg_key = (channel_id, message_id)
+                self._stopping_counts[msg_key] = self._stopping_counts.get(msg_key, 0) + 1
+            if stop_ts is not None:
+                self._pending_stop_watermarks.setdefault(key, []).append((token, stop_ts))
+
+        return StopPlan(
+            channel_id=channel_id,
+            thread_ts=thread_ts,
+            stop_ts=stop_ts,
+            covered_ids=tuple(covered),
+            remaining_ids=tuple(remaining),
+            dedupe_keys=dedupe_keys,
+            token=token,
+        )
+
+    @staticmethod
+    def _request_covered_by_stop(message_id: str, stop_ts: Decimal | None) -> bool:
+        if stop_ts is None:
+            return True
+        req_ts = parse_slack_ts(message_id)
+        if req_ts is None:
+            return True
+        return req_ts <= stop_ts
+
+    def complete_stop(self, web_client, plan: StopPlan, *, accepted: bool) -> bool:
+        """Finalize a prepared Stop after Gateway cancellation succeeds or fails."""
+        key = (plan.channel_id, plan.thread_ts)
+        with self._lock:
+            for dk in plan.dedupe_keys:
+                self._in_progress_stops.discard(dk)
+            for message_id in plan.covered_ids:
+                msg_key = (plan.channel_id, message_id)
+                count = self._stopping_counts.get(msg_key, 0) - 1
+                if count <= 0:
+                    self._stopping_counts.pop(msg_key, None)
+                else:
+                    self._stopping_counts[msg_key] = count
+            pending_wms = self._pending_stop_watermarks.get(key)
+            if pending_wms is not None:
+                pending_wms = [(tok, ts) for tok, ts in pending_wms if tok is not plan.token]
+                if pending_wms:
+                    self._pending_stop_watermarks[key] = pending_wms
+                else:
+                    self._pending_stop_watermarks.pop(key, None)
+
+            if not accepted:
+                logger.warning(
+                    "[Slack agent] cancellation was not accepted for channel=%s thread_ts=%s; leaving session unconfirmed",
+                    plan.channel_id,
+                    plan.thread_ts,
+                )
+                return False
+
+            for dk in plan.dedupe_keys:
+                _bounded_set(self._seen_stops, dk)
+            if plan.stop_ts is not None:
+                existing_wm = self._stop_watermarks.get(key)
+                if existing_wm is None or plan.stop_ts > existing_wm:
+                    _bounded_set(self._stop_watermarks, key, plan.stop_ts)
+            for message_id in plan.covered_ids:
+                _bounded_set(self._stopped, (plan.channel_id, message_id))
+
+        covered_set = set(plan.covered_ids)
+        stopped_ids: list[str] = list(plan.covered_ids)
+        has_newer = False
+        stop_pending_token: tuple[str, str] | None = None
+        retry_terminal = False
         with self._thread_lock(key):
             with self._lock:
-                ids = self._in_flight.pop(key, None) or []
-                for message_id in ids:
-                    _bounded_set(self._stopped, (channel_id, message_id))
-            if ids:
-                logger.info("[Slack agent] user stopped %d request(s) in channel=%s thread_ts=%s", len(ids), channel_id, thread_ts)
+                ids = self._in_flight.get(key)
+                if ids is not None:
+                    kept: list[str] = []
+                    for message_id in ids:
+                        if message_id in covered_set or (plan.stop_ts is not None and self._request_covered_by_stop(message_id, plan.stop_ts)):
+                            _bounded_set(self._stopped, (plan.channel_id, message_id))
+                            if message_id not in covered_set:
+                                covered_set.add(message_id)
+                                stopped_ids.append(message_id)
+                        else:
+                            kept.append(message_id)
+                    if kept:
+                        _bounded_set(self._in_flight, key, kept)
+                        has_newer = True
+                    else:
+                        self._in_flight.pop(key, None)
+                if not has_newer:
+                    stop_pending_token = (f"__stop__:{id(plan.token)}", "active")
+                    _bounded_set(self._pending_finish, key, stop_pending_token)
+            if stopped_ids:
+                logger.info(
+                    "[Slack agent] user stopped %d request(s) in channel=%s thread_ts=%s (newer_remaining=%s)",
+                    len(stopped_ids),
+                    plan.channel_id,
+                    plan.thread_ts,
+                    has_newer,
+                )
+            elif has_newer:
+                logger.info(
+                    "[Slack agent] delayed stop ignored for newer in-flight request(s) in channel=%s thread_ts=%s",
+                    plan.channel_id,
+                    plan.thread_ts,
+                )
             else:
                 # Slack only shows Stop while the session is processing; after a restart this process
                 # may not know the request, but the session must still leave processing.
-                logger.info("[Slack agent] stop for a thread with no tracked request channel=%s thread_ts=%s", channel_id, thread_ts)
-            self._set_status(web_client, {"channel_id": channel_id, "thread_ts": thread_ts, "status": "active"})
-        try:
-            web_client.chat_postMessage(channel=channel_id, text=self.stopped_text, thread_ts=thread_ts)
-        except Exception:
-            logger.exception("[Slack agent] failed to confirm stop in channel=%s", channel_id)
+                logger.info("[Slack agent] stop for a thread with no tracked request channel=%s thread_ts=%s", plan.channel_id, plan.thread_ts)
+            if not has_newer and stop_pending_token is not None and web_client is not None:
+                outcome = self._attempt_terminal_status_locked(web_client, key, pending_token=stop_pending_token, status="active")
+                retry_terminal = outcome == "retry"
+
+        if retry_terminal and stop_pending_token is not None and web_client is not None:
+            self._retry_terminal_status(web_client, key, pending_token=stop_pending_token, status="active")
+
+        if (stopped_ids or not has_newer) and web_client is not None:
+            try:
+                web_client.chat_postMessage(channel=plan.channel_id, text=self.stopped_text, thread_ts=plan.thread_ts)
+            except Exception:
+                logger.exception("[Slack agent] failed to confirm stop in channel=%s", plan.channel_id)
+        return True
+
+    def stopped(
+        self,
+        web_client,
+        event: dict,
+        *,
+        event_id: str | None = None,
+        event_time: Any = None,
+        cancel_runs: Callable[[StopPlan], bool] | None = None,
+    ) -> bool:
+        """Handle ``agent_session_stopped`` synchronously (for callers without an async manager)."""
+        plan = self.prepare_stop(event, event_id=event_id, event_time=event_time)
+        if plan is None:
+            return False
+        accepted = True
+        if cancel_runs is not None:
+            try:
+                accepted = bool(cancel_runs(plan))
+            except Exception:
+                logger.exception("[Slack agent] cancel_runs callback failed for channel=%s thread_ts=%s", plan.channel_id, plan.thread_ts)
+                accepted = False
+        return self.complete_stop(web_client, plan, accepted=accepted)
 
     def title_changed(self, event: dict) -> None:
         """Handle ``agent_session_title_changed``: remember the user's title for the session."""
+        if self._mode == "off":
+            return
         channel_id = str(event.get("channel") or "")
         thread_ts = str(event.get("thread_ts") or "")
         title = str(event.get("title") or "")
@@ -282,6 +596,8 @@ class SlackAgentSessions:
 
     def context_changed(self, event: dict) -> None:
         """Handle ``app_context_changed``. Only logged for now; the context is not sent to the agent."""
+        if self._mode == "off":
+            return
         context = event.get("context") if isinstance(event.get("context"), dict) else {}
         entities = context.get("entities") if isinstance(context.get("entities"), list) else []
         logger.debug("[Slack agent] app context changed: %d entities", len(entities))

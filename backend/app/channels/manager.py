@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import math
 import mimetypes
@@ -10,8 +11,9 @@ import re
 import stat
 import time
 from collections import OrderedDict
-from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from decimal import Decimal
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -35,6 +37,7 @@ from app.channels.message_bus import (
     ResolvedAttachment,
 )
 from app.channels.run_policy import CHANNEL_RUN_POLICY, ChannelRunPolicy
+from app.channels.slack_agent import parse_slack_ts
 from app.channels.store import ChannelStore
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, generate_csrf_token
 
@@ -187,7 +190,11 @@ WECOM_ALLOWED_MEDIA_HOST_SUFFIXES = ("qq.com",)
 _WECOM_MEDIA_COS_APPIDS = frozenset({"1258476243"})
 _WECOM_MEDIA_COS_HOST_RE = re.compile(r"^ww-aibot-img-(?P<appid>\d+)\.cos\.[a-z0-9-]+\.myqcloud\.com$")
 
-_METADATA_DROP_KEYS = frozenset({"raw_message", "ref_msg"})
+_METADATA_DROP_KEYS = frozenset({"raw_message", "ref_msg", "slack_agent_session"})
+_CHANNEL_STOP_MAX_TRACKED = 512
+_RUN_CANCEL_LOOKUP_TIMEOUT_SECONDS = 5.0
+_RUN_CANCEL_POLL_INTERVAL_SECONDS = 0.05
+_ACTIVE_RUN_STATUSES = frozenset({"pending", "running"})
 
 
 def _slim_metadata(meta: dict[str, Any]) -> dict[str, Any]:
@@ -424,6 +431,23 @@ class _SerializedThreadRunState:
 
     lock: asyncio.Lock
     waiters: int = 0
+
+
+@dataclass(slots=True)
+class _ActiveChannelRequest:
+    """In-flight channel request tracked so a channel Stop can cancel its exact Gateway run."""
+
+    channel_name: str
+    chat_id: str
+    thread_ts: str
+    message_id: str
+    thread_id: str | None = None
+    run_id: str | None = None
+    headers: dict[str, str] | None = None
+    run_started: bool = False
+    cancel_requested: bool = False
+    run_created: asyncio.Event = field(default_factory=asyncio.Event)
+    finished: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 @dataclass(slots=True)
@@ -1241,6 +1265,7 @@ class ChannelManager:
         require_bound_identity: bool = False,
         inbound_dedupe_store: InboundDedupeStore | None = None,
         get_stream_bridge: Callable[[], StreamBridge | None] | None = None,
+        channel_getter: Callable[[str], Any] | None = None,
     ) -> None:
         if isinstance(max_concurrency, bool) or not isinstance(max_concurrency, int) or max_concurrency <= 0:
             raise ValueError("max_concurrency must be a positive integer")
@@ -1265,6 +1290,7 @@ class ChannelManager:
         # tests) — follow-up buffering still works, but no watcher is
         # spawned to auto-drain it (see _maybe_spawn_followup_watcher).
         self._get_stream_bridge = get_stream_bridge
+        self._channel_getter = channel_getter
         self._client = None  # lazy init — langgraph_sdk async client
         self._channel_metadata_synced: set[str] = set()
         # Explicit /agent selections are pinned to the newly-created thread.
@@ -1312,6 +1338,235 @@ class ChannelManager:
         # run after this manager has been shut down. Discarded via the same
         # task's done-callback (see _maybe_spawn_followup_watcher).
         self._followup_watcher_tasks: set[asyncio.Task] = set()
+        # Active channel requests and accepted/in-flight Stop fences so a channel
+        # Stop cancels the specific Gateway runs and blocks queued requests covered
+        # by that Stop from starting.
+        self._active_requests: dict[tuple[str, str, str], _ActiveChannelRequest] = {}
+        self._channel_stop_watermarks: OrderedDict[tuple[str, str, str], Decimal] = OrderedDict()
+        self._channel_stopped_messages: OrderedDict[tuple[str, str, str], None] = OrderedDict()
+        self._pending_channel_stops: dict[object, tuple[str, str, str, frozenset[str], Decimal | None]] = {}
+
+    def _get_channel(self, channel_name: str):
+        if self._channel_getter is not None:
+            return self._channel_getter(channel_name)
+        from .service import get_channel_service
+
+        service = get_channel_service()
+        return service.get_channel(channel_name) if service is not None else None
+
+    @staticmethod
+    def _bounded_channel_set(store: OrderedDict, key: Any, value: Any = None) -> None:
+        store[key] = value
+        store.move_to_end(key)
+        while len(store) > _CHANNEL_STOP_MAX_TRACKED:
+            store.popitem(last=False)
+
+    @staticmethod
+    def _channel_request_key(msg: InboundMessage) -> tuple[str, str, str] | None:
+        message_id = str((msg.metadata or {}).get("message_id") or "")
+        if not message_id or not msg.thread_ts:
+            return None
+        return (msg.channel_name, msg.chat_id, message_id)
+
+    def _is_channel_request_stopped(self, msg: InboundMessage) -> bool:
+        message_id = str((msg.metadata or {}).get("message_id") or "")
+        thread_ts = str(msg.thread_ts or "")
+        if not message_id or not thread_ts:
+            return False
+        msg_key = (msg.channel_name, msg.chat_id, message_id)
+        if msg_key in self._channel_stopped_messages:
+            return True
+        thread_key = (msg.channel_name, msg.chat_id, thread_ts)
+        msg_ts = parse_slack_ts(message_id)
+        watermark = self._channel_stop_watermarks.get(thread_key)
+        if watermark is not None and msg_ts is not None and msg_ts <= watermark:
+            return True
+        for p_channel, p_chat, p_thread, p_ids, p_stop_ts in self._pending_channel_stops.values():
+            if p_channel != msg.channel_name or p_chat != msg.chat_id or p_thread != thread_ts:
+                continue
+            if message_id in p_ids:
+                return True
+            if p_stop_ts is not None and msg_ts is not None and msg_ts <= p_stop_ts:
+                return True
+        return False
+
+    async def _accept_inbound(self, msg: InboundMessage) -> bool:
+        if self._is_channel_request_stopped(msg):
+            logger.info(
+                "[Manager] dropping queued inbound covered by Stop: channel=%s chat_id=%s thread_ts=%s",
+                msg.channel_name,
+                msg.chat_id,
+                msg.thread_ts,
+            )
+            return False
+        channel = self._get_channel(msg.channel_name)
+        if channel is None:
+            return True
+        hook = getattr(channel, "on_inbound_accepted", None)
+        if not callable(hook):
+            return True
+        result = hook(msg)
+        if not inspect.isawaitable(result):
+            return True
+        accepted = await result
+        if not accepted:
+            logger.info(
+                "[Manager] channel rejected accepted inbound before dispatch: channel=%s chat_id=%s",
+                msg.channel_name,
+                msg.chat_id,
+            )
+        return bool(accepted)
+
+    async def cancel_channel_runs(
+        self,
+        *,
+        channel_name: str,
+        chat_id: str,
+        thread_ts: str,
+        message_ids: Sequence[str] | None = None,
+        stop_ts: Decimal | None = None,
+    ) -> bool:
+        """Cancel active Gateway runs covered by a channel Stop and fence covered queued requests."""
+        covered_ids = frozenset(str(mid) for mid in (message_ids or ()) if str(mid))
+        pending_token = object()
+        self._pending_channel_stops[pending_token] = (channel_name, chat_id, thread_ts, covered_ids, stop_ts)
+
+        matched: list[_ActiveChannelRequest] = []
+        for req in list(self._active_requests.values()):
+            if req.channel_name != channel_name or req.chat_id != chat_id or req.thread_ts != thread_ts:
+                continue
+            if req.message_id in covered_ids:
+                matched.append(req)
+            elif stop_ts is not None:
+                req_ts = parse_slack_ts(req.message_id)
+                if req_ts is not None and req_ts <= stop_ts:
+                    matched.append(req)
+            elif message_ids is None:
+                matched.append(req)
+
+        # Mark all matched requests first so pre-start requests cannot launch runs while others cancel.
+        newly_marked: list[_ActiveChannelRequest] = []
+        for req in matched:
+            if not req.cancel_requested:
+                req.cancel_requested = True
+                newly_marked.append(req)
+
+        all_accepted = True
+        try:
+            for req in matched:
+                if not req.run_started or req.finished.is_set():
+                    continue
+                ok = await self._cancel_active_request_on_gateway(req)
+                if not ok:
+                    all_accepted = False
+                    if req in newly_marked:
+                        req.cancel_requested = False
+        finally:
+            self._pending_channel_stops.pop(pending_token, None)
+
+        if not all_accepted:
+            return False
+
+        thread_key = (channel_name, chat_id, thread_ts)
+        if stop_ts is not None:
+            existing_wm = self._channel_stop_watermarks.get(thread_key)
+            if existing_wm is None or stop_ts > existing_wm:
+                self._bounded_channel_set(self._channel_stop_watermarks, thread_key, stop_ts)
+        for mid in covered_ids:
+            self._bounded_channel_set(self._channel_stopped_messages, (channel_name, chat_id, mid))
+        for req in matched:
+            self._bounded_channel_set(self._channel_stopped_messages, (channel_name, chat_id, req.message_id))
+        return True
+
+    async def _cancel_active_request_on_gateway(self, req: _ActiveChannelRequest) -> bool:
+        client = self._get_client()
+        deadline = time.monotonic() + _RUN_CANCEL_LOOKUP_TIMEOUT_SECONDS
+        while not req.finished.is_set() and not req.run_id:
+            if req.thread_id:
+                try:
+                    runs = await client.runs.list(req.thread_id, headers=req.headers)
+                except Exception as exc:
+                    logger.warning(
+                        "[Manager] failed listing runs to cancel thread_id=%s message_id=%s: %s",
+                        req.thread_id,
+                        req.message_id,
+                        exc,
+                    )
+                    return False
+                matched_active: str | None = None
+                matched_terminal = False
+                for run in runs or ():
+                    if not isinstance(run, Mapping):
+                        continue
+                    meta = run.get("metadata")
+                    if not isinstance(meta, Mapping):
+                        continue
+                    if meta.get("channel_name") == req.channel_name and meta.get("channel_chat_id") == req.chat_id and meta.get("channel_message_id") == req.message_id:
+                        run_id = run.get("run_id")
+                        status = str(run.get("status") or "")
+                        if status in _ACTIVE_RUN_STATUSES and isinstance(run_id, str) and run_id:
+                            matched_active = run_id
+                            break
+                        if status and status not in _ACTIVE_RUN_STATUSES:
+                            matched_terminal = True
+                if matched_active:
+                    req.run_id = matched_active
+                    break
+                if matched_terminal:
+                    return True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            wait_time = min(_RUN_CANCEL_POLL_INTERVAL_SECONDS, remaining)
+            created_waiter = asyncio.create_task(req.run_created.wait())
+            finished_waiter = asyncio.create_task(req.finished.wait())
+            try:
+                await asyncio.wait({created_waiter, finished_waiter}, timeout=wait_time, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for waiter in (created_waiter, finished_waiter):
+                    if not waiter.done():
+                        waiter.cancel()
+                await asyncio.gather(created_waiter, finished_waiter, return_exceptions=True)
+
+        if req.finished.is_set():
+            return True
+        if not req.thread_id or not req.run_id:
+            logger.warning(
+                "[Manager] could not resolve Gateway run_id for cancellation channel=%s chat_id=%s message_id=%s",
+                req.channel_name,
+                req.chat_id,
+                req.message_id,
+            )
+            return False
+
+        try:
+            await client.runs.cancel(
+                req.thread_id,
+                req.run_id,
+                wait=True,
+                action="interrupt",
+                headers=req.headers,
+            )
+            return True
+        except Exception as exc:
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            if status_code == 404:
+                return True
+            if status_code == 409 or isinstance(exc, ConflictError):
+                try:
+                    run = await client.runs.get(req.thread_id, req.run_id, headers=req.headers)
+                except Exception:
+                    return False
+                if isinstance(run, Mapping) and str(run.get("status") or "") not in _ACTIVE_RUN_STATUSES:
+                    return True
+                return False
+            logger.warning(
+                "[Manager] failed cancelling Gateway run thread_id=%s run_id=%s: %s",
+                req.thread_id,
+                req.run_id,
+                exc,
+            )
+            return False
 
     @staticmethod
     def _channel_supports_streaming(channel_name: str) -> bool:
@@ -2029,6 +2284,8 @@ class ChannelManager:
                     if await self._is_duplicate_inbound(msg):
                         continue
                     dedupe_recorded = self._inbound_dedupe_key(msg) is not None
+                    if not await self._accept_inbound(msg):
+                        continue
                     logger.info(
                         "[Manager] received inbound: channel=%s, chat_id=%s, type=%s, text_len=%d, files=%d",
                         msg.channel_name,
@@ -2143,7 +2400,20 @@ class ChannelManager:
 
     async def _handle_message(self, msg: InboundMessage) -> None:
         msg = _apply_effective_owner(msg)
+        req_key = self._channel_request_key(msg)
+        active_req: _ActiveChannelRequest | None = None
+        if req_key is not None:
+            active_req = _ActiveChannelRequest(
+                channel_name=msg.channel_name,
+                chat_id=msg.chat_id,
+                thread_ts=str(msg.thread_ts),
+                message_id=req_key[2],
+            )
+            self._active_requests[req_key] = active_req
         try:
+            if active_req is not None and self._is_channel_request_stopped(msg):
+                active_req.cancel_requested = True
+                return
             # Commands are handled below because provider adapters consume
             # binding commands before manager dispatch, and _handle_command()
             # applies its own admission gate for manager-level commands.
@@ -2175,6 +2445,14 @@ class ChannelManager:
             )
             await self._send_error(msg, str(exc))
         except Exception:
+            if active_req is not None and active_req.cancel_requested:
+                logger.info(
+                    "[Manager] suppressing error for cancelled channel request: channel=%s chat_id=%s message_id=%s",
+                    msg.channel_name,
+                    msg.chat_id,
+                    active_req.message_id,
+                )
+                return
             logger.exception(
                 "Error handling message from %s (chat=%s)",
                 msg.channel_name,
@@ -2185,6 +2463,11 @@ class ChannelManager:
             # for the dedupe TTL.
             await self._release_inbound_dedupe_key(msg)
             await self._send_error(msg, "An internal error occurred. Please try again.")
+        finally:
+            if active_req is not None:
+                active_req.finished.set()
+                if req_key is not None and self._active_requests.get(req_key) is active_req:
+                    self._active_requests.pop(req_key, None)
 
     # -- chat handling -----------------------------------------------------
 
@@ -2455,6 +2738,12 @@ class ChannelManager:
             await self._reject_unbound_channel_message(msg, bound_identity_rejection=bound_identity_rejection)
             return
 
+        req_key = self._channel_request_key(msg)
+        active_req = self._active_requests.get(req_key) if req_key is not None else None
+        if active_req is not None and (active_req.cancel_requested or self._is_channel_request_stopped(msg)):
+            active_req.cancel_requested = True
+            return
+
         client = self._get_client()
         storage_user_id = _channel_storage_user_id(msg)
 
@@ -2463,6 +2752,11 @@ class ChannelManager:
         # private chats) — the store handles this by using the "channel:chat_id"
         # key without a topic suffix.
         thread_id, created = await self._get_or_create_thread(client, msg)
+        if active_req is not None:
+            active_req.thread_id = thread_id
+            if active_req.cancel_requested or self._is_channel_request_stopped(msg):
+                active_req.cancel_requested = True
+                return
         if not created:
             logger.info("[Manager] reusing thread: thread_id=%s for topic_id=%s", thread_id, msg.topic_id)
             await self._update_thread_channel_metadata(client, msg, thread_id)
@@ -2483,6 +2777,9 @@ class ChannelManager:
             if serial_state is not None:
                 await serial_state.lock.acquire()
                 serial_lock_acquired = True
+            if active_req is not None and (active_req.cancel_requested or self._is_channel_request_stopped(msg)):
+                active_req.cancel_requested = True
+                return
             if queued:
                 await self._publish_progress_update(msg, thread_id, "thinking...")
             await self._handle_chat_on_thread(
@@ -2559,12 +2856,24 @@ class ChannelManager:
             )
             return
 
+        req_key = self._channel_request_key(msg)
+        active_req = self._active_requests.get(req_key) if req_key is not None else None
+        if active_req is not None and (active_req.cancel_requested or self._is_channel_request_stopped(msg)):
+            active_req.cancel_requested = True
+            return
+
         run_kwargs: dict[str, Any] = {
             "input": {"messages": [human_message]},
             "config": run_config,
             "context": run_context,
             "multitask_strategy": "reject",
         }
+        if active_req is not None:
+            run_kwargs["metadata"] = {
+                "channel_name": msg.channel_name,
+                "channel_chat_id": msg.chat_id,
+                "channel_message_id": active_req.message_id,
+            }
         if owner_headers := _owner_headers(msg):
             run_kwargs["headers"] = owner_headers
 
@@ -2611,14 +2920,33 @@ class ChannelManager:
 
         logger.info("[Manager] invoking runs.wait(thread_id=%s, text_len=%d)", thread_id, len(msg.text or ""))
         created_run: dict[str, Any] = {}
+
+        def _on_run_created(meta: dict[str, Any]) -> None:
+            created_run.update(meta)
+            if active_req is not None and isinstance(meta, Mapping):
+                run_id = meta.get("run_id")
+                if isinstance(run_id, str) and run_id:
+                    active_req.run_id = run_id
+                    active_req.run_created.set()
+
+        if active_req is not None:
+            if active_req.cancel_requested or self._is_channel_request_stopped(msg):
+                active_req.cancel_requested = True
+                return
+            active_req.thread_id = thread_id
+            active_req.headers = run_kwargs.get("headers")
+            active_req.run_started = True
         try:
             result = await client.runs.wait(
                 thread_id,
                 assistant_id,
-                on_run_created=created_run.update,
+                on_run_created=_on_run_created,
                 **run_kwargs,
             )
         except Exception as exc:
+            if active_req is not None and active_req.cancel_requested:
+                logger.info("[Manager] channel run cancelled by user: thread_id=%s message_id=%s", thread_id, active_req.message_id)
+                return
             if _is_thread_busy_error(exc):
                 logger.warning("[Manager] thread busy (concurrent run rejected): thread_id=%s", thread_id)
                 # Same reason as the fire-and-forget branch above: this error is
@@ -2628,6 +2956,10 @@ class ChannelManager:
                 return
             else:
                 raise
+
+        if active_req is not None and active_req.cancel_requested:
+            logger.info("[Manager] suppressing response for cancelled channel run: thread_id=%s message_id=%s", thread_id, active_req.message_id)
+            return
 
         # runs.wait returns the thread's latest state even when the run failed, which can be the
         # previous turn's answer. Check this run's own status before replying with that state.
@@ -2663,6 +2995,10 @@ class ChannelManager:
                 response_text = _format_artifact_text([a.virtual_path for a in attachments])
             else:
                 response_text = "(No response from agent)"
+
+        if active_req is not None and active_req.cancel_requested:
+            logger.info("[Manager] suppressing outbound for cancelled channel run: thread_id=%s message_id=%s", thread_id, active_req.message_id)
+            return
 
         outbound = OutboundMessage(
             channel_name=msg.channel_name,
