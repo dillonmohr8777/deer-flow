@@ -446,7 +446,10 @@ class _ActiveChannelRequest:
     headers: dict[str, str] | None = None
     run_started: bool = False
     cancel_requested: bool = False
+    cancel_accepted: bool = False
+    pending_cancels: list[tuple[asyncio.Future[bool], asyncio.Event | None]] = field(default_factory=list)
     run_created: asyncio.Event = field(default_factory=asyncio.Event)
+    run_ended: asyncio.Event = field(default_factory=asyncio.Event)
     finished: asyncio.Event = field(default_factory=asyncio.Event)
 
 
@@ -1417,6 +1420,28 @@ class ChannelManager:
             )
         return bool(accepted)
 
+    async def _await_request_stop_resolution(self, req: _ActiveChannelRequest) -> bool:
+        """Hold a request's completion until any in-progress Stop resolves.
+
+        Returns True only when cancellation was accepted (discarding the answer); returns False
+        when cancellation failed so the caller still delivers the completed answer.
+        """
+        while True:
+            if req.pending_cancels:
+                pending_future, release_gate = req.pending_cancels[0]
+                try:
+                    accepted = await asyncio.shield(pending_future)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    accepted = False
+                if release_gate is not None and not release_gate.is_set():
+                    await release_gate.wait()
+                if accepted:
+                    return True
+                continue
+            return req.cancel_accepted
+
     async def cancel_channel_runs(
         self,
         *,
@@ -1425,6 +1450,7 @@ class ChannelManager:
         thread_ts: str,
         message_ids: Sequence[str] | None = None,
         stop_ts: Decimal | None = None,
+        release_gate: asyncio.Event | None = None,
     ) -> bool:
         """Cancel active Gateway runs covered by a channel Stop and fence covered queued requests."""
         covered_ids = frozenset(str(mid) for mid in (message_ids or ()) if str(mid))
@@ -1444,25 +1470,50 @@ class ChannelManager:
             elif message_ids is None:
                 matched.append(req)
 
-        # Mark all matched requests first so pre-start requests cannot launch runs while others cancel.
+        loop = asyncio.get_running_loop()
+        pending_future: asyncio.Future[bool] = loop.create_future()
+        pending_entry = (pending_future, release_gate)
+
+        # Register this pending Stop on every matched request so pre-start requests wait and
+        # completed answers are held until Gateway cancellation actually resolves.
         newly_marked: list[_ActiveChannelRequest] = []
         for req in matched:
+            req.pending_cancels.append(pending_entry)
             if not req.cancel_requested:
                 req.cancel_requested = True
                 newly_marked.append(req)
 
         all_accepted = True
+        cancelled_reqs: list[_ActiveChannelRequest] = []
         try:
             for req in matched:
-                if not req.run_started or req.finished.is_set():
+                if not req.run_started or req.run_ended.is_set():
+                    cancelled_reqs.append(req)
                     continue
                 ok = await self._cancel_active_request_on_gateway(req)
-                if not ok:
+                if ok:
+                    cancelled_reqs.append(req)
+                else:
                     all_accepted = False
-                    if req in newly_marked:
-                        req.cancel_requested = False
+        except BaseException:
+            all_accepted = False
+            raise
         finally:
             self._pending_channel_stops.pop(pending_token, None)
+            if all_accepted:
+                for req in matched:
+                    req.cancel_accepted = True
+            else:
+                for req in newly_marked:
+                    if not req.cancel_accepted:
+                        req.cancel_requested = False
+            for req in matched:
+                try:
+                    req.pending_cancels.remove(pending_entry)
+                except ValueError:
+                    pass
+            if not pending_future.done():
+                pending_future.set_result(all_accepted)
 
         if not all_accepted:
             return False
@@ -1474,14 +1525,14 @@ class ChannelManager:
                 self._bounded_channel_set(self._channel_stop_watermarks, thread_key, stop_ts)
         for mid in covered_ids:
             self._bounded_channel_set(self._channel_stopped_messages, (channel_name, chat_id, mid))
-        for req in matched:
+        for req in cancelled_reqs:
             self._bounded_channel_set(self._channel_stopped_messages, (channel_name, chat_id, req.message_id))
         return True
 
     async def _cancel_active_request_on_gateway(self, req: _ActiveChannelRequest) -> bool:
         client = self._get_client()
         deadline = time.monotonic() + _RUN_CANCEL_LOOKUP_TIMEOUT_SECONDS
-        while not req.finished.is_set() and not req.run_id:
+        while not req.run_ended.is_set() and not req.run_id:
             if req.thread_id:
                 try:
                     runs = await client.runs.list(req.thread_id, headers=req.headers)
@@ -1519,16 +1570,16 @@ class ChannelManager:
                 break
             wait_time = min(_RUN_CANCEL_POLL_INTERVAL_SECONDS, remaining)
             created_waiter = asyncio.create_task(req.run_created.wait())
-            finished_waiter = asyncio.create_task(req.finished.wait())
+            ended_waiter = asyncio.create_task(req.run_ended.wait())
             try:
-                await asyncio.wait({created_waiter, finished_waiter}, timeout=wait_time, return_when=asyncio.FIRST_COMPLETED)
+                await asyncio.wait({created_waiter, ended_waiter}, timeout=wait_time, return_when=asyncio.FIRST_COMPLETED)
             finally:
-                for waiter in (created_waiter, finished_waiter):
+                for waiter in (created_waiter, ended_waiter):
                     if not waiter.done():
                         waiter.cancel()
-                await asyncio.gather(created_waiter, finished_waiter, return_exceptions=True)
+                await asyncio.gather(created_waiter, ended_waiter, return_exceptions=True)
 
-        if req.finished.is_set():
+        if req.run_ended.is_set():
             return True
         if not req.thread_id or not req.run_id:
             logger.warning(
@@ -2445,7 +2496,7 @@ class ChannelManager:
             )
             await self._send_error(msg, str(exc))
         except Exception:
-            if active_req is not None and active_req.cancel_requested:
+            if active_req is not None and await self._await_request_stop_resolution(active_req):
                 logger.info(
                     "[Manager] suppressing error for cancelled channel request: channel=%s chat_id=%s message_id=%s",
                     msg.channel_name,
@@ -2740,7 +2791,8 @@ class ChannelManager:
 
         req_key = self._channel_request_key(msg)
         active_req = self._active_requests.get(req_key) if req_key is not None else None
-        if active_req is not None and (active_req.cancel_requested or self._is_channel_request_stopped(msg)):
+        if active_req is not None and (await self._await_request_stop_resolution(active_req) or self._is_channel_request_stopped(msg)):
+            active_req.cancel_accepted = True
             active_req.cancel_requested = True
             return
 
@@ -2754,7 +2806,8 @@ class ChannelManager:
         thread_id, created = await self._get_or_create_thread(client, msg)
         if active_req is not None:
             active_req.thread_id = thread_id
-            if active_req.cancel_requested or self._is_channel_request_stopped(msg):
+            if await self._await_request_stop_resolution(active_req) or self._is_channel_request_stopped(msg):
+                active_req.cancel_accepted = True
                 active_req.cancel_requested = True
                 return
         if not created:
@@ -2777,7 +2830,8 @@ class ChannelManager:
             if serial_state is not None:
                 await serial_state.lock.acquire()
                 serial_lock_acquired = True
-            if active_req is not None and (active_req.cancel_requested or self._is_channel_request_stopped(msg)):
+            if active_req is not None and (await self._await_request_stop_resolution(active_req) or self._is_channel_request_stopped(msg)):
+                active_req.cancel_accepted = True
                 active_req.cancel_requested = True
                 return
             if queued:
@@ -2858,7 +2912,8 @@ class ChannelManager:
 
         req_key = self._channel_request_key(msg)
         active_req = self._active_requests.get(req_key) if req_key is not None else None
-        if active_req is not None and (active_req.cancel_requested or self._is_channel_request_stopped(msg)):
+        if active_req is not None and (await self._await_request_stop_resolution(active_req) or self._is_channel_request_stopped(msg)):
+            active_req.cancel_accepted = True
             active_req.cancel_requested = True
             return
 
@@ -2930,7 +2985,8 @@ class ChannelManager:
                     active_req.run_created.set()
 
         if active_req is not None:
-            if active_req.cancel_requested or self._is_channel_request_stopped(msg):
+            if await self._await_request_stop_resolution(active_req) or self._is_channel_request_stopped(msg):
+                active_req.cancel_accepted = True
                 active_req.cancel_requested = True
                 return
             active_req.thread_id = thread_id
@@ -2944,9 +3000,11 @@ class ChannelManager:
                 **run_kwargs,
             )
         except Exception as exc:
-            if active_req is not None and active_req.cancel_requested:
-                logger.info("[Manager] channel run cancelled by user: thread_id=%s message_id=%s", thread_id, active_req.message_id)
-                return
+            if active_req is not None:
+                active_req.run_ended.set()
+                if await self._await_request_stop_resolution(active_req):
+                    logger.info("[Manager] channel run cancelled by user: thread_id=%s message_id=%s", thread_id, active_req.message_id)
+                    return
             if _is_thread_busy_error(exc):
                 logger.warning("[Manager] thread busy (concurrent run rejected): thread_id=%s", thread_id)
                 # Same reason as the fire-and-forget branch above: this error is
@@ -2956,8 +3014,11 @@ class ChannelManager:
                 return
             else:
                 raise
+        finally:
+            if active_req is not None:
+                active_req.run_ended.set()
 
-        if active_req is not None and active_req.cancel_requested:
+        if active_req is not None and await self._await_request_stop_resolution(active_req):
             logger.info("[Manager] suppressing response for cancelled channel run: thread_id=%s message_id=%s", thread_id, active_req.message_id)
             return
 
@@ -2996,7 +3057,7 @@ class ChannelManager:
             else:
                 response_text = "(No response from agent)"
 
-        if active_req is not None and active_req.cancel_requested:
+        if active_req is not None and await self._await_request_stop_resolution(active_req):
             logger.info("[Manager] suppressing outbound for cancelled channel run: thread_id=%s message_id=%s", thread_id, active_req.message_id)
             return
 

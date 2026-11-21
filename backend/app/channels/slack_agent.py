@@ -21,25 +21,29 @@ Configuration keys (``channels.slack.agent``):
 
 Session lifecycle (https://docs.slack.dev/ai/agent-sessions): a direct message accepted past the
 dispatcher's dedupe gate sets the thread's session to ``processing`` (Slack shows its own
-"Working..." state and a Stop button), the reply is posted, then the session goes to ``active``
-(or ``suspended`` when the agent asked a question). Terminal transitions stay pending until Slack
-accepts them and retry transient failures without overwriting a newer request. Only a reply that
-carries the request's ``message_id`` settles it; notices such as approval prompts carry none and
-leave the session alone. Stop is deduplicated, scoped by event timestamp to requests already
-present when the user clicked Stop, routes cancellation to the specific Gateway runs and queued
-requests, and confirms in the thread only after cancellation is accepted. Stopped request markers
-stay recorded through outbound delivery so both text posts and attachment uploads drop them.
+"Working..." state and a Stop button), the full outbound delivery (text + attachments) completes,
+then the session goes to ``active`` (or ``suspended`` when the agent asked a question). Terminal
+transitions stay pending until Slack accepts them and schedule background retries honoring Slack's
+``Retry-After`` header independently of reply delivery, cancelling the retry as soon as newer work
+supersedes it. Only a reply that carries the request's ``message_id`` settles it; notices such as
+approval prompts carry none and leave the session alone. Stop is deduplicated, scoped by event
+timestamp to requests already present when the user clicked Stop (never clobbering newer in-flight
+or completed turns), routes cancellation to the specific Gateway runs and queued requests, and
+confirms in the thread only after cancellation is accepted. Stopped request markers stay recorded
+through outbound delivery so both text posts and attachment uploads drop them.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import threading
-import time
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 from app.channels.message_bus import PENDING_CLARIFICATION_METADATA_KEY, OutboundMessage
@@ -60,7 +64,8 @@ DEFAULT_SUGGESTED_PROMPTS: tuple[dict[str, str], ...] = (
 )
 DEFAULT_WELCOME_TEXT = "Hi! Ask me anything here, or start from one of the suggested prompts above. Each thread is its own session, and you can stop me while I work."
 DEFAULT_STOPPED_TEXT = "Stopped. I won't post the answer I was working on. Send a new message when you're ready."
-DEFAULT_FINISH_RETRY_DELAYS: tuple[float, ...] = (0.25, 0.75)
+DEFAULT_FINISH_RETRY_DELAYS: tuple[float, ...] = (1.0, 2.0, 4.0, 8.0, 16.0)
+MAX_RETRY_AFTER_SECONDS = 300.0
 
 _MAX_TRACKED = 512
 _MAX_PROMPTS = 4
@@ -72,6 +77,12 @@ def _bounded_set(store: OrderedDict, key: Any, value: Any = None) -> None:
     store.move_to_end(key)
     while len(store) > _MAX_TRACKED:
         store.popitem(last=False)
+
+
+def _make_daemon_timer(delay: float, callback: Callable[[], None]) -> threading.Timer:
+    timer = threading.Timer(delay, callback)
+    timer.daemon = True
+    return timer
 
 
 def parse_slack_ts(value: Any) -> Decimal | None:
@@ -86,6 +97,41 @@ def parse_slack_ts(value: Any) -> Decimal | None:
     except InvalidOperation:
         return None
     return parsed if parsed.is_finite() else None
+
+
+def _extract_retry_after(response: Any) -> float | None:
+    """Read Slack's ``Retry-After`` header (seconds or HTTP-date) from a SlackResponse or mapping."""
+    if response is None:
+        return None
+    raw: Any = None
+    headers = getattr(response, "headers", None)
+    if isinstance(headers, Mapping):
+        for header_name, value in headers.items():
+            if str(header_name).lower() == "retry-after":
+                raw = value
+                break
+    if raw is None:
+        raw = _response_get(response, "retry_after")
+    if isinstance(raw, list | tuple):
+        raw = raw[0] if raw else None
+    if raw is None or isinstance(raw, bool):
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        seconds = float(text)
+    except ValueError:
+        try:
+            target = parsedate_to_datetime(text)
+        except (TypeError, ValueError):
+            return None
+        if target.tzinfo is None:
+            target = target.replace(tzinfo=UTC)
+        seconds = max(0.0, (target - datetime.now(UTC)).total_seconds())
+    if not math.isfinite(seconds) or seconds < 0:
+        return None
+    return min(seconds, MAX_RETRY_AFTER_SECONDS)
 
 
 def _parse_enabled(raw: Any) -> str:
@@ -154,7 +200,7 @@ class SlackAgentSessions:
         config: Any,
         *,
         finish_retry_delays: tuple[float, ...] = DEFAULT_FINISH_RETRY_DELAYS,
-        sleep_fn: Callable[[float], None] = time.sleep,
+        timer_factory: Callable[[float, Callable[[], None]], Any] = _make_daemon_timer,
     ) -> None:
         config = config if isinstance(config, dict) else {}
         self._mode = _parse_enabled(config.get("enabled", "auto"))
@@ -165,14 +211,19 @@ class SlackAgentSessions:
         self.welcome_text = str(welcome).strip() if welcome else ""
         self.stopped_text = str(config.get("stopped_text") or DEFAULT_STOPPED_TEXT)
         self._finish_retry_delays = tuple(finish_retry_delays)
-        self._sleep = sleep_fn
+        self._timer_factory = timer_factory
+        self._closed = False
         self._lock = threading.Lock()
         # (channel, thread_ts) -> lock serializing that thread's status calls.
         self._thread_locks: OrderedDict[tuple[str, str], threading.Lock] = OrderedDict()
         # (channel, thread_ts) -> message ids still waiting for a final reply in that session.
         self._in_flight: OrderedDict[tuple[str, str], list[str]] = OrderedDict()
+        # (channel, thread_ts) -> highest completed request timestamp so older Stops cannot clobber newer turns.
+        self._latest_completed_ts: OrderedDict[tuple[str, str], Decimal] = OrderedDict()
         # (channel, thread_ts) -> (owner_id, terminal_status) pending Slack acceptance.
         self._pending_finish: OrderedDict[tuple[str, str], tuple[str, str]] = OrderedDict()
+        # (channel, thread_ts) -> (pending_token, scheduled_timer) for background terminal-status retries.
+        self._retry_timers: dict[tuple[str, str], tuple[tuple[str, str], Any]] = {}
         # (channel, message_id) of requests the user stopped; retained through outbound delivery.
         self._stopped: OrderedDict[tuple[str, str], None] = OrderedDict()
         # (channel, message_id) -> active cancellation refcount while Gateway cancel is in flight.
@@ -187,6 +238,18 @@ class SlackAgentSessions:
         self._titles: OrderedDict[tuple[str, str], str] = OrderedDict()
         self._welcomed: OrderedDict[str, None] = OrderedDict()
         self._warned_no_stop_subscription = False
+
+    def close(self) -> None:
+        """Cancel any pending background terminal-status retry timers."""
+        with self._lock:
+            self._closed = True
+            timers = list(self._retry_timers.values())
+            self._retry_timers.clear()
+        for _, timer in timers:
+            try:
+                timer.cancel()
+            except Exception:
+                logger.debug("[Slack agent] failed cancelling retry timer on close", exc_info=True)
 
     # -- activation ---------------------------------------------------------
 
@@ -215,6 +278,24 @@ class SlackAgentSessions:
             lock = self._thread_locks.get(key) or threading.Lock()
             _bounded_set(self._thread_locks, key, lock)
             return lock
+
+    def _cancel_retry_timer_locked(self, key: tuple[str, str]) -> None:
+        entry = self._retry_timers.pop(key, None)
+        if entry is None:
+            return
+        _, timer = entry
+        try:
+            timer.cancel()
+        except Exception:
+            logger.debug("[Slack agent] failed cancelling scheduled terminal retry for %s", key, exc_info=True)
+
+    def _record_completed_ts_locked(self, key: tuple[str, str], message_id: str) -> None:
+        req_ts = parse_slack_ts(message_id)
+        if req_ts is None:
+            return
+        existing = self._latest_completed_ts.get(key)
+        if existing is None or req_ts > existing:
+            _bounded_set(self._latest_completed_ts, key, req_ts)
 
     def _is_covered_by_stop_locked(self, channel_id: str, thread_ts: str, message_id: str) -> bool:
         if not channel_id or not message_id:
@@ -260,10 +341,11 @@ class SlackAgentSessions:
                 if added:
                     ids.append(message_id)
                 _bounded_set(self._in_flight, key, ids)
-            ok, error = self._set_status(web_client, payload)
+            ok, error, _retry_after = self._set_status(web_client, payload)
             if ok:
                 with self._lock:
                     self._pending_finish.pop(key, None)
+                    self._cancel_retry_timer_locked(key)
                 return True
             with self._lock:
                 ids = self._in_flight.get(key)
@@ -301,57 +383,106 @@ class SlackAgentSessions:
         *,
         pending_token: tuple[str, str],
         status: str,
-    ) -> str:
+    ) -> tuple[str, float | None]:
         """Attempt one ``setStatus`` call while ``_thread_lock(key)`` is already held.
 
-        Returns ``"accepted"``, ``"superseded"``, ``"permanent_error"``, or ``"retry"``.
+        Returns ``(outcome, retry_after)`` where outcome is ``"accepted"``, ``"superseded"``,
+        ``"permanent_error"``, or ``"retry"``.
         """
         with self._lock:
             if self._in_flight.get(key) or self._pending_finish.get(key) != pending_token:
-                return "superseded"
-        ok, error = self._set_status(web_client, {"channel_id": key[0], "thread_ts": key[1], "status": status})
+                return "superseded", None
+        ok, error, retry_after = self._set_status(web_client, {"channel_id": key[0], "thread_ts": key[1], "status": status})
         if ok:
             with self._lock:
                 if self._pending_finish.get(key) == pending_token:
                     self._pending_finish.pop(key, None)
-            return "accepted"
+                    self._cancel_retry_timer_locked(key)
+            return "accepted", None
         if error in NOT_AN_AGENT_ERRORS:
             with self._lock:
                 if self._pending_finish.get(key) == pending_token:
                     self._pending_finish.pop(key, None)
+                    self._cancel_retry_timer_locked(key)
             if self._mode == "auto" and self._detected:
                 self._detected = False
                 logger.warning("[Slack agent] %s status refused (%s); agent sessions off until Slack shows the app is an agent again", status, error)
-            return "permanent_error"
-        return "retry"
+            return "permanent_error", None
+        return "retry", retry_after
 
-    def _retry_terminal_status(
+    def _schedule_terminal_retry(
         self,
         web_client,
         key: tuple[str, str],
         *,
         pending_token: tuple[str, str],
         status: str,
+        attempt: int,
+        retry_after: float | None,
     ) -> bool:
-        """Retry a transient terminal-status failure without blocking newer requests during backoff."""
-        for delay in self._finish_retry_delays:
-            if delay > 0:
-                self._sleep(delay)
-            with self._thread_lock(key):
-                outcome = self._attempt_terminal_status_locked(web_client, key, pending_token=pending_token, status=status)
-            if outcome == "accepted":
-                return True
-            if outcome in {"superseded", "permanent_error"}:
+        """Schedule an asynchronous terminal-status retry honoring Slack's ``Retry-After`` header."""
+        if attempt >= len(self._finish_retry_delays):
+            return False
+        delay = retry_after if retry_after is not None else self._finish_retry_delays[attempt]
+        with self._lock:
+            if self._closed or self._in_flight.get(key) or self._pending_finish.get(key) != pending_token:
                 return False
-        return False
+            self._cancel_retry_timer_locked(key)
+            timer = self._timer_factory(
+                delay,
+                lambda: self._run_scheduled_terminal_retry(
+                    web_client,
+                    key,
+                    pending_token=pending_token,
+                    status=status,
+                    attempt=attempt,
+                ),
+            )
+            self._retry_timers[key] = (pending_token, timer)
+        try:
+            timer.start()
+        except Exception:
+            with self._lock:
+                if self._retry_timers.get(key) == (pending_token, timer):
+                    self._retry_timers.pop(key, None)
+            logger.exception("[Slack agent] failed starting terminal-status retry timer for channel=%s thread_ts=%s", key[0], key[1])
+            return False
+        return True
+
+    def _run_scheduled_terminal_retry(
+        self,
+        web_client,
+        key: tuple[str, str],
+        *,
+        pending_token: tuple[str, str],
+        status: str,
+        attempt: int,
+    ) -> None:
+        with self._thread_lock(key):
+            with self._lock:
+                if self._closed:
+                    return
+                entry = self._retry_timers.get(key)
+                if entry is not None and entry[0] == pending_token:
+                    self._retry_timers.pop(key, None)
+            outcome, retry_after = self._attempt_terminal_status_locked(web_client, key, pending_token=pending_token, status=status)
+        if outcome == "retry":
+            self._schedule_terminal_retry(
+                web_client,
+                key,
+                pending_token=pending_token,
+                status=status,
+                attempt=attempt + 1,
+                retry_after=retry_after,
+            )
 
     def finish(self, web_client, msg: OutboundMessage) -> bool:
-        """After a final reply, move the session to ``active`` (``suspended`` if the agent asked a question).
+        """After outbound delivery, move the session to ``active`` (``suspended`` if clarifying).
 
         Only a reply carrying the request's ``message_id`` settles it: a late reply to an earlier
         request, or a notice without an id (approval prompts), leaves a newer request processing.
-        A transient failure leaves the transition pending and retries without overwriting a newer
-        request that started in the meantime.
+        A transient failure keeps the transition pending and schedules a background retry honoring
+        ``Retry-After`` without blocking reply delivery or overwriting a newer request.
         """
         if not web_client or not msg.is_final or not msg.thread_ts:
             return False
@@ -366,22 +497,33 @@ class SlackAgentSessions:
                 ids = self._in_flight.get(key)
                 if ids is not None and message_id in ids:
                     ids.remove(message_id)
+                    self._record_completed_ts_locked(key, message_id)
                     if ids:
                         return True
                     self._in_flight.pop(key, None)
                     pending_token = (message_id, desired_status)
                     _bounded_set(self._pending_finish, key, pending_token)
+                    self._cancel_retry_timer_locked(key)
                 else:
                     existing = self._pending_finish.get(key)
                     if self._in_flight.get(key) or existing is None or existing[0] != message_id:
                         return False
+                    self._record_completed_ts_locked(key, message_id)
                     pending_token = existing
                     desired_status = existing[1]
-            outcome = self._attempt_terminal_status_locked(web_client, key, pending_token=pending_token, status=desired_status)
+                    self._cancel_retry_timer_locked(key)
+            outcome, retry_after = self._attempt_terminal_status_locked(web_client, key, pending_token=pending_token, status=desired_status)
         if outcome == "accepted":
             return True
         if outcome == "retry":
-            return self._retry_terminal_status(web_client, key, pending_token=pending_token, status=desired_status)
+            self._schedule_terminal_retry(
+                web_client,
+                key,
+                pending_token=pending_token,
+                status=desired_status,
+                attempt=0,
+                retry_after=retry_after,
+            )
         return False
 
     def prepare_stop(
@@ -499,9 +641,11 @@ class SlackAgentSessions:
 
         covered_set = set(plan.covered_ids)
         stopped_ids: list[str] = list(plan.covered_ids)
-        has_newer = False
+        has_newer_in_flight = False
+        has_newer_completed = False
         stop_pending_token: tuple[str, str] | None = None
         retry_terminal = False
+        retry_after: float | None = None
         with self._thread_lock(key):
             with self._lock:
                 ids = self._in_flight.get(key)
@@ -517,12 +661,16 @@ class SlackAgentSessions:
                             kept.append(message_id)
                     if kept:
                         _bounded_set(self._in_flight, key, kept)
-                        has_newer = True
+                        has_newer_in_flight = True
                     else:
                         self._in_flight.pop(key, None)
+                latest_completed = self._latest_completed_ts.get(key)
+                has_newer_completed = plan.stop_ts is not None and latest_completed is not None and latest_completed > plan.stop_ts
+                has_newer = has_newer_in_flight or has_newer_completed
                 if not has_newer:
                     stop_pending_token = (f"__stop__:{id(plan.token)}", "active")
                     _bounded_set(self._pending_finish, key, stop_pending_token)
+                    self._cancel_retry_timer_locked(key)
             if stopped_ids:
                 logger.info(
                     "[Slack agent] user stopped %d request(s) in channel=%s thread_ts=%s (newer_remaining=%s)",
@@ -533,7 +681,7 @@ class SlackAgentSessions:
                 )
             elif has_newer:
                 logger.info(
-                    "[Slack agent] delayed stop ignored for newer in-flight request(s) in channel=%s thread_ts=%s",
+                    "[Slack agent] delayed stop ignored for newer turn in channel=%s thread_ts=%s",
                     plan.channel_id,
                     plan.thread_ts,
                 )
@@ -542,13 +690,20 @@ class SlackAgentSessions:
                 # may not know the request, but the session must still leave processing.
                 logger.info("[Slack agent] stop for a thread with no tracked request channel=%s thread_ts=%s", plan.channel_id, plan.thread_ts)
             if not has_newer and stop_pending_token is not None and web_client is not None:
-                outcome = self._attempt_terminal_status_locked(web_client, key, pending_token=stop_pending_token, status="active")
+                outcome, retry_after = self._attempt_terminal_status_locked(web_client, key, pending_token=stop_pending_token, status="active")
                 retry_terminal = outcome == "retry"
 
         if retry_terminal and stop_pending_token is not None and web_client is not None:
-            self._retry_terminal_status(web_client, key, pending_token=stop_pending_token, status="active")
+            self._schedule_terminal_retry(
+                web_client,
+                key,
+                pending_token=stop_pending_token,
+                status="active",
+                attempt=0,
+                retry_after=retry_after,
+            )
 
-        if (stopped_ids or not has_newer) and web_client is not None:
+        if not has_newer_completed and (stopped_ids or not has_newer_in_flight) and web_client is not None:
             try:
                 web_client.chat_postMessage(channel=plan.channel_id, text=self.stopped_text, thread_ts=plan.thread_ts)
             except Exception:
@@ -644,32 +799,38 @@ class SlackAgentSessions:
 
     # -- Slack calls ------------------------------------------------------------
 
-    def _set_status(self, web_client, payload: dict[str, Any]) -> tuple[bool, str]:
-        """Call ``agents.sessions.setStatus``. Returns (ok, Slack error code or "")."""
-        response, error = self._api_call(web_client, "agents.sessions.setStatus", payload)
+    def _set_status(self, web_client, payload: dict[str, Any]) -> tuple[bool, str, float | None]:
+        """Call ``agents.sessions.setStatus``. Returns (ok, Slack error code or "", retry_after)."""
+        response, error, retry_after = self._api_call(web_client, "agents.sessions.setStatus", payload)
         if response is None:
-            return False, error
+            return False, error, retry_after
         warning = str(_response_get(response, "warning") or "")
         if "missing_agent_session_stopped_event_subscription" in warning and not self._warned_no_stop_subscription:
             self._warned_no_stop_subscription = True
             logger.warning("[Slack agent] app is not subscribed to agent_session_stopped; users get no Stop button")
-        return True, ""
+        return True, "", None
 
     @staticmethod
-    def _api_call(web_client, method: str, payload: dict[str, Any]) -> tuple[Any, str]:
+    def _api_call(web_client, method: str, payload: dict[str, Any]) -> tuple[Any, str, float | None]:
         """POST a JSON Web API call (slack-sdk 3.41 has no typed wrapper for the agent methods).
 
-        Returns (response, "") on success, or (None, error code) on failure. slack-sdk raises
-        ``SlackApiError`` for ``ok: false``; its response carries the code.
+        Returns (response, "", None) on success, or (None, error code, retry_after) on failure.
+        slack-sdk raises ``SlackApiError`` for ``ok: false`` / 429; its response carries the code
+        and ``Retry-After`` header.
         """
         try:
             response = web_client.api_call(method, json=payload)
         except Exception as exc:
-            error = str(_response_get(getattr(exc, "response", None), "error") or "")
+            resp = getattr(exc, "response", None)
+            error = str(_response_get(resp, "error") or "")
+            if not error and getattr(resp, "status_code", None) == 429:
+                error = "ratelimited"
+            retry_after = _extract_retry_after(resp)
             logger.warning("[Slack agent] %s failed: %s", method, error or type(exc).__name__)
-            return None, error
+            return None, error, retry_after
         if _response_get(response, "ok") is not True:
             error = str(_response_get(response, "error") or "")
+            retry_after = _extract_retry_after(response)
             logger.warning("[Slack agent] %s returned error=%s", method, error)
-            return None, error
-        return response, ""
+            return None, error, retry_after
+        return response, "", None

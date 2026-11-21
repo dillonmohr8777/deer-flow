@@ -448,20 +448,55 @@ def test_status_calls_for_one_thread_are_serialized():
     assert [status["status"] for status in web.statuses()] == ["processing", "active"]
 
 
+class FakeTimer:
+    """Deterministic timer capturing scheduled Retry-After / backoff retries."""
+
+    def __init__(self, delay: float, callback) -> None:
+        self.delay = delay
+        self.callback = callback
+        self.started = False
+        self.cancelled = False
+
+    def start(self) -> None:
+        self.started = True
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+    def fire(self) -> None:
+        if not self.cancelled:
+            self.callback()
+
+
 def test_finish_retries_transient_failure_and_keeps_pending_transition_until_accepted():
-    # Automatic retry succeeds on second attempt.
+    scheduled: list[FakeTimer] = []
+
+    def make_timer(delay: float, cb):
+        timer = FakeTimer(delay, cb)
+        scheduled.append(timer)
+        return timer
+
+    # Initial attempt hits transient failure: returns immediately without blocking and schedules background retry.
     web = FakeWebClient(errors=["", "ratelimited", ""])
-    sessions = SlackAgentSessions({"enabled": True}, finish_retry_delays=(0.0, 0.0), sleep_fn=lambda _: None)
+    sessions = SlackAgentSessions({"enabled": True}, finish_retry_delays=(1.0, 2.0), timer_factory=make_timer)
     assert sessions.begin(web, channel_id="D1", thread_ts="1.1", message_id="1.1", user_id="U1", text="hi") is True
-    assert sessions.finish(web, _reply()) is True
+    assert sessions.finish(web, _reply()) is False
+    assert sessions.has_session("D1", "1.1") is True
+    assert len(scheduled) == 1 and scheduled[0].started is True and scheduled[0].delay == 1.0
+
+    # Scheduled retry settles the session once Slack accepts.
+    scheduled[0].fire()
     assert [s["status"] for s in web.statuses()] == ["processing", "active", "active"]
     assert sessions.has_session("D1", "1.1") is False
 
-    # When all automatic retries fail transiently, the terminal transition stays pending for a later retry.
+    # When all scheduled retries fail transiently, the terminal transition stays pending for a later retry.
+    scheduled2: list[FakeTimer] = []
     web2 = FakeWebClient(errors=["", "ratelimited", "ratelimited"])
-    sessions2 = SlackAgentSessions({"enabled": True}, finish_retry_delays=(0.0,), sleep_fn=lambda _: None)
+    sessions2 = SlackAgentSessions({"enabled": True}, finish_retry_delays=(1.0,), timer_factory=lambda d, cb: scheduled2.append(FakeTimer(d, cb)) or scheduled2[-1])
     assert sessions2.begin(web2, channel_id="D1", thread_ts="1.1", message_id="1.1", user_id="U1", text="hi") is True
     assert sessions2.finish(web2, _reply()) is False
+    assert len(scheduled2) == 1
+    scheduled2[0].fire()
     assert sessions2.has_session("D1", "1.1") is True
 
     # Repeated finalization attempt finds the pending transition and settles once Slack accepts.
@@ -470,20 +505,105 @@ def test_finish_retries_transient_failure_and_keeps_pending_transition_until_acc
     assert [s["status"] for s in web2.statuses()] == ["processing", "active", "active", "active"]
 
 
-def test_finish_retry_does_not_overwrite_newer_request_processing_status():
+def test_finish_honors_retry_after_header_and_schedules_independent_background_retry():
+    scheduled: list[FakeTimer] = []
+
+    class RateLimitedResponse(dict):
+        def __init__(self, retry_after: str) -> None:
+            super().__init__(ok=False, error="ratelimited")
+            self.status_code = 429
+            self.headers = {"Retry-After": retry_after}
+
+    class RateLimitedWeb(FakeWebClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self._retry_afters = ["17", "9"]
+
+        def api_call(self, method, json=None):
+            self.api_calls.append((method, dict(json or {})))
+            if (json or {}).get("status") == "active" and self._retry_afters:
+                raise SlackApiError("rate limited", RateLimitedResponse(self._retry_afters.pop(0)))
+            return {"ok": True}
+
+    web = RateLimitedWeb()
+    sessions = SlackAgentSessions(
+        {"enabled": True},
+        finish_retry_delays=(1.0, 2.0, 4.0),
+        timer_factory=lambda d, cb: scheduled.append(FakeTimer(d, cb)) or scheduled[-1],
+    )
+    assert sessions.begin(web, channel_id="D1", thread_ts="1.1", message_id="1.1", user_id="U1", text="hi") is True
+    # Returns immediately while scheduling retry after Slack's 17s Retry-After.
+    assert sessions.finish(web, _reply()) is False
+    assert [t.delay for t in scheduled] == [17.0]
+    assert scheduled[0].started is True
+    assert sessions.has_session("D1", "1.1") is True
+
+    # First background retry gets a second 429 with Retry-After: 9.
+    scheduled[0].fire()
+    assert [t.delay for t in scheduled] == [17.0, 9.0]
+    assert sessions.has_session("D1", "1.1") is True
+
+    # Second background retry succeeds and clears the pending transition.
+    scheduled[1].fire()
+    assert sessions.has_session("D1", "1.1") is False
+    assert [s["status"] for s in web.statuses()] == ["processing", "active", "active", "active"]
+
+
+def test_scheduled_terminal_retry_is_cancelled_when_newer_work_or_close_supersedes_it():
+    scheduled: list[FakeTimer] = []
     web = FakeWebClient(errors=["", "ratelimited", ""])
-    sessions: SlackAgentSessions
-
-    def start_newer_during_backoff(_delay: float) -> None:
-        # Newer request starts in the same thread while the earlier finish is backing off.
-        assert sessions.begin(web, channel_id="D1", thread_ts="1.1", message_id="1.2", user_id="U1", text="next") is True
-
-    sessions = SlackAgentSessions({"enabled": True}, finish_retry_delays=(0.01,), sleep_fn=start_newer_during_backoff)
+    sessions = SlackAgentSessions(
+        {"enabled": True},
+        finish_retry_delays=(15.0,),
+        timer_factory=lambda d, cb: scheduled.append(FakeTimer(d, cb)) or scheduled[-1],
+    )
     assert sessions.begin(web, channel_id="D1", thread_ts="1.1", message_id="1.1", user_id="U1", text="first") is True
     assert sessions.finish(web, _reply(message_id="1.1")) is False
-    # No retry "active" call landed after the newer request's "processing".
+    assert len(scheduled) == 1 and scheduled[0].cancelled is False
+
+    # Newer request starts before the timer fires: timer is cancelled and never overwrites processing.
+    assert sessions.begin(web, channel_id="D1", thread_ts="1.1", message_id="1.2", user_id="U1", text="next") is True
+    assert scheduled[0].cancelled is True
+    # Even if an already-dispatched callback races, it does not overwrite the newer processing status.
+    scheduled[0].callback()
     assert [s["status"] for s in web.statuses()] == ["processing", "active", "processing"]
     assert sessions.has_session("D1", "1.1") is True
+
+    # Closing the session manager cancels any remaining scheduled retries.
+    web_close = FakeWebClient(errors=["", "ratelimited"])
+    scheduled_close: list[FakeTimer] = []
+    sessions_close = SlackAgentSessions(
+        {"enabled": True},
+        finish_retry_delays=(20.0,),
+        timer_factory=lambda d, cb: scheduled_close.append(FakeTimer(d, cb)) or scheduled_close[-1],
+    )
+    assert sessions_close.begin(web_close, channel_id="D1", thread_ts="2.1", message_id="2.1", user_id="U1", text="hi") is True
+    assert sessions_close.finish(web_close, _reply(thread_ts="2.1", message_id="2.1")) is False
+    assert len(scheduled_close) == 1 and scheduled_close[0].cancelled is False
+    sessions_close.close()
+    assert scheduled_close[0].cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_session_stays_processing_until_all_attachments_finish_uploading():
+    statuses_seen_during_upload: list[list[str]] = []
+
+    class ObservingUploadWeb(FakeWebClient):
+        def files_upload_v2(self, **kwargs):
+            statuses_seen_during_upload.append([s["status"] for s in self.statuses()])
+            return super().files_upload_v2(**kwargs)
+
+    web = ObservingUploadWeb()
+    bus, channel = _channel({"enabled": True}, web=web)
+    await _accept_dm(bus, channel)
+    reply = _reply("here are your files", attachments=[_attachment("one.pdf"), _attachment("two.pdf")])
+    await channel._on_outbound(reply)
+
+    # During both attachment uploads, Slack still had the session in processing (Stop button available).
+    assert statuses_seen_during_upload == [["processing"], ["processing"]]
+    assert [u["filename"] for u in web.uploads] == ["one.pdf", "two.pdf"]
+    assert [s["status"] for s in web.statuses()] == ["processing", "active"]
+    assert channel._agent.has_session("D1", "1.1") is False
 
 
 # -- stop and title --------------------------------------------------------------
@@ -619,6 +739,145 @@ async def test_delayed_stop_after_older_request_finished_leaves_newer_request_un
     await channel._on_outbound(_reply("second answer", thread_ts="1.10", message_id="1.20"))
     assert [post["text"] for post in web.posts] == ["first answer", "second answer"]
     assert [status["status"] for status in web.statuses()] == ["processing", "active", "processing", "active"]
+
+
+@pytest.mark.asyncio
+async def test_delayed_stop_does_not_overwrite_newer_completed_clarification_turn():
+    bus, channel = _channel({"enabled": True})
+    await _accept_dm(bus, channel, _dm("first ask", ts="1.10"))
+    await channel._on_outbound(_reply("first answer", thread_ts="1.10", message_id="1.10"))
+
+    # Newer request completes with a clarifying question -> session is suspended and no requests remain in flight.
+    await _accept_dm(bus, channel, {**_dm("second ask", ts="1.20"), "thread_ts": "1.10"})
+    await channel._on_outbound(_reply("Which week?", thread_ts="1.10", message_id="1.20", pending_clarification=True))
+    web = channel._web_client
+    assert [status["status"] for status in web.statuses()] == ["processing", "active", "processing", "suspended"]
+    assert channel._agent.has_session("D1", "1.10") is False
+
+    # Delayed Stop from the older turn (event_ts=1.15 < 1.20) must not overwrite suspended or post a confirmation.
+    _socket(channel, _stop(thread_ts="1.10", event_ts="1.15"), event_id="Ev-older-stop")
+    assert [status["status"] for status in web.statuses()] == ["processing", "active", "processing", "suspended"]
+    assert [post["text"] for post in web.posts] == ["first answer", "Which week?"]
+
+
+@pytest.mark.asyncio
+async def test_completed_answer_is_held_during_pending_stop_and_delivered_if_cancel_fails(tmp_path):
+    """If a run finishes while Gateway cancel is failing, hold and deliver the answer once Stop fails."""
+    loop = asyncio.get_running_loop()
+    web = FakeWebClient()
+    bus, channel = _channel({"enabled": True}, web=web, loop=loop)
+    store = ChannelStore(path=tmp_path / "store.json")
+    manager = ChannelManager(bus=bus, store=store, channel_getter=lambda name: channel if name == "slack" else None)
+    channel._channel_manager = manager
+    bus.subscribe_outbound(channel._on_outbound)
+
+    run_started = asyncio.Event()
+    cancel_entered = asyncio.Event()
+    allow_cancel_to_fail = asyncio.Event()
+    allow_run_to_complete = asyncio.Event()
+
+    class RacingFailCancelRuns:
+        async def wait(self, thread_id, assistant_id, *, on_run_created=None, metadata=None, **kwargs):
+            run_started.set()
+            await allow_run_to_complete.wait()
+            return {"messages": [{"type": "ai", "content": "completed answer"}]}
+
+        async def list(self, thread_id, *, headers=None):
+            return [{"run_id": "run-1", "thread_id": thread_id, "status": "running", "metadata": {"channel_name": "slack", "channel_chat_id": "D1", "channel_message_id": "1.10"}}]
+
+        async def cancel(self, thread_id, run_id, *, wait=False, action="interrupt", headers=None):
+            cancel_entered.set()
+            await allow_cancel_to_fail.wait()
+            raise RuntimeError("gateway cancel failed")
+
+    fake_client = MagicMock()
+    fake_client.threads = MagicMock()
+    fake_client.threads.create = AsyncMock(return_value={"thread_id": "thread-1"})
+    fake_client.threads.update = AsyncMock(return_value={})
+    fake_client.threads.get = AsyncMock(return_value={"metadata": {}})
+    fake_client.runs = RacingFailCancelRuns()
+    manager._client = fake_client
+
+    await manager.start()
+    try:
+        _socket(channel, _dm("long task", ts="1.10"))
+        await asyncio.wait_for(run_started.wait(), timeout=3.0)
+
+        # Start Stop -> enters Gateway cancel, then the run finishes BEFORE cancel fails.
+        _socket(channel, _stop(thread_ts="1.10", event_ts="1.15"), event_id="Ev-race-fail")
+        await asyncio.wait_for(cancel_entered.wait(), timeout=3.0)
+        allow_run_to_complete.set()
+        await asyncio.sleep(0.05)
+
+        # Answer is held while Stop is still pending.
+        assert web.posts == []
+
+        # Gateway cancel fails: held answer is released, delivered to Slack, and settles session to active.
+        allow_cancel_to_fail.set()
+        await _wait_for(lambda: [post["text"] for post in web.posts] == ["completed answer"] and [s["status"] for s in web.statuses()] == ["processing", "active"])
+        assert channel._agent.has_session("D1", "1.10") is False
+    finally:
+        allow_run_to_complete.set()
+        allow_cancel_to_fail.set()
+        await manager.stop()
+
+
+@pytest.mark.asyncio
+async def test_completed_answer_is_discarded_when_pending_stop_succeeds(tmp_path):
+    """If a run finishes while Gateway cancel succeeds, discard the held answer and confirm Stop."""
+    loop = asyncio.get_running_loop()
+    web = FakeWebClient()
+    bus, channel = _channel({"enabled": True}, web=web, loop=loop)
+    store = ChannelStore(path=tmp_path / "store.json")
+    manager = ChannelManager(bus=bus, store=store, channel_getter=lambda name: channel if name == "slack" else None)
+    channel._channel_manager = manager
+    bus.subscribe_outbound(channel._on_outbound)
+
+    run_started = asyncio.Event()
+    cancel_entered = asyncio.Event()
+    allow_cancel_to_succeed = asyncio.Event()
+    allow_run_to_complete = asyncio.Event()
+
+    class RacingSucceedCancelRuns:
+        async def wait(self, thread_id, assistant_id, *, on_run_created=None, metadata=None, **kwargs):
+            run_started.set()
+            await allow_run_to_complete.wait()
+            return {"messages": [{"type": "ai", "content": "late answer"}]}
+
+        async def list(self, thread_id, *, headers=None):
+            return [{"run_id": "run-1", "thread_id": thread_id, "status": "running", "metadata": {"channel_name": "slack", "channel_chat_id": "D1", "channel_message_id": "1.10"}}]
+
+        async def cancel(self, thread_id, run_id, *, wait=False, action="interrupt", headers=None):
+            cancel_entered.set()
+            await allow_cancel_to_succeed.wait()
+
+    fake_client = MagicMock()
+    fake_client.threads = MagicMock()
+    fake_client.threads.create = AsyncMock(return_value={"thread_id": "thread-1"})
+    fake_client.threads.update = AsyncMock(return_value={})
+    fake_client.threads.get = AsyncMock(return_value={"metadata": {}})
+    fake_client.runs = RacingSucceedCancelRuns()
+    manager._client = fake_client
+
+    await manager.start()
+    try:
+        _socket(channel, _dm("long task", ts="1.10"))
+        await asyncio.wait_for(run_started.wait(), timeout=3.0)
+
+        _socket(channel, _stop(thread_ts="1.10", event_ts="1.15"), event_id="Ev-race-ok")
+        await asyncio.wait_for(cancel_entered.wait(), timeout=3.0)
+        allow_run_to_complete.set()
+        await asyncio.sleep(0.05)
+
+        assert web.posts == []
+        allow_cancel_to_succeed.set()
+        await _wait_for(lambda: [post["text"] for post in web.posts] == [DEFAULT_STOPPED_TEXT] and [s["status"] for s in web.statuses()] == ["processing", "active"])
+        await asyncio.sleep(0.05)
+        assert [post["text"] for post in web.posts] == [DEFAULT_STOPPED_TEXT]
+    finally:
+        allow_run_to_complete.set()
+        allow_cancel_to_succeed.set()
+        await manager.stop()
 
 
 @pytest.mark.asyncio
