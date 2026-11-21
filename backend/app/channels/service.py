@@ -522,7 +522,9 @@ class ChannelService:
         try:
             config = dict(config)
             config["channel_store"] = self.store
-            config["channel_manager"] = self.manager
+            manager = getattr(self, "manager", None)
+            if manager is not None:
+                config["channel_manager"] = manager
             if name == "buzz" and "seen_event_store_path" not in config:
                 # Durable processed-event ids for the Buzz connector's replay
                 # guard. Wired here (like channel_store) rather than defaulted
