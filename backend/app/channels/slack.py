@@ -153,6 +153,8 @@ class SlackChannel(Channel):
         self._approvals_store = None
         self._channel_manager = config.get("channel_manager")
         self._agent = SlackAgentSessions(config.get("agent"))
+        self._pending_stop_lock = threading.Lock()
+        self._pending_stop_gates: list[tuple[StopPlan, asyncio.Event]] = []
 
     async def start(self) -> None:
         if self._running:
@@ -244,6 +246,12 @@ class SlackChannel(Channel):
         unregister_created_hook(self._notify_approval)
         self._agent.close()
         await self._close_and_drain_threadsafe_futures()
+        with self._pending_stop_lock:
+            remaining_gates = list(self._pending_stop_gates)
+            self._pending_stop_gates.clear()
+        for plan, gate in remaining_gates:
+            self._agent.complete_stop(self._web_client, plan, accepted=False)
+            gate.set()
         if self._brainforge:
             await self._brainforge.close()
             self._brainforge = None
@@ -276,6 +284,7 @@ class SlackChannel(Channel):
                 kwargs["thread_ts"] = reply_ts
 
             # Checked again right before the post: Stop can land after the reply left the bus.
+            await self._await_pending_stop_for(msg.chat_id, str(msg.thread_ts or ""), str(msg.metadata.get("message_id") or ""))
             if self._agent.should_drop(msg):
                 msg.metadata["slack_delivery"] = {"state": "dropped", "channel": msg.chat_id}
                 logger.info("[Slack agent] dropped the reply to a stopped request in channel=%s", msg.chat_id)
@@ -302,7 +311,7 @@ class SlackChannel(Channel):
             if msg.thread_ts:
                 await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "white_check_mark")
         finally:
-            if _settle_session:
+            if _settle_session and (msg.metadata.get("slack_delivery") or {}).get("state") != "dropped":
                 # Direct send() callers settle immediately; _on_outbound defers settling until
                 # attachment uploads finish so Slack keeps the Stop button available during uploads.
                 await self._finish_agent_session(msg)
@@ -310,9 +319,16 @@ class SlackChannel(Channel):
     async def _on_outbound(self, msg: OutboundMessage) -> None:
         if msg.channel_name != self.name:
             return
+        message_id = str(msg.metadata.get("message_id") or "")
+        thread_ts = str(msg.thread_ts or "")
+        dropped = False
         try:
-            # A reply to a request the user stopped from the agent session is dropped, files included.
+            # Hold outbound delivery while a covering Stop's Gateway cancellation is still resolving,
+            # so a failed cancel still delivers the answer and an accepted cancel drops text + files.
+            await self._await_pending_stop_for(msg.chat_id, thread_ts, message_id)
             if self._agent.should_drop(msg):
+                dropped = True
+                msg.metadata["slack_delivery"] = {"state": "dropped", "channel": msg.chat_id}
                 logger.info("[Slack agent] dropped the reply to a stopped request in channel=%s", msg.chat_id)
                 return
             try:
@@ -321,7 +337,16 @@ class SlackChannel(Channel):
                 logger.exception("Failed to send outbound message on channel %s", self.name)
                 return  # Do not attempt file uploads when the text message failed
 
+            if (msg.metadata.get("slack_delivery") or {}).get("state") == "dropped":
+                dropped = True
+                return
+
             for attachment in msg.attachments:
+                await self._await_pending_stop_for(msg.chat_id, thread_ts, message_id)
+                if self._agent.should_drop(msg):
+                    dropped = True
+                    logger.info("[Slack agent] stopped before uploading %s in channel=%s", attachment.filename, msg.chat_id)
+                    break
                 try:
                     success = await self.send_file(msg, attachment)
                     if not success:
@@ -329,9 +354,10 @@ class SlackChannel(Channel):
                 except Exception:
                     logger.exception("[%s] failed to upload file %s", self.name, attachment.filename)
         finally:
-            # Settle only after the full outbound delivery attempt (text + attachments) finishes,
-            # so Slack keeps the Stop button visible while attachment uploads are still pending.
-            await self._finish_agent_session(msg)
+            if not dropped:
+                # Settle only after the full outbound delivery attempt (text + attachments) finishes,
+                # so Slack keeps the Stop button visible while attachment uploads are still pending.
+                await self._finish_agent_session(msg)
 
     async def _finish_agent_session(self, msg: OutboundMessage) -> None:
         if not msg.thread_ts or not self._agent.has_session(msg.chat_id, str(msg.thread_ts)):
@@ -356,6 +382,7 @@ class SlackChannel(Channel):
         channel_id = msg.chat_id
         thread_ts = str(msg.thread_ts or "")
         message_id = str(msg.metadata.get("message_id") or "")
+        await self._await_pending_stop_for(channel_id, thread_ts, message_id)
         if self._agent.is_stopped_or_covered(channel_id, thread_ts, message_id):
             logger.info(
                 "[Slack agent] skipping queued message covered by Stop in channel=%s thread_ts=%s message_id=%s",
@@ -376,6 +403,7 @@ class SlackChannel(Channel):
             user_id=str(msg.user_id or ""),
             text=msg.text,
         )
+        await self._await_pending_stop_for(channel_id, thread_ts, message_id)
         if self._agent.is_stopped_or_covered(channel_id, thread_ts, message_id):
             logger.info(
                 "[Slack agent] dropping message stopped during session start in channel=%s thread_ts=%s message_id=%s",
@@ -389,6 +417,9 @@ class SlackChannel(Channel):
         return True
 
     async def send_file(self, msg: OutboundMessage, attachment: ResolvedAttachment) -> bool:
+        message_id = str(msg.metadata.get("message_id") or "")
+        thread_ts = str(msg.thread_ts or "")
+        await self._await_pending_stop_for(msg.chat_id, thread_ts, message_id)
         if (msg.metadata.get("slack_delivery") or {}).get("state") == "dropped" or self._agent.should_drop(msg):
             # The request was stopped before or during outbound delivery; its files go with it.
             return False
@@ -396,6 +427,7 @@ class SlackChannel(Channel):
         if not web_client:
             return False
         # Re-check immediately before the upload in case Stop arrived while resolving credentials.
+        await self._await_pending_stop_for(msg.chat_id, thread_ts, message_id)
         if self._agent.should_drop(msg):
             return False
 
@@ -614,6 +646,35 @@ class SlackChannel(Channel):
         elif etype == "app_home_opened":
             self._agent.home_opened(self._web_client, event)
 
+    @staticmethod
+    def _stop_plan_covers(plan: StopPlan, channel_id: str, thread_ts: str, message_id: str) -> bool:
+        if not channel_id or not message_id or plan.channel_id != channel_id:
+            return False
+        if message_id in plan.covered_ids:
+            return True
+        if not thread_ts or plan.thread_ts != thread_ts:
+            return False
+        return SlackAgentSessions._request_covered_by_stop(message_id, plan.stop_ts)
+
+    async def _await_pending_stop_for(self, channel_id: str, thread_ts: str, message_id: str) -> None:
+        """Hold outbound/inbound decisions until any covering in-flight Stop resolves."""
+        if not channel_id or not message_id:
+            return
+        while True:
+            with self._pending_stop_lock:
+                gate = next(
+                    (g for plan, g in self._pending_stop_gates if self._stop_plan_covers(plan, channel_id, thread_ts, message_id)),
+                    None,
+                )
+            if gate is None:
+                return
+            await gate.wait()
+
+    def _release_pending_stop_gate(self, plan: StopPlan, release_gate: asyncio.Event) -> None:
+        with self._pending_stop_lock:
+            self._pending_stop_gates = [(p, g) for p, g in self._pending_stop_gates if p is not plan]
+        release_gate.set()
+
     def _handle_agent_stop(self, event: dict, *, event_id: str | None = None, event_time: Any = None) -> None:
         """Route ``agent_session_stopped`` to Gateway cancellation before confirming in Slack."""
         plan = self._agent.prepare_stop(event, event_id=event_id, event_time=event_time)
@@ -624,20 +685,33 @@ class SlackChannel(Channel):
             if not isinstance(self._loop, asyncio.AbstractEventLoop) or not self._loop.is_running():
                 self._agent.complete_stop(self._web_client, plan, accepted=False)
                 return
+            release_gate = asyncio.Event()
+            entry = (plan, release_gate)
+            with self._pending_stop_lock:
+                self._pending_stop_gates.append(entry)
             scheduled = self._submit_threadsafe_coroutine(
-                self._process_agent_stop(plan, manager),
+                self._process_agent_stop(plan, manager, release_gate),
                 self._loop,
                 name="agent_stop",
                 msg_id=f"{plan.channel_id}:{plan.thread_ts}",
             )
             if not scheduled:
+                with self._pending_stop_lock:
+                    try:
+                        self._pending_stop_gates.remove(entry)
+                    except ValueError:
+                        pass
                 self._agent.complete_stop(self._web_client, plan, accepted=False)
+                if self._loop.is_running():
+                    try:
+                        self._loop.call_soon_threadsafe(release_gate.set)
+                    except RuntimeError:
+                        pass
             return
         self._agent.complete_stop(self._web_client, plan, accepted=True)
 
-    async def _process_agent_stop(self, plan: StopPlan, manager: Any) -> None:
+    async def _process_agent_stop(self, plan: StopPlan, manager: Any, release_gate: asyncio.Event) -> None:
         accepted = False
-        release_gate = asyncio.Event()
         try:
             accepted = await manager.cancel_channel_runs(
                 channel_name=self.name,
@@ -651,7 +725,7 @@ class SlackChannel(Channel):
             try:
                 await asyncio.to_thread(self._agent.complete_stop, self._web_client, plan, accepted=False)
             finally:
-                release_gate.set()
+                self._release_pending_stop_gate(plan, release_gate)
             raise
         except Exception:
             logger.exception(
@@ -663,7 +737,7 @@ class SlackChannel(Channel):
         try:
             await asyncio.to_thread(self._agent.complete_stop, self._web_client, plan, accepted=accepted)
         finally:
-            release_gate.set()
+            self._release_pending_stop_gate(plan, release_gate)
 
     # -- approvals DM (channels.slack.approvals_dm) --------------------------
 

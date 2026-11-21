@@ -494,6 +494,8 @@ class SlackAgentSessions:
         pending_token: tuple[str, str] | None = None
         with self._thread_lock(key):
             with self._lock:
+                if self._is_covered_by_stop_locked(msg.chat_id, str(msg.thread_ts), message_id):
+                    return False
                 ids = self._in_flight.get(key)
                 if ids is not None and message_id in ids:
                     ids.remove(message_id)

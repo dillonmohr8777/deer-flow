@@ -880,6 +880,109 @@ async def test_completed_answer_is_discarded_when_pending_stop_succeeds(tmp_path
         await manager.stop()
 
 
+def test_finish_does_not_settle_or_record_completion_while_stop_is_pending():
+    """A pending Stop must keep finish() from settling the session or recording completion early."""
+    web = FakeWebClient()
+    sessions = SlackAgentSessions({"enabled": True})
+    assert sessions.begin(web, channel_id="D1", thread_ts="1.10", message_id="1.10", user_id="U1", text="hi") is True
+    plan = sessions.prepare_stop(_stop(thread_ts="1.10", event_ts="1.15"), event_id="Ev-pending-finish")
+    assert plan is not None
+
+    # finish() called while Stop is still pending must be a no-op (no setStatus, still in-flight).
+    assert sessions.finish(web, _reply("Which week?", thread_ts="1.10", message_id="1.10", pending_clarification=True)) is False
+    assert [s["status"] for s in web.statuses()] == ["processing"]
+    assert sessions.has_session("D1", "1.10") is True
+
+    # If cancellation later fails, finish() can now settle the turn cleanly.
+    assert sessions.complete_stop(web, plan, accepted=False) is False
+    assert sessions.finish(web, _reply("Which week?", thread_ts="1.10", message_id="1.10", pending_clarification=True)) is True
+    assert [s["status"] for s in web.statuses()] == ["processing", "suspended"]
+    assert sessions.has_session("D1", "1.10") is False
+
+
+@pytest.mark.asyncio
+async def test_outbound_already_on_bus_holds_during_pending_stop_and_delivers_if_cancel_fails():
+    """Outbound delivery racing a pending Stop holds until cancel resolves; failed cancel still delivers."""
+    loop = asyncio.get_running_loop()
+    web = FakeWebClient()
+    bus, channel = _channel({"enabled": True}, web=web, loop=loop)
+    channel._handle_message_event(_dm("work", ts="1.10"), team_id="T1")
+    inbound = await asyncio.wait_for(bus.get_inbound(), timeout=3.0)
+    assert await channel.on_inbound_accepted(inbound) is True
+
+    cancel_entered = asyncio.Event()
+    allow_cancel_to_finish = asyncio.Event()
+
+    class HoldingFailManager:
+        async def cancel_channel_runs(self, *, release_gate=None, **kwargs):
+            cancel_entered.set()
+            await allow_cancel_to_finish.wait()
+            return False
+
+    channel._channel_manager = HoldingFailManager()
+
+    _socket(channel, _stop(thread_ts="1.10", event_ts="1.15"), event_id="Ev-outbound-fail")
+    await asyncio.wait_for(cancel_entered.wait(), timeout=3.0)
+
+    reply = _reply("final answer", thread_ts="1.10", message_id="1.10", attachments=[_attachment("report.pdf")])
+    outbound_task = asyncio.create_task(channel._on_outbound(reply))
+    await asyncio.sleep(0.05)
+
+    # While Stop is pending, outbound neither posts nor drops nor settles the session.
+    assert outbound_task.done() is False
+    assert web.posts == []
+    assert web.uploads == []
+    assert [s["status"] for s in web.statuses()] == ["processing"]
+
+    # Cancel fails -> held outbound delivers text + attachment and settles session to active.
+    allow_cancel_to_finish.set()
+    await asyncio.wait_for(outbound_task, timeout=3.0)
+    assert reply.metadata["slack_delivery"]["state"] == "sent"
+    assert [post["text"] for post in web.posts] == ["final answer"]
+    assert [u["filename"] for u in web.uploads] == ["report.pdf"]
+    assert [s["status"] for s in web.statuses()] == ["processing", "active"]
+    assert channel._agent.has_session("D1", "1.10") is False
+
+
+@pytest.mark.asyncio
+async def test_outbound_already_on_bus_holds_during_pending_stop_and_drops_if_cancel_succeeds():
+    """Outbound delivery racing a pending Stop drops text + attachments if cancel succeeds."""
+    loop = asyncio.get_running_loop()
+    web = FakeWebClient()
+    bus, channel = _channel({"enabled": True}, web=web, loop=loop)
+    channel._handle_message_event(_dm("work", ts="1.10"), team_id="T1")
+    inbound = await asyncio.wait_for(bus.get_inbound(), timeout=3.0)
+    assert await channel.on_inbound_accepted(inbound) is True
+
+    cancel_entered = asyncio.Event()
+    allow_cancel_to_finish = asyncio.Event()
+
+    class HoldingSucceedManager:
+        async def cancel_channel_runs(self, *, release_gate=None, **kwargs):
+            cancel_entered.set()
+            await allow_cancel_to_finish.wait()
+            return True
+
+    channel._channel_manager = HoldingSucceedManager()
+
+    _socket(channel, _stop(thread_ts="1.10", event_ts="1.15"), event_id="Ev-outbound-ok")
+    await asyncio.wait_for(cancel_entered.wait(), timeout=3.0)
+
+    reply = _reply("late answer", thread_ts="1.10", message_id="1.10", attachments=[_attachment("report.pdf")])
+    outbound_task = asyncio.create_task(channel._on_outbound(reply))
+    await asyncio.sleep(0.05)
+    assert outbound_task.done() is False
+    assert web.posts == []
+
+    allow_cancel_to_finish.set()
+    await asyncio.wait_for(outbound_task, timeout=3.0)
+    assert reply.metadata["slack_delivery"] == {"state": "dropped", "channel": "D1"}
+    assert [post["text"] for post in web.posts] == [DEFAULT_STOPPED_TEXT]
+    assert web.uploads == []
+    assert [s["status"] for s in web.statuses()] == ["processing", "active"]
+    assert channel._agent.has_session("D1", "1.10") is False
+
+
 @pytest.mark.asyncio
 async def test_stop_cancels_active_gateway_run_and_allows_immediate_followup(tmp_path):
     """Finding 1: Stop cancels the specific Gateway run and frees the thread before confirming."""
