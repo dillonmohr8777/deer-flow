@@ -945,6 +945,110 @@ async def test_outbound_already_on_bus_holds_during_pending_stop_and_delivers_if
 
 
 @pytest.mark.asyncio
+async def test_finish_waits_for_pending_stop_after_text_post_and_settles_if_cancel_fails():
+    """A Stop arriving during text post that fails cancellation must not leave a posted reply stuck processing."""
+    loop = asyncio.get_running_loop()
+    cancel_entered = asyncio.Event()
+    allow_cancel_to_finish = asyncio.Event()
+    stop_triggered = False
+
+    class StopDuringPostWebClient(FakeWebClient):
+        def chat_postMessage(self, **kwargs):
+            nonlocal stop_triggered
+            res = super().chat_postMessage(**kwargs)
+            if not stop_triggered:
+                stop_triggered = True
+                _socket(channel, _stop(thread_ts="1.10", event_ts="1.15"), event_id="Ev-stop-during-post")
+            return res
+
+    web = StopDuringPostWebClient()
+    bus, channel = _channel({"enabled": True}, web=web, loop=loop)
+    channel._handle_message_event(_dm("work", ts="1.10"), team_id="T1")
+    inbound = await asyncio.wait_for(bus.get_inbound(), timeout=3.0)
+    assert await channel.on_inbound_accepted(inbound) is True
+
+    class HoldingFailManager:
+        async def cancel_channel_runs(self, *, release_gate=None, **kwargs):
+            cancel_entered.set()
+            await allow_cancel_to_finish.wait()
+            return False
+
+    channel._channel_manager = HoldingFailManager()
+
+    reply = _reply("posted answer", thread_ts="1.10", message_id="1.10")
+    outbound_task = asyncio.create_task(channel._on_outbound(reply))
+    await asyncio.wait_for(cancel_entered.wait(), timeout=3.0)
+    await asyncio.sleep(0.05)
+
+    # Text is already posted, but finish must wait for the pending Stop to resolve.
+    assert [post["text"] for post in web.posts] == ["posted answer"]
+    assert outbound_task.done() is False
+    assert [s["status"] for s in web.statuses()] == ["processing"]
+
+    # Cancel fails -> _finish_agent_session wakes and settles the session to active instead of sticking in processing.
+    allow_cancel_to_finish.set()
+    await asyncio.wait_for(outbound_task, timeout=3.0)
+    assert [s["status"] for s in web.statuses()] == ["processing", "active"]
+    assert channel._agent.has_session("D1", "1.10") is False
+
+
+@pytest.mark.asyncio
+async def test_failed_run_error_suppressed_when_stop_resolves_during_runs_get(tmp_path):
+    """If Stop is accepted while checking run status after runs.wait, do not post a failed-run error."""
+    loop = asyncio.get_running_loop()
+    web = FakeWebClient()
+    bus, channel = _channel({"enabled": True}, web=web, loop=loop)
+    store = ChannelStore(path=tmp_path / "store.json")
+    manager = ChannelManager(bus=bus, store=store, channel_getter=lambda name: channel if name == "slack" else None)
+    channel._channel_manager = manager
+    bus.subscribe_outbound(channel._on_outbound)
+
+    get_entered = asyncio.Event()
+    allow_get_return = asyncio.Event()
+
+    class FailedAfterGetRuns:
+        async def wait(self, thread_id, assistant_id, *, on_run_created=None, **kwargs):
+            if on_run_created:
+                on_run_created({"run_id": "run-err"})
+            return {"messages": []}
+
+        async def get(self, thread_id, run_id, *, headers=None):
+            get_entered.set()
+            await allow_get_return.wait()
+            return {"run_id": run_id, "thread_id": thread_id, "status": "error"}
+
+        async def list(self, thread_id, *, headers=None):
+            return []
+
+        async def cancel(self, thread_id, run_id, *, wait=False, action="interrupt", headers=None):
+            pass
+
+    fake_client = MagicMock()
+    fake_client.threads = MagicMock()
+    fake_client.threads.create = AsyncMock(return_value={"thread_id": "thread-1"})
+    fake_client.threads.update = AsyncMock(return_value={})
+    fake_client.threads.get = AsyncMock(return_value={"metadata": {}})
+    fake_client.runs = FailedAfterGetRuns()
+    manager._client = fake_client
+
+    await manager.start()
+    try:
+        _socket(channel, _dm("failing work", ts="1.10"))
+        await asyncio.wait_for(get_entered.wait(), timeout=3.0)
+        _socket(channel, _stop(thread_ts="1.10", event_ts="1.15"), event_id="Ev-stop-during-get")
+        await _wait_for(lambda: len(web.posts) == 1)
+        allow_get_return.set()
+        await bus.join_inbound()
+        await asyncio.sleep(0.05)
+
+        assert [post["text"] for post in web.posts] == [DEFAULT_STOPPED_TEXT]
+        assert [s["status"] for s in web.statuses()] == ["processing", "active"]
+    finally:
+        allow_get_return.set()
+        await manager.stop()
+
+
+@pytest.mark.asyncio
 async def test_outbound_already_on_bus_holds_during_pending_stop_and_drops_if_cancel_succeeds():
     """Outbound delivery racing a pending Stop drops text + attachments if cancel succeeds."""
     loop = asyncio.get_running_loop()

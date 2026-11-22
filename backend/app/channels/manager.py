@@ -3031,6 +3031,9 @@ class ChannelManager:
                 logger.warning("[Manager] could not read run status: thread_id=%s run_id=%s", thread_id, created_run["run_id"], exc_info=True)
                 run = None
             if isinstance(run, dict) and run.get("status") in RUN_FAILED_STATUSES:
+                if active_req is not None and await self._await_request_stop_resolution(active_req):
+                    logger.info("[Manager] suppressing failed-run error for cancelled channel run: thread_id=%s message_id=%s", thread_id, active_req.message_id)
+                    return
                 logger.warning("[Manager] run ended with status=%s: thread_id=%s run_id=%s", run.get("status"), thread_id, created_run["run_id"])
                 await self._send_error(msg, RUN_FAILED_MESSAGE)
                 return

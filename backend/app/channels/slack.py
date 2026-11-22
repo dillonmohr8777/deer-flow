@@ -350,6 +350,10 @@ class SlackChannel(Channel):
                 try:
                     success = await self.send_file(msg, attachment)
                     if not success:
+                        if self._agent.should_drop(msg):
+                            dropped = True
+                            logger.info("[Slack agent] stopped during upload prep for %s in channel=%s", attachment.filename, msg.chat_id)
+                            break
                         logger.warning("[%s] file upload skipped for %s", self.name, attachment.filename)
                 except Exception:
                     logger.exception("[%s] failed to upload file %s", self.name, attachment.filename)
@@ -360,7 +364,14 @@ class SlackChannel(Channel):
                 await self._finish_agent_session(msg)
 
     async def _finish_agent_session(self, msg: OutboundMessage) -> None:
-        if not msg.thread_ts or not self._agent.has_session(msg.chat_id, str(msg.thread_ts)):
+        if not msg.thread_ts:
+            return
+        message_id = str(msg.metadata.get("message_id") or "")
+        if message_id:
+            # If Stop landed during the text post or final upload, wait for cancellation to resolve:
+            # failed cancel must still settle the posted reply instead of sticking in processing.
+            await self._await_pending_stop_for(msg.chat_id, str(msg.thread_ts), message_id)
+        if not self._agent.has_session(msg.chat_id, str(msg.thread_ts)):
             return
         try:
             await asyncio.to_thread(self._agent.finish, self._web_client, msg)
