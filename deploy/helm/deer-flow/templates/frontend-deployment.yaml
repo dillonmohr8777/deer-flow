@@ -48,6 +48,10 @@ spec:
               value: production
             - name: DEER_FLOW_INTERNAL_GATEWAY_BASE_URL
               value: http://gateway:8001
+            {{- if .Values.frontend.siteUrl }}
+            - name: MOMOBOT_SITE_URL
+              value: {{ .Values.frontend.siteUrl | quote }}
+            {{- end }}
             - name: BETTER_AUTH_SECRET
               valueFrom:
                 secretKeyRef:

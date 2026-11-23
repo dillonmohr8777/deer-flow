@@ -14,17 +14,27 @@ import { z } from "zod";
 export const MOMO_DAILY_NAME = "The Momo Daily";
 export const MOMO_DAILY_PATH = "/daily";
 
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed !== undefined && trimmed.length > 0 ? trimmed : undefined;
+}
+
 /**
- * Absolute origin for canonical, OpenGraph, sitemap and JSON-LD URLs.
- * MOMOBOT_SITE_URL is read on the server at runtime, so one image serves any
- * domain; NEXT_PUBLIC_SITE_URL (inlined at build) is the fallback, then the
- * local nginx entry.
+ * Resolve the public site origin at call time for canonical, OpenGraph,
+ * robots.txt, sitemap.xml, llms.txt and JSON-LD URLs.
+ * MOMOBOT_SITE_URL is read on the server per request so one image serves any
+ * domain; NEXT_PUBLIC_SITE_URL is the build-time fallback, then localhost.
  */
-export const SITE_URL = (
-  process.env.MOMOBOT_SITE_URL ??
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  "http://localhost:2026"
-).replace(/\/+$/, "");
+export function getSiteUrl(): string {
+  const raw =
+    nonEmpty(process.env.MOMOBOT_SITE_URL) ??
+    nonEmpty(process.env.NEXT_PUBLIC_SITE_URL) ??
+    "http://localhost:2026";
+  return raw.replace(/\/+$/, "");
+}
+
+/** Snapshot at module load; prefer `getSiteUrl()` inside request handlers. */
+export const SITE_URL = getSiteUrl();
 
 const isoDate = z
   .string()
@@ -151,7 +161,7 @@ export function relatedArticles(
 }
 
 export function absoluteUrl(path: string) {
-  return `${SITE_URL}${path}`;
+  return `${getSiteUrl()}${path}`;
 }
 
 /*
@@ -193,13 +203,16 @@ export function reporterLayers(slug: ReporterSlug) {
   };
 }
 
-const ORGANIZATION = {
-  "@type": "Organization",
-  "@id": `${SITE_URL}/#organization`,
-  name: "Momentum",
-  url: SITE_URL,
-  logo: { "@type": "ImageObject", url: absoluteUrl("/momentum/wordmark.png") },
-} as const;
+function organizationJsonLd() {
+  const siteUrl = getSiteUrl();
+  return {
+    "@type": "Organization",
+    "@id": `${siteUrl}/#organization`,
+    name: "Momentum",
+    url: siteUrl,
+    logo: { "@type": "ImageObject", url: `${siteUrl}/momentum/wordmark.png` },
+  } as const;
+}
 
 type JsonLd = Record<string, unknown>;
 
@@ -209,6 +222,8 @@ type JsonLd = Record<string, unknown>;
  * application/ld+json script.
  */
 export function articleJsonLd(article: DailyArticle): JsonLd[] {
+  const siteUrl = getSiteUrl();
+  const organization = organizationJsonLd();
   const url = absoluteUrl(articlePath(article.slug));
   const graphs: JsonLd[] = [
     {
@@ -226,12 +241,12 @@ export function articleJsonLd(article: DailyArticle): JsonLd[] {
       url,
       author: {
         "@type": "Person",
-        "@id": `${SITE_URL}/#${article.author.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        "@id": `${siteUrl}/#${article.author.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
         name: article.author.name,
         ...(article.author.title ? { jobTitle: article.author.title } : {}),
-        worksFor: ORGANIZATION,
+        worksFor: organization,
       },
-      publisher: ORGANIZATION,
+      publisher: organization,
       isPartOf: {
         "@type": "Periodical",
         name: MOMO_DAILY_NAME,

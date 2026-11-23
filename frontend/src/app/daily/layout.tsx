@@ -2,16 +2,18 @@ import { type Metadata } from "next";
 import Link from "next/link";
 
 import styles from "@/components/momentum/daily/daily.module.css";
-import { MOMO_DAILY_NAME, SITE_URL } from "@/core/momo-daily";
+import { getSiteUrl, MOMO_DAILY_NAME } from "@/core/momo-daily";
 import { isSignedIn } from "@/core/momo-daily/load";
 
-export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
-  title: {
-    default: `${MOMO_DAILY_NAME}: the latest in AI from Momentum`,
-    template: `%s | ${MOMO_DAILY_NAME}`,
-  },
-};
+export function generateMetadata(): Metadata {
+  return {
+    metadataBase: new URL(getSiteUrl()),
+    title: {
+      default: `${MOMO_DAILY_NAME}: the latest in AI from Momentum`,
+      template: `%s | ${MOMO_DAILY_NAME}`,
+    },
+  };
+}
 
 export default async function DailyLayout({
   children,

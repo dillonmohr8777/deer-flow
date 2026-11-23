@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "@rstest/core";
 
 import {
+  absoluteUrl,
   articleJsonLd,
   type DailyArticle,
+  getSiteUrl,
   parseArticle,
   plainText,
   relatedArticles,
@@ -264,5 +266,46 @@ describe("relatedArticles", () => {
       "same-section-old",
       "other-section-new",
     ]);
+  });
+});
+
+describe("getSiteUrl and runtime SEO URLs", () => {
+  it("reads MOMOBOT_SITE_URL dynamically, ignores blank strings, and updates JSON-LD", () => {
+    const prevMomo = process.env.MOMOBOT_SITE_URL;
+    const prevNext = process.env.NEXT_PUBLIC_SITE_URL;
+    try {
+      process.env.MOMOBOT_SITE_URL = "  https://momobot.example.com/// ";
+      process.env.NEXT_PUBLIC_SITE_URL = "https://fallback.example.com";
+      expect(getSiteUrl()).toBe("https://momobot.example.com");
+      expect(absoluteUrl("/sitemap.xml")).toBe(
+        "https://momobot.example.com/sitemap.xml",
+      );
+
+      const [news, crumbs] = articleJsonLd(article());
+      expect(news?.url).toBe(
+        "https://momobot.example.com/daily/what-is-a-test",
+      );
+      expect((news?.publisher as { url: string; "@id": string }).url).toBe(
+        "https://momobot.example.com",
+      );
+      expect((news?.publisher as { "@id": string })["@id"]).toBe(
+        "https://momobot.example.com/#organization",
+      );
+      expect((crumbs?.itemListElement as { item: string }[])[0]?.item).toBe(
+        "https://momobot.example.com/daily",
+      );
+
+      process.env.MOMOBOT_SITE_URL = "   ";
+      expect(getSiteUrl()).toBe("https://fallback.example.com");
+
+      delete process.env.MOMOBOT_SITE_URL;
+      delete process.env.NEXT_PUBLIC_SITE_URL;
+      expect(getSiteUrl()).toBe("http://localhost:2026");
+    } finally {
+      if (prevMomo === undefined) delete process.env.MOMOBOT_SITE_URL;
+      else process.env.MOMOBOT_SITE_URL = prevMomo;
+      if (prevNext === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+      else process.env.NEXT_PUBLIC_SITE_URL = prevNext;
+    }
   });
 });
