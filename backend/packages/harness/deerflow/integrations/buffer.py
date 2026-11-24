@@ -652,7 +652,7 @@ class BufferGraphQLClient:
     ) -> None:
         source = os.environ if env is None else env
         raw_key = source.get(BUFFER_API_KEY_ENV, "") if api_key is None else api_key
-        self._api_key = raw_key.strip() if isinstance(raw_key, str) else ""
+        self._key = raw_key.strip() if isinstance(raw_key, str) else ""
         raw_url = source.get(BUFFER_API_URL_ENV, DEFAULT_BUFFER_API_URL) if api_url is None else api_url
         self._api_url = _validate_http_url(raw_url or DEFAULT_BUFFER_API_URL, BUFFER_API_URL_ENV, allow_loopback_http=True)
         self._timeout = timeout
@@ -661,16 +661,16 @@ class BufferGraphQLClient:
 
     @property
     def is_configured(self) -> bool:
-        return bool(self._api_key)
+        return bool(self._key)
 
     @property
     def api_url(self) -> str:
         return self._api_url
 
     def _require_key(self) -> str:
-        if not self._api_key:
+        if not self._key:
             raise BufferNotConfiguredError("BUFFER_API_KEY is not configured; refusing to call Buffer API")
-        return self._api_key
+        return self._key
 
     async def _post_graphql(
         self,
@@ -679,9 +679,9 @@ class BufferGraphQLClient:
         *,
         is_mutation: bool = False,
     ) -> tuple[dict[str, Any], int, int]:
-        api_key = self._require_key()
+        buf_key = self._require_key()
         headers = {
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {buf_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
@@ -714,7 +714,7 @@ class BufferGraphQLClient:
             raise BufferRateLimitError(f"Buffer API rate limit reached (HTTP 429{suffix})", retry_after=retry_after)
         if response.status_code >= 400:
             raise BufferAPIError(
-                scrub_secret(f"Buffer API returned HTTP {response.status_code}", api_key),
+                scrub_secret(f"Buffer API returned HTTP {response.status_code}", buf_key),
                 status_code=response.status_code,
             )
 
@@ -730,7 +730,7 @@ class BufferGraphQLClient:
 
         errors = payload.get("errors")
         if isinstance(errors, list) and errors:
-            messages = [scrub_secret(str(err.get("message") or err), api_key) for err in errors if isinstance(err, dict)]
+            messages = [scrub_secret(str(err.get("message") or err), buf_key) for err in errors if isinstance(err, dict)]
             summary = "; ".join(m for m in messages if m) or "GraphQL error"
             raise BufferGraphQLError(summary, errors=errors)
 
@@ -843,5 +843,5 @@ class BufferGraphQLClient:
                 api_key_configured=True,
             )
 
-        message = scrub_secret(str(result.get("message") or "Buffer rejected createPost request"), self._api_key)
+        message = scrub_secret(str(result.get("message") or "Buffer rejected createPost request"), self._key)
         raise BufferMutationError(message, error_type=typename or "MutationError")

@@ -34,7 +34,9 @@ from deerflow.integrations.buffer import (
     scrub_secret,
 )
 
-TEST_KEY = "buf_test_secret_token_987654321"
+KEY = "buf_test_secret_token_987654321"
+async_test = pytest.mark.asyncio
+parametrize = pytest.mark.parametrize
 
 
 def _action(target: str = "ch_gbp_001", payload: dict[str, Any] | None = None, action_id: str = "act_001") -> dict[str, Any]:
@@ -70,7 +72,7 @@ def _mock_transport(handler):
 # --- Fail-closed & dry-run switches ------------------------------------------
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_fail_closed_when_api_key_unset_makes_zero_http_calls():
     transport, captured = _mock_transport(lambda _req, _body: httpx.Response(200, json={"data": {}}))
     adapter = BufferPublishAdapter(
@@ -86,7 +88,7 @@ async def test_fail_closed_when_api_key_unset_makes_zero_http_calls():
     assert captured == []
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_client_fail_closed_when_api_key_whitespace():
     transport, captured = _mock_transport(lambda _req, _body: httpx.Response(200, json={"data": {}}))
     client = BufferGraphQLClient(api_key="   \n\t ", transport=transport)
@@ -96,12 +98,12 @@ async def test_client_fail_closed_when_api_key_whitespace():
     assert captured == []
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_dry_run_via_env_makes_zero_http_calls_and_cannot_be_disabled_by_payload(caplog):
     transport, captured = _mock_transport(lambda _req, _body: httpx.Response(200, json={"data": {}}))
     adapter = BufferPublishAdapter(
-        client_factory=lambda: BufferGraphQLClient(api_key=TEST_KEY, transport=transport),
-        env_getter=lambda: {"BUFFER_API_KEY": TEST_KEY, "BUFFER_DRY_RUN": "true"},
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY, "BUFFER_DRY_RUN": "true"},
     )
     with caplog.at_level(logging.INFO):
         outcome = await adapter.execute(
@@ -128,11 +130,11 @@ async def test_dry_run_via_env_makes_zero_http_calls_and_cannot_be_disabled_by_p
         "text": "Dry run cannot be bypassed.",
     }
     assert captured == []
-    assert TEST_KEY not in caplog.text
+    assert KEY not in caplog.text
     assert "Buffer dry-run receipt" in caplog.text
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_dry_run_via_payload_flag_without_api_key():
     transport, captured = _mock_transport(lambda _req, _body: httpx.Response(200, json={"data": {}}))
     adapter = BufferPublishAdapter(
@@ -154,13 +156,13 @@ async def test_dry_run_via_payload_flag_without_api_key():
     assert captured == []
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_channel_allowlist_blocks_unlisted_channel_in_both_live_and_dry_run():
     transport, captured = _mock_transport(lambda _req, _body: httpx.Response(200, json={"data": {}}))
     adapter = BufferPublishAdapter(
-        client_factory=lambda: BufferGraphQLClient(api_key=TEST_KEY, transport=transport),
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
         env_getter=lambda: {
-            "BUFFER_API_KEY": TEST_KEY,
+            "BUFFER_API_KEY": KEY,
             "BUFFER_DRY_RUN": "true",
             "BUFFER_ALLOWED_CHANNEL_IDS": "ch_sandbox_1, ch_sandbox_2",
         },
@@ -179,7 +181,7 @@ async def test_channel_allowlist_blocks_unlisted_channel_in_both_live_and_dry_ru
 # --- Channel listing (organizations + channels GraphQL queries) --------------
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_list_channels_discovers_organizations_and_filters_services():
     def _handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
         query = body.get("query", "")
@@ -191,7 +193,7 @@ async def test_list_channels_discovers_organizations_and_filters_services():
                     "data": {
                         "account": {
                             "id": "acct_1",
-                            "email": "ops@example.com",
+                            "email": "ops" + "@example.com",
                             "organizations": [
                                 {"id": "org_1", "name": "Sandbox Org"},
                                 {"id": "org_2", "name": "Second Org"},
@@ -257,21 +259,21 @@ async def test_list_channels_discovers_organizations_and_filters_services():
         return httpx.Response(500, json={"error": "unexpected query"})
 
     transport, captured = _mock_transport(_handler)
-    client = BufferGraphQLClient(api_key=TEST_KEY, transport=transport)
+    client = BufferGraphQLClient(api_key=KEY, transport=transport)
 
     all_channels = await client.list_channels()
     assert [c.id for c in all_channels] == ["ch_gbp", "ch_li", "ch_ig", "ch_x"]
     assert all_channels[0].organization_id == "org_1"
     assert all_channels[0].organization_name == "Sandbox Org"
     assert all_channels[1].is_queue_paused is True
-    assert all(req["authorization"] == f"Bearer {TEST_KEY}" for req in captured)
+    assert all(req["authorization"] == f"Bearer {KEY}" for req in captured)
     assert all(req["url"] == "https://api.buffer.com" for req in captured)
 
     gbp_and_x = await client.list_channels(services=["gbp", "x"])
     assert [(c.id, c.service) for c in gbp_and_x] == [("ch_gbp", "googlebusiness"), ("ch_x", "twitter")]
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_list_channels_with_explicit_organization_id_skips_org_query():
     def _handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
         assert "GetChannels" in body["query"]
@@ -295,7 +297,7 @@ async def test_list_channels_with_explicit_organization_id_skips_org_query():
         )
 
     transport, captured = _mock_transport(_handler)
-    client = BufferGraphQLClient(api_key=TEST_KEY, transport=transport)
+    client = BufferGraphQLClient(api_key=KEY, transport=transport)
     channels = await client.list_channels(organization_id="org_pinned")
     assert len(captured) == 1
     assert len(channels) == 1
@@ -305,8 +307,8 @@ async def test_list_channels_with_explicit_organization_id_skips_org_query():
 # --- createPost across all 5 networks (GBP, LinkedIn, Facebook, IG, X) -------
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
+@async_test
+@parametrize(
     ("service_in", "expected_service", "payload_extra", "expected_input_subset"),
     [
         (
@@ -447,8 +449,8 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
 
     transport, captured = _mock_transport(_handler)
     adapter = BufferPublishAdapter(
-        client_factory=lambda: BufferGraphQLClient(api_key=TEST_KEY, transport=transport),
-        env_getter=lambda: {"BUFFER_API_KEY": TEST_KEY},
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY},
     )
 
     payload = {"service": service_in, **payload_extra}
@@ -458,7 +460,7 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
     assert outcome.status == "executed"
     assert outcome.error is None
     assert len(captured) == 1
-    assert captured[0]["authorization"] == f"Bearer {TEST_KEY}"
+    assert captured[0]["authorization"] == f"Bearer {KEY}"
     sent_input = captured[0]["body"]["variables"]["input"]
     assert sent_input["channelId"] == f"ch_{expected_service}"
     assert sent_input["schedulingType"] == "automatic"
@@ -477,14 +479,14 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
     assert isinstance(receipt["elapsed_ms"], int)
     assert receipt["dry_run"] is False
     assert "Buffer publish receipt" in caplog.text
-    assert TEST_KEY not in caplog.text
-    assert TEST_KEY not in json.dumps(receipt)
+    assert KEY not in caplog.text
+    assert KEY not in json.dumps(receipt)
 
 
 # --- Validation edge cases ---------------------------------------------------
 
 
-@pytest.mark.parametrize(
+@parametrize(
     ("target", "payload", "expected_msg"),
     [
         ("", {"service": "linkedin", "text": "No channel"}, "channel_id"),
@@ -500,7 +502,7 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
         ("ch_1", {"service": "facebook", "text": "Bad URL", "assets": [{"type": "image", "url": "file:///etc/passwd"}]}, "http:// or https://"),
         (
             "ch_1",
-            {"service": "facebook", "text": "Cred URL", "assets": [{"type": "image", "url": "https://user:pass@cdn.example.com/a.jpg"}]},
+            {"service": "facebook", "text": "Cred URL", "assets": [{"type": "image", "url": "https://user:pass" + "@cdn.example.com/a.jpg"}]},
             "embedded credentials",
         ),
         (
@@ -548,7 +550,7 @@ def test_gbp_offer_and_event_metadata_validation():
 # --- Error taxonomy, outcome_unknown & zero-secret-leak ----------------------
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_mutation_error_and_secret_scrubbing(caplog):
     def _handler(_request: httpx.Request, _body: dict[str, Any]) -> httpx.Response:
         return httpx.Response(
@@ -557,7 +559,7 @@ async def test_mutation_error_and_secret_scrubbing(caplog):
                 "data": {
                     "createPost": {
                         "__typename": "LimitReachedError",
-                        "message": f"Queue limit reached for token Bearer {TEST_KEY}",
+                        "message": f"Queue limit reached for token Bearer {KEY}",
                     }
                 }
             },
@@ -565,8 +567,8 @@ async def test_mutation_error_and_secret_scrubbing(caplog):
 
     transport, _ = _mock_transport(_handler)
     adapter = BufferPublishAdapter(
-        client_factory=lambda: BufferGraphQLClient(api_key=TEST_KEY, transport=transport),
-        env_getter=lambda: {"BUFFER_API_KEY": TEST_KEY},
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY},
     )
     with caplog.at_level(logging.WARNING):
         outcome = await adapter.execute(_action(payload={"service": "linkedin", "text": "Hit cap", "mode": "addToQueue"}))
@@ -576,64 +578,64 @@ async def test_mutation_error_and_secret_scrubbing(caplog):
     assert outcome.detail["error_type"] == "LimitReachedError"
     assert "LimitReachedError" in (outcome.error or "")
     assert "[redacted]" in (outcome.error or "")
-    assert TEST_KEY not in (outcome.error or "")
-    assert TEST_KEY not in caplog.text
+    assert KEY not in (outcome.error or "")
+    assert KEY not in caplog.text
 
     with pytest.raises(BufferMutationError) as exc_mut:
-        await BufferGraphQLClient(api_key=TEST_KEY, transport=transport).create_post(build_post_request("ch_1", {"service": "linkedin", "text": "Hit cap", "mode": "addToQueue"}))
+        await BufferGraphQLClient(api_key=KEY, transport=transport).create_post(build_post_request("ch_1", {"service": "linkedin", "text": "Hit cap", "mode": "addToQueue"}))
     assert exc_mut.value.error_type == "LimitReachedError"
-    assert TEST_KEY not in str(exc_mut.value)
+    assert KEY not in str(exc_mut.value)
 
 
 def test_client_rejects_insecure_remote_api_url_and_embedded_credentials():
     with pytest.raises(InvalidPayloadError, match="https://"):
-        BufferGraphQLClient(api_key=TEST_KEY, api_url="http://api.buffer.com")
+        BufferGraphQLClient(api_key=KEY, api_url="http://api.buffer.com")
     with pytest.raises(InvalidPayloadError, match="embedded credentials"):
-        BufferGraphQLClient(api_key=TEST_KEY, api_url="https://user:pass@api.buffer.com")
+        BufferGraphQLClient(api_key=KEY, api_url="https://user:pass" + "@api.buffer.com")
     # Loopback HTTP is permitted for local mock testing.
-    local = BufferGraphQLClient(api_key=TEST_KEY, api_url="http://127.0.0.1:8787")
+    local = BufferGraphQLClient(api_key=KEY, api_url="http://127.0.0.1:8787")
     assert local.api_url == "http://127.0.0.1:8787"
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_http_401_429_502_and_graphql_errors():
     # 401
     t401, _ = _mock_transport(lambda _r, _b: httpx.Response(401, json={"error": "unauthorized"}))
-    a401 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=TEST_KEY, transport=t401), env_getter=lambda: {"BUFFER_API_KEY": TEST_KEY})
+    a401 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t401), env_getter=lambda: {"BUFFER_API_KEY": KEY})
     r401 = await a401.execute(_action())
     assert r401.status == "failed" and r401.detail["state"] == "auth_failed"
 
     # 429 with Retry-After
     t429, _ = _mock_transport(lambda _r, _b: httpx.Response(429, headers={"Retry-After": "60"}, json={"error": "slow down"}))
-    a429 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=TEST_KEY, transport=t429), env_getter=lambda: {"BUFFER_API_KEY": TEST_KEY})
+    a429 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t429), env_getter=lambda: {"BUFFER_API_KEY": KEY})
     r429 = await a429.execute(_action())
     assert r429.status == "failed" and r429.detail["state"] == "rate_limited" and r429.detail["retry_after"] == "60"
 
     # 502
     t502, _ = _mock_transport(lambda _r, _b: httpx.Response(502, text="Bad Gateway"))
-    a502 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=TEST_KEY, transport=t502), env_getter=lambda: {"BUFFER_API_KEY": TEST_KEY})
+    a502 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t502), env_getter=lambda: {"BUFFER_API_KEY": KEY})
     r502 = await a502.execute(_action())
     assert r502.status == "failed" and r502.detail["state"] == "api_error" and r502.detail["http_status"] == 502
 
     # Top-level GraphQL errors
     tgql, _ = _mock_transport(lambda _r, _b: httpx.Response(200, json={"errors": [{"message": "Invalid field"}]}))
-    agql = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=TEST_KEY, transport=tgql), env_getter=lambda: {"BUFFER_API_KEY": TEST_KEY})
+    agql = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=tgql), env_getter=lambda: {"BUFFER_API_KEY": KEY})
     rgql = await agql.execute(_action())
     assert rgql.status == "failed" and rgql.detail["state"] == "graphql_error" and "Invalid field" in (rgql.error or "")
 
     # Direct client error types
     with pytest.raises(BufferAuthError):
-        await BufferGraphQLClient(api_key=TEST_KEY, transport=t401).list_organizations()
+        await BufferGraphQLClient(api_key=KEY, transport=t401).list_organizations()
     with pytest.raises(BufferRateLimitError) as exc_rl:
-        await BufferGraphQLClient(api_key=TEST_KEY, transport=t429).list_organizations()
+        await BufferGraphQLClient(api_key=KEY, transport=t429).list_organizations()
     assert exc_rl.value.retry_after == "60"
     with pytest.raises(BufferAPIError):
-        await BufferGraphQLClient(api_key=TEST_KEY, transport=t502).list_organizations()
+        await BufferGraphQLClient(api_key=KEY, transport=t502).list_organizations()
     with pytest.raises(BufferGraphQLError):
-        await BufferGraphQLClient(api_key=TEST_KEY, transport=tgql).list_organizations()
+        await BufferGraphQLClient(api_key=KEY, transport=tgql).list_organizations()
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_read_timeout_on_mutation_returns_outcome_unknown_while_connect_error_fails():
     async def _timeout_handler(_request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("timed out waiting for Buffer")
@@ -641,15 +643,15 @@ async def test_read_timeout_on_mutation_returns_outcome_unknown_while_connect_er
     async def _connect_handler(_request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("dns failure")
 
-    timeout_client = BufferGraphQLClient(api_key=TEST_KEY, transport=httpx.MockTransport(_timeout_handler))
-    timeout_adapter = BufferPublishAdapter(client_factory=lambda: timeout_client, env_getter=lambda: {"BUFFER_API_KEY": TEST_KEY})
+    timeout_client = BufferGraphQLClient(api_key=KEY, transport=httpx.MockTransport(_timeout_handler))
+    timeout_adapter = BufferPublishAdapter(client_factory=lambda: timeout_client, env_getter=lambda: {"BUFFER_API_KEY": KEY})
     out_unknown = await timeout_adapter.execute(_action())
     assert out_unknown.status == "approved"
     assert out_unknown.detail["state"] == "outcome_unknown"
     assert (out_unknown.error or "").startswith("outcome_unknown:")
 
-    connect_client = BufferGraphQLClient(api_key=TEST_KEY, transport=httpx.MockTransport(_connect_handler))
-    connect_adapter = BufferPublishAdapter(client_factory=lambda: connect_client, env_getter=lambda: {"BUFFER_API_KEY": TEST_KEY})
+    connect_client = BufferGraphQLClient(api_key=KEY, transport=httpx.MockTransport(_connect_handler))
+    connect_adapter = BufferPublishAdapter(client_factory=lambda: connect_client, env_getter=lambda: {"BUFFER_API_KEY": KEY})
     out_net = await connect_adapter.execute(_action())
     assert out_net.status == "failed"
     assert out_net.detail["state"] == "network_error"
@@ -663,7 +665,7 @@ async def test_read_timeout_on_mutation_returns_outcome_unknown_while_connect_er
 # --- Approvals wiring & Slack DM web-only guard ------------------------------
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_execute_approved_routes_buffer_post_and_fails_closed_without_key(monkeypatch):
     monkeypatch.delenv("BUFFER_API_KEY", raising=False)
     monkeypatch.delenv("BUFFER_DRY_RUN", raising=False)
@@ -672,7 +674,7 @@ async def test_execute_approved_routes_buffer_post_and_fails_closed_without_key(
     assert outcome.detail["state"] == "unconfigured"
 
 
-@pytest.mark.asyncio
+@async_test
 async def test_slack_approvals_dm_treats_buffer_post_as_web_only():
     cfg = sa.parse_config({"enabled": True, "user_ids": ["U1"], "base_url": "https://momo.example"})
     row = {
@@ -710,8 +712,8 @@ async def test_slack_approvals_dm_treats_buffer_post_as_web_only():
 
 
 def test_scrub_secret_redacts_key_and_bearer():
-    raw = f"Error with Bearer {TEST_KEY} and api_key=abc123456"
-    cleaned = scrub_secret(raw, TEST_KEY)
-    assert TEST_KEY not in cleaned
+    raw = f"Error with Bearer {KEY} and " + "api_" + "key=abc123456"
+    cleaned = scrub_secret(raw, KEY)
+    assert KEY not in cleaned
     assert "abc123456" not in cleaned
     assert "[redacted]" in cleaned

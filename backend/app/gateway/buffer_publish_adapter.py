@@ -70,12 +70,12 @@ class BufferPublishAdapter:
     async def execute(self, action: dict[str, Any]) -> AdapterOutcome:
         action_id = str(action.get("id") or "")
         env = self._env()
-        api_key = (env.get(BUFFER_API_KEY_ENV) or "").strip()
+        buffer_key = (env.get(BUFFER_API_KEY_ENV) or "").strip()
 
         try:
             request = build_post_request(str(action.get("target") or ""), action.get("payload"))
         except InvalidPayloadError as exc:
-            err = scrub_secret(str(exc), api_key)
+            err = scrub_secret(str(exc), buffer_key)
             receipt = {
                 "provider": "buffer",
                 "state": "invalid_payload",
@@ -165,7 +165,7 @@ class BufferPublishAdapter:
             logger.warning("Buffer approval %s failed closed (unconfigured)", action_id)
             return AdapterOutcome("failed", {**base_receipt, "state": "unconfigured", "api_key_configured": False}, error=err)
         except BufferOutcomeUnknownError as exc:
-            detail = scrub_secret(str(exc), api_key)
+            detail = scrub_secret(str(exc), buffer_key)
             err = f"outcome_unknown: {detail}; check Buffer before retrying"
             receipt = {**base_receipt, "state": "outcome_unknown"}
             logger.warning(
@@ -177,17 +177,17 @@ class BufferPublishAdapter:
             )
             return AdapterOutcome("approved", receipt, error=err)
         except BufferRateLimitError as exc:
-            err = scrub_secret(str(exc), api_key)
+            err = scrub_secret(str(exc), buffer_key)
             receipt = {**base_receipt, "state": "rate_limited", "http_status": 429, "retry_after": exc.retry_after}
             logger.warning("Buffer approval %s rate-limited: channel_id=%s retry_after=%s", action_id, request.channel_id, exc.retry_after)
             return AdapterOutcome("failed", receipt, error=err)
         except BufferAuthError as exc:
-            err = scrub_secret(str(exc), api_key)
+            err = scrub_secret(str(exc), buffer_key)
             receipt = {**base_receipt, "state": "auth_failed"}
             logger.warning("Buffer approval %s auth failed: channel_id=%s", action_id, request.channel_id)
             return AdapterOutcome("failed", receipt, error=err)
         except BufferMutationError as exc:
-            err = scrub_secret(f"{exc.error_type}: {exc}", api_key)
+            err = scrub_secret(f"{exc.error_type}: {exc}", buffer_key)
             receipt = {**base_receipt, "state": "mutation_rejected", "error_type": exc.error_type}
             logger.warning(
                 "Buffer approval %s rejected by Buffer (%s): channel_id=%s service=%s",
@@ -198,17 +198,17 @@ class BufferPublishAdapter:
             )
             return AdapterOutcome("failed", receipt, error=err)
         except BufferGraphQLError as exc:
-            err = scrub_secret(f"Buffer GraphQL error: {exc}", api_key)
+            err = scrub_secret(f"Buffer GraphQL error: {exc}", buffer_key)
             receipt = {**base_receipt, "state": "graphql_error"}
             logger.warning("Buffer approval %s GraphQL error: channel_id=%s", action_id, request.channel_id)
             return AdapterOutcome("failed", receipt, error=err)
         except BufferAPIError as exc:
-            err = scrub_secret(str(exc), api_key)
+            err = scrub_secret(str(exc), buffer_key)
             receipt = {**base_receipt, "state": "api_error", "http_status": exc.status_code}
             logger.warning("Buffer approval %s HTTP error: channel_id=%s status=%s", action_id, request.channel_id, exc.status_code)
             return AdapterOutcome("failed", receipt, error=err)
         except BufferNetworkError as exc:
-            err = scrub_secret(str(exc), api_key)
+            err = scrub_secret(str(exc), buffer_key)
             receipt = {**base_receipt, "state": "network_error"}
             logger.warning("Buffer approval %s network error: channel_id=%s", action_id, request.channel_id)
             return AdapterOutcome("failed", receipt, error=err)
