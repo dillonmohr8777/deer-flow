@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from app.gateway.buffer_publish_adapter import ACTION_TYPE as BUFFER_POST_ACTION_TYPE
+from app.gateway.buffer_publish_adapter import BufferPublishAdapter
 from app.gateway.composio_approval_adapter import ComposioAdapter
 from deerflow.approvals import ActionAdapter, AdapterOutcome
 
@@ -76,6 +78,7 @@ def register_adapter(action_type: str, adapter: ActionAdapter) -> None:
 
 
 register_adapter("composio_tool_call", ComposioAdapter())
+register_adapter(BUFFER_POST_ACTION_TYPE, BufferPublishAdapter())
 
 
 async def execute_approved(action: dict[str, Any]) -> AdapterOutcome:
