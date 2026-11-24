@@ -18,6 +18,14 @@ import {
 import { AuthProvider } from "@/core/auth/AuthProvider";
 import type { User } from "@/core/auth/types";
 
+const workspaceState = rs.hoisted(() => ({
+  active_workspace_id: "ws-amp",
+  workspaces: [
+    { id: "ws-amp", name: "AI Marketing Philly", role: "owner" },
+    { id: "ws-1", name: "Sandbox Workspace", role: "member" },
+  ],
+}));
+
 rs.mock("next/navigation", () => ({
   useRouter: () => ({ push: rs.fn(), replace: rs.fn(), refresh: rs.fn() }),
   usePathname: () => "/workspace/control-panel",
@@ -49,8 +57,8 @@ rs.mock("@/core/agents/hooks", () => ({
 rs.mock("@/core/workspaces/hooks", () => ({
   useWorkspaceSelection: () => ({
     data: {
-      active_workspace_id: "ws-1",
-      workspaces: [{ id: "ws-1", name: "Sandbox Workspace", role: "member" }],
+      active_workspace_id: workspaceState.active_workspace_id,
+      workspaces: workspaceState.workspaces,
     },
     isLoading: false,
     busy: false,
@@ -86,17 +94,26 @@ function renderControlPanel(role: User["system_role"] = "client") {
 }
 
 beforeEach(() => {
+  workspaceState.active_workspace_id = "ws-amp";
   window.localStorage.clear();
 });
 
 afterEach(cleanup);
 
 describe("Client Control Panel", () => {
-  it("renders all 6 1-click Create Something action cards with pre-filled chat links", () => {
+  it("renders the AI Marketing Philly workspace header, summary strip, Start Here shortcut, and all 6 Create Something cards", () => {
     renderControlPanel("client");
 
     expect(screen.getByRole("heading", { name: "Control Panel" })).toBeTruthy();
-    expect(screen.getByText("Sandbox Workspace")).toBeTruthy();
+    expect(screen.getByText("AI Marketing Philly")).toBeTruthy();
+
+    const summary = screen.getByTestId("control-panel-summary");
+    expect(within(summary).getByText("0 / 5")).toBeTruthy();
+    expect(within(summary).getByText("0 / 5 lessons")).toBeTruthy();
+    const academyLink = within(summary).getByRole("link", {
+      name: /Open Start Here \/ Academy/i,
+    });
+    expect(academyLink.getAttribute("href")).toBe("/workspace/start-here");
 
     const createGrid = screen.getByTestId("create-something-grid");
     for (const card of CREATE_SOMETHING_CARDS) {
@@ -110,7 +127,7 @@ describe("Client Control Panel", () => {
     );
   });
 
-  it("renders all 4 portal tabs and honest empty/readiness states", () => {
+  it("renders all 4 portal tabs, updates the progress ring, and shows honest empty/readiness states", () => {
     renderControlPanel("client");
 
     expect(
@@ -126,7 +143,7 @@ describe("Client Control Panel", () => {
       screen.getByRole("tab", { name: /Results & Reporting/i }),
     ).toBeTruthy();
 
-    // Check off Day-1 item
+    // Check off Day-1 item and verify both checklist counter and ring update
     const firstCheck = screen.getByRole("checkbox", {
       name: "Complete your Business Profile",
     });
@@ -134,6 +151,7 @@ describe("Client Control Panel", () => {
     fireEvent.click(firstCheck);
     expect(firstCheck.getAttribute("aria-checked")).toBe("true");
     expect(screen.getByText("1 of 5 done")).toBeTruthy();
+    expect(screen.getByText("20%")).toBeTruthy();
 
     // Switch to Meetings & Action Plans
     const meetingsTab = screen.getByRole("tab", {

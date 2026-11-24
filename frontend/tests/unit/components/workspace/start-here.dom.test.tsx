@@ -8,6 +8,13 @@ import { AuthProvider } from "@/core/auth/AuthProvider";
 import type { User } from "@/core/auth/types";
 
 const featureState = rs.hoisted(() => ({ internal: false }));
+const workspaceState = rs.hoisted(() => ({
+  active_workspace_id: "ws-amp",
+  workspaces: [
+    { id: "ws-amp", name: "AI Marketing Philly", role: "owner" },
+    { id: "ws-other", name: "Other Workspace", role: "member" },
+  ],
+}));
 
 rs.mock("next/navigation", () => ({
   useRouter: () => ({ push: rs.fn(), replace: rs.fn(), refresh: rs.fn() }),
@@ -44,6 +51,19 @@ rs.mock("@/core/features", () => ({
   }),
 }));
 
+rs.mock("@/core/workspaces/hooks", () => ({
+  useWorkspaceSelection: () => ({
+    data: {
+      active_workspace_id: workspaceState.active_workspace_id,
+      workspaces: workspaceState.workspaces,
+    },
+    isLoading: false,
+    busy: false,
+    error: null,
+    selectWorkspace: rs.fn(),
+  }),
+}));
+
 function renderStartHere(role: User["system_role"] = "client") {
   return render(
     <AuthProvider
@@ -58,17 +78,21 @@ function renderStartHere(role: User["system_role"] = "client") {
 
 beforeEach(() => {
   featureState.internal = false;
+  workspaceState.active_workspace_id = "ws-amp";
   window.localStorage.clear();
 });
 
 afterEach(cleanup);
 
 describe("Start Here / Academy", () => {
-  it("renders the business-owner track, persists completion, and filters prompts", () => {
+  it("renders in the AI Marketing Philly workspace, persists workspace-scoped completion, and filters prompts", () => {
     renderStartHere("client");
 
     expect(
       screen.getByRole("heading", { name: "Start Here / Academy" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("AI Marketing Philly · Business Owner Track"),
     ).toBeTruthy();
     expect(
       screen.getByText(
@@ -88,6 +112,13 @@ describe("Start Here / Academy", () => {
         `1 of ${BUSINESS_OWNER_LESSONS.length} quick-start lessons done`,
       ),
     ).toBeTruthy();
+    expect(screen.getByText("20%")).toBeTruthy();
+
+    // Persists under the active workspace scope
+    const stored = window.localStorage.getItem(
+      "momobot.start-here.lessons.u-sh.ws-amp",
+    );
+    expect(stored).toContain('"control-panel-vs-chat":true');
 
     // Filter prompt library by Paid Ads
     fireEvent.click(screen.getByRole("button", { name: "Paid Ads" }));
@@ -95,6 +126,21 @@ describe("Start Here / Academy", () => {
       screen.getByText("Local Google Ads Campaign Blueprint"),
     ).toBeTruthy();
     expect(screen.queryByText("Homepage Conversion Redesign")).toBeNull();
+  });
+
+  it("stays accessible for non-staff user members in AI Marketing Philly even when internal flag is off", () => {
+    featureState.internal = false;
+    renderStartHere("user");
+
+    expect(
+      screen.getByRole("heading", { name: "Start Here / Academy" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("AI Marketing Philly · Business Owner Track"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: /Staff AI Academy/i }),
+    ).toBeNull();
   });
 
   it("shows a Staff AI Academy shortcut for internal non-client users", () => {

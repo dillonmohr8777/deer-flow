@@ -24,6 +24,7 @@ import { useAgents } from "@/core/agents/hooks";
 import { useAuth, useIsClient } from "@/core/auth/AuthProvider";
 import { writeTextToClipboard } from "@/core/clipboard";
 import { useMomentumInternalEnabled } from "@/core/features";
+import { useWorkspaceSelection } from "@/core/workspaces/hooks";
 import { cn } from "@/lib/utils";
 
 import {
@@ -36,6 +37,9 @@ import {
 } from "./start-here-data";
 
 import styles from "./start-here.module.css";
+
+const RING_RADIUS = 26;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 export function StartHereAcademyPage() {
   useEffect(() => {
@@ -57,7 +61,23 @@ export function StartHereAcademyBody() {
   const isClient = useIsClient();
   const { agents } = useAgents();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
-  const scopeKey = user?.id ?? "guest";
+  const { data: workspaceData } = useWorkspaceSelection();
+
+  const activeWorkspaceName = useMemo(() => {
+    if (!workspaceData) {
+      return null;
+    }
+    const active = workspaceData.workspaces.find(
+      (item) => item.id === workspaceData.active_workspace_id,
+    );
+    return active?.name ?? workspaceData.private_workspace_name ?? null;
+  }, [workspaceData]);
+
+  const scopeKey = useMemo(() => {
+    const userPart = user?.id ?? "guest";
+    const workspacePart = workspaceData?.active_workspace_id ?? "default";
+    return `${userPart}.${workspacePart}`;
+  }, [user?.id, workspaceData?.active_workspace_id]);
 
   const [completed, setCompleted] = useState<Record<string, boolean>>(() =>
     readStartHereProgress(scopeKey),
@@ -73,6 +93,7 @@ export function StartHereAcademyBody() {
     (lesson) => completed[lesson.id],
   ).length;
   const percent = Math.round((doneCount / BUSINESS_OWNER_LESSONS.length) * 100);
+  const ringOffset = RING_CIRCUMFERENCE * (1 - percent / 100);
 
   const filteredPrompts = useMemo(() => {
     if (category === "All") {
@@ -102,24 +123,77 @@ export function StartHereAcademyBody() {
   return (
     <main className={styles.frame} data-testid="start-here-academy">
       <header className={styles.headerRow}>
-        <div>
-          <p className={pageStyles.eyebrow}>Business Owner Track</p>
-          <h1 className="mt-1">Start Here / Academy</h1>
-          <p className={cn(pageStyles.lede, "mt-1")}>
-            Five short guides and a library of ready-to-run prompts to help you
-            build pages, local SEO content, weekly posts, and growth plans in
-            minutes.
-          </p>
+        <div className={styles.headerLead}>
+          <div
+            className={styles.progressRingWrap}
+            aria-label={`Start Here lessons ${percent} percent complete`}
+          >
+            <svg
+              className={styles.progressRingSvg}
+              viewBox="0 0 64 64"
+              aria-hidden="true"
+            >
+              <circle
+                cx="32"
+                cy="32"
+                r={RING_RADIUS}
+                fill="none"
+                stroke="#4A5C50"
+                strokeWidth="6"
+              />
+              <circle
+                cx="32"
+                cy="32"
+                r={RING_RADIUS}
+                fill="none"
+                stroke="#D4F33B"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeDasharray={RING_CIRCUMFERENCE}
+                strokeDashoffset={ringOffset}
+                transform="rotate(-90 32 32)"
+              />
+            </svg>
+            <span className={styles.progressRingLabel}>{percent}%</span>
+          </div>
+
+          <div className="min-w-0">
+            <p className={styles.headerEyebrow}>
+              <span className={styles.headerDot} aria-hidden="true" />
+              <span>
+                {activeWorkspaceName
+                  ? `${activeWorkspaceName} · Business Owner Track`
+                  : "Business Owner Track"}
+              </span>
+            </p>
+            <h1 className={styles.headerTitle}>Start Here / Academy</h1>
+            <p className={styles.headerLede}>
+              Five short guides and a library of ready-to-run prompts to help
+              you build pages, local SEO content, weekly posts, and growth plans
+              in minutes.
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm">
+
+        <div className={styles.headerActions}>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className={styles.headerBtnSecondary}
+          >
             <Link href="/workspace/control-panel">
               <LayoutDashboardIcon className="size-4" />
               Control Panel
             </Link>
           </Button>
           {internalEnabled && !isClient && (
-            <Button asChild variant="secondary" size="sm">
+            <Button
+              asChild
+              variant="secondary"
+              size="sm"
+              className={styles.headerBtnPrimary}
+            >
               <Link href="/workspace/academy">
                 <GraduationCapIcon className="size-4" />
                 Staff AI Academy
@@ -151,10 +225,13 @@ export function StartHereAcademyBody() {
         />
       </section>
 
-      <section aria-labelledby="owner-track-heading" className="space-y-3">
+      <section
+        aria-labelledby="owner-track-heading"
+        className={styles.sectionShell}
+      >
         <div>
           <p className={pageStyles.eyebrow}>Step-by-Step</p>
-          <h2 id="owner-track-heading" className="mt-0.5 text-xl">
+          <h2 id="owner-track-heading" className="mt-0.5 text-xl font-bold">
             5-Lesson Quick Start
           </h2>
         </div>
@@ -176,7 +253,7 @@ export function StartHereAcademyBody() {
                 <summary className={styles.lessonSummary}>
                   <div className="flex min-w-0 items-center gap-2.5">
                     {isDone ? (
-                      <CheckCircle2Icon className="text-primary size-4 shrink-0" />
+                      <CheckCircle2Icon className="size-4 shrink-0 text-[#1F7A66] dark:text-[#33A98F]" />
                     ) : (
                       <CircleIcon className="text-muted-foreground size-4 shrink-0" />
                     )}
@@ -184,7 +261,7 @@ export function StartHereAcademyBody() {
                       {index + 1}. {lesson.title}
                     </span>
                   </div>
-                  <span className="text-muted-foreground shrink-0 text-xs">
+                  <span className={styles.categoryChip}>
                     {lesson.minutes} min
                   </span>
                 </summary>
@@ -197,13 +274,13 @@ export function StartHereAcademyBody() {
                       <li key={step}>{step}</li>
                     ))}
                   </ol>
-                  <div className="bg-muted/50 rounded-md border p-3">
+                  <div className={styles.tryBox}>
                     <p className="text-xs font-semibold">Try this in Chat</p>
                     <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
                       {lesson.tryPrompt}
                     </p>
                     <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                      <Button asChild size="sm">
+                      <Button asChild size="sm" className={styles.brandBtn}>
                         <Link href={tryHref}>
                           <span>Try in Chat</span>
                           <ArrowRightIcon className="size-3.5" />
@@ -220,7 +297,7 @@ export function StartHereAcademyBody() {
                         <CopyIcon className="size-3.5" />
                         {copiedId === lesson.id ? "Copied" : "Copy prompt"}
                       </Button>
-                      <label className="ml-auto inline-flex cursor-pointer items-center gap-2 text-xs font-medium">
+                      <label className="ml-auto inline-flex min-h-[44px] cursor-pointer items-center gap-2 text-xs font-medium">
                         <input
                           type="checkbox"
                           checked={isDone}
@@ -237,11 +314,17 @@ export function StartHereAcademyBody() {
         </div>
       </section>
 
-      <section aria-labelledby="prompt-library-heading" className="space-y-3">
+      <section
+        aria-labelledby="prompt-library-heading"
+        className={styles.sectionShell}
+      >
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className={pageStyles.eyebrow}>Ready-to-Run Examples</p>
-            <h2 id="prompt-library-heading" className="mt-0.5 text-xl">
+            <h2
+              id="prompt-library-heading"
+              className="mt-0.5 text-xl font-bold"
+            >
               Example Prompt Library
             </h2>
           </div>
@@ -266,14 +349,14 @@ export function StartHereAcademyBody() {
             return (
               <article key={item.id} className={styles.promptCard}>
                 <div className="space-y-1.5">
-                  <span className={pageStyles.chip}>{item.category}</span>
+                  <span className={styles.categoryChip}>{item.category}</span>
                   <h3 className="text-sm font-bold">{item.title}</h3>
                   <p className="text-muted-foreground text-xs leading-relaxed">
                     {item.description}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <Button asChild size="sm" variant="outline">
+                  <Button asChild size="sm" className={styles.brandBtn}>
                     <Link href={href}>
                       <span>Open in Chat</span>
                       <ArrowRightIcon className="size-3.5" />
@@ -282,7 +365,7 @@ export function StartHereAcademyBody() {
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
+                    variant="outline"
                     onClick={() => void handleCopy(item.id, item.prompt)}
                   >
                     <CopyIcon className="size-3.5" />

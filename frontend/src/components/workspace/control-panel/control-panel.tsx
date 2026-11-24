@@ -27,6 +27,10 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pageStyles, StatusTag } from "@/components/workspace/page-body";
 import {
+  BUSINESS_OWNER_LESSONS,
+  readStartHereProgress,
+} from "@/components/workspace/start-here/start-here-data";
+import {
   WorkspaceBody,
   WorkspaceContainer,
   WorkspaceHeader,
@@ -67,6 +71,9 @@ type PortalRoster = {
   workspace_id: string;
   clients: { id: string; name: string }[];
 };
+
+const RING_RADIUS = 26;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 const DELIVERABLE_STATE_LABELS: Record<
   string,
@@ -148,6 +155,9 @@ export function ControlPanelBody() {
   const [checklist, setChecklist] = useState<Record<string, boolean>>(() =>
     readChecklistState(scopeKey),
   );
+  const [academyProgress, setAcademyProgress] = useState<
+    Record<string, boolean>
+  >(() => readStartHereProgress(scopeKey));
   const [actionItems, setActionItems] = useState<LocalActionItem[]>(() =>
     readActionItems(scopeKey),
   );
@@ -155,6 +165,7 @@ export function ControlPanelBody() {
 
   useEffect(() => {
     setChecklist(readChecklistState(scopeKey));
+    setAcademyProgress(readStartHereProgress(scopeKey));
     setActionItems(readActionItems(scopeKey));
   }, [scopeKey]);
 
@@ -176,7 +187,13 @@ export function ControlPanelBody() {
   const checklistPercent = Math.round(
     (completedChecklistCount / DAY_ONE_CHECKLIST.length) * 100,
   );
+  const ringOffset = RING_CIRCUMFERENCE * (1 - checklistPercent / 100);
   const profileComplete = Boolean(checklist["complete-profile"]);
+
+  const completedLessonsCount = BUSINESS_OWNER_LESSONS.filter(
+    (lesson) => academyProgress[lesson.id],
+  ).length;
+  const activeDeliverableCount = deliverablesQuery.data?.length ?? 0;
 
   const toggleChecklist = (id: string) => {
     setChecklist((prev) => {
@@ -236,25 +253,69 @@ export function ControlPanelBody() {
   return (
     <main className={styles.frame} data-testid="client-control-panel">
       <header className={styles.hero}>
-        <div>
-          <p className={pageStyles.eyebrow}>
-            {activeWorkspaceName ?? "Workspace Control Panel"}
-          </p>
-          <h1 className="mt-1">Control Panel</h1>
-          <p className={cn(pageStyles.lede, "mt-1")}>
-            Your workspace home for kickoff progress, weekly deliverables,
-            meeting action plans, and reporting connections. Use Chat whenever
-            you want MomoBot to create or revise an asset.
-          </p>
+        <div className={styles.heroLead}>
+          <div
+            className={styles.progressRingWrap}
+            aria-label={`Kickoff setup ${checklistPercent} percent complete`}
+          >
+            <svg
+              className={styles.progressRingSvg}
+              viewBox="0 0 64 64"
+              aria-hidden="true"
+            >
+              <circle
+                cx="32"
+                cy="32"
+                r={RING_RADIUS}
+                fill="none"
+                stroke="#4A5C50"
+                strokeWidth="6"
+              />
+              <circle
+                cx="32"
+                cy="32"
+                r={RING_RADIUS}
+                fill="none"
+                stroke="#D4F33B"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeDasharray={RING_CIRCUMFERENCE}
+                strokeDashoffset={ringOffset}
+                transform="rotate(-90 32 32)"
+              />
+            </svg>
+            <span className={styles.progressRingLabel}>
+              {checklistPercent}%
+            </span>
+          </div>
+
+          <div className="min-w-0">
+            <p className={styles.heroEyebrow}>
+              <span className={styles.heroDot} aria-hidden="true" />
+              <span>{activeWorkspaceName ?? "Workspace Control Panel"}</span>
+            </p>
+            <h1 className={styles.heroTitle}>Control Panel</h1>
+            <p className={styles.heroLede}>
+              Your workspace home for kickoff progress, weekly deliverables,
+              meeting action plans, and reporting connections. Use Chat whenever
+              you want MomoBot to create or revise an asset.
+            </p>
+          </div>
         </div>
+
         <div className={styles.heroActions}>
-          <Button asChild variant="outline" size="sm">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className={styles.heroBtnSecondary}
+          >
             <Link href="/workspace/start-here">
               <GraduationCapIcon className="size-4" />
               Start Here / Academy
             </Link>
           </Button>
-          <Button asChild size="sm">
+          <Button asChild size="sm" className={styles.heroBtnPrimary}>
             <Link href={openChatHref}>
               <MessageSquarePlusIcon className="size-4" />
               Open Chat
@@ -263,11 +324,73 @@ export function ControlPanelBody() {
         </div>
       </header>
 
-      <section aria-labelledby="create-something-heading">
+      <section
+        className={styles.summaryStrip}
+        aria-label="Workspace readiness summary"
+        data-testid="control-panel-summary"
+      >
+        <div className={styles.summaryTile}>
+          <span className={styles.summaryLabel}>Kickoff Setup</span>
+          <span className={styles.summaryValue}>
+            {completedChecklistCount} / {DAY_ONE_CHECKLIST.length}
+          </span>
+          <span className={styles.summaryMeta}>
+            {profileComplete
+              ? "Business Profile marked complete"
+              : "Start with your Day-1 checklist"}
+          </span>
+        </div>
+
+        <div className={styles.summaryTile}>
+          <span className={styles.summaryLabel}>Active Deliverables</span>
+          <span className={styles.summaryValue}>
+            {deliverablesQuery.isLoading
+              ? "Checking..."
+              : activeDeliverableCount === 0
+                ? "None queued"
+                : `${activeDeliverableCount} active`}
+          </span>
+          <Link href="/workspace/inbox" className={styles.summaryLink}>
+            Open Client Inbox
+            <ArrowRightIcon className="size-3.5" />
+          </Link>
+        </div>
+
+        <div className={styles.summaryTile}>
+          <span className={styles.summaryLabel}>Tutorial &amp; Academy</span>
+          <span className={styles.summaryValue}>
+            {completedLessonsCount} / {BUSINESS_OWNER_LESSONS.length} lessons
+          </span>
+          <Link href="/workspace/start-here" className={styles.summaryLink}>
+            Open Start Here / Academy
+            <ArrowRightIcon className="size-3.5" />
+          </Link>
+        </div>
+
+        <div className={styles.summaryTile}>
+          <span className={styles.summaryLabel}>Reporting Access</span>
+          <span className={styles.summaryValue}>
+            {REPORTING_CONNECTIONS.length} channels ready
+          </span>
+          <button
+            type="button"
+            className={styles.summaryLink}
+            onClick={() => setActiveTab("reporting")}
+          >
+            Review connection status
+            <ArrowRightIcon className="size-3.5" />
+          </button>
+        </div>
+      </section>
+
+      <section
+        className={styles.sectionShell}
+        aria-labelledby="create-something-heading"
+      >
         <div className={styles.sectionHeader}>
           <div>
             <p className={pageStyles.eyebrow}>1-Click Workflows</p>
-            <h2 id="create-something-heading" className="mt-0.5 text-xl">
+            <h2 id="create-something-heading" className={styles.sectionHeading}>
               Create Something
             </h2>
           </div>
@@ -288,9 +411,9 @@ export function ControlPanelBody() {
               <article key={card.id} className={styles.actionCard}>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className={pageStyles.chip}>{card.category}</span>
+                    <span className={styles.categoryChip}>{card.category}</span>
                     <SparklesIcon
-                      className="text-primary size-4 shrink-0"
+                      className="size-4 shrink-0 text-[#1F7A66] dark:text-[#33A98F]"
                       aria-hidden="true"
                     />
                   </div>
@@ -305,7 +428,10 @@ export function ControlPanelBody() {
                     asChild
                     size="sm"
                     variant="outline"
-                    className="w-full justify-between"
+                    className={cn(
+                      styles.brandActionBtn,
+                      "w-full justify-between",
+                    )}
                   >
                     <Link href={href}>
                       <span>Start in Chat</span>
@@ -322,14 +448,18 @@ export function ControlPanelBody() {
       <section aria-label="Workspace sections">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
           <TabsList className={styles.tabsList}>
-            <TabsTrigger value="kickoff">Kickoff &amp; Roadmap</TabsTrigger>
-            <TabsTrigger value="weekly">
+            <TabsTrigger value="kickoff" className={styles.tabTrigger}>
+              Kickoff &amp; Roadmap
+            </TabsTrigger>
+            <TabsTrigger value="weekly" className={styles.tabTrigger}>
               Weekly Plan &amp; Approvals
             </TabsTrigger>
-            <TabsTrigger value="meetings">
+            <TabsTrigger value="meetings" className={styles.tabTrigger}>
               Meetings &amp; Action Plans
             </TabsTrigger>
-            <TabsTrigger value="reporting">Results &amp; Reporting</TabsTrigger>
+            <TabsTrigger value="reporting" className={styles.tabTrigger}>
+              Results &amp; Reporting
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="kickoff" className="space-y-4">
@@ -338,7 +468,9 @@ export function ControlPanelBody() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className={pageStyles.eyebrow}>Guided Day-1 Setup</p>
-                    <h2 className="mt-0.5 text-lg">Setup Checklist</h2>
+                    <h2 className="mt-0.5 text-lg font-bold">
+                      Setup Checklist
+                    </h2>
                   </div>
                   <span
                     className={cn(
@@ -360,14 +492,14 @@ export function ControlPanelBody() {
                     const checked = Boolean(checklist[item.id]);
                     return (
                       <li key={item.id} className={styles.checklistRow}>
-                        <div className="flex min-w-0 items-start gap-2.5">
+                        <div className="flex min-w-0 flex-1 items-start gap-2.5">
                           <button
                             type="button"
                             role="checkbox"
                             aria-checked={checked}
                             aria-label={item.title}
                             onClick={() => toggleChecklist(item.id)}
-                            className="text-primary mt-0.5 shrink-0 cursor-pointer"
+                            className={styles.checkButton}
                           >
                             {checked ? (
                               <CheckCircle2Icon className="size-4" />
@@ -433,14 +565,21 @@ export function ControlPanelBody() {
                       {profileComplete ? "Profile captured" : "Needs profile"}
                     </StatusTag>
                   </div>
-                  <h2 className="mt-1 text-lg">Business Profile Status</h2>
+                  <h2 className="mt-1 text-lg font-bold">
+                    Business Profile Status
+                  </h2>
                   <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">
                     {profileComplete
                       ? "Your Day-1 profile step is marked complete. Update it anytime in Chat when your offers or service area change."
                       : "Start with a 3-minute guided interview so MomoBot knows your services, local market, tone, and goals."}
                   </p>
                   <div className="mt-3">
-                    <Button asChild size="sm" variant="outline">
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className={styles.brandActionBtn}
+                    >
                       <Link
                         href={buildChatPromptHref({
                           isClient,
@@ -463,7 +602,9 @@ export function ControlPanelBody() {
                     />
                     <p className={pageStyles.eyebrow}>Who&apos;s Doing What</p>
                   </div>
-                  <h2 className="mt-1 text-lg">Workspace Team Roles</h2>
+                  <h2 className="mt-1 text-lg font-bold">
+                    Workspace Team Roles
+                  </h2>
                   <dl className="mt-3 space-y-3">
                     {WORKSPACE_TEAM_ROLES.map((entry) => (
                       <div
@@ -488,14 +629,11 @@ export function ControlPanelBody() {
 
             <div className={styles.sheetCard}>
               <p className={pageStyles.eyebrow}>Growth Sequence</p>
-              <h2 className="mt-0.5 text-lg">Phase Roadmap</h2>
+              <h2 className="mt-0.5 text-lg font-bold">Phase Roadmap</h2>
               <div className={cn(styles.roadmapGrid, "mt-3")}>
                 {KICKOFF_ROADMAP_PHASES.map((phase) => (
-                  <div
-                    key={phase.id}
-                    className="bg-background/60 rounded-md border p-4"
-                  >
-                    <span className={pageStyles.chip}>{phase.phase}</span>
+                  <div key={phase.id} className={styles.roadmapCard}>
+                    <span className={styles.categoryChip}>{phase.phase}</span>
                     <h3 className="mt-2 text-sm font-bold">{phase.title}</h3>
                     <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
                       {phase.summary}
@@ -517,7 +655,7 @@ export function ControlPanelBody() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className={pageStyles.eyebrow}>Active Deliverables</p>
-                    <h2 className="mt-0.5 text-lg">
+                    <h2 className="mt-0.5 text-lg font-bold">
                       Weekly Plan &amp; Requests
                     </h2>
                   </div>
@@ -555,7 +693,7 @@ export function ControlPanelBody() {
                     })}
                   </ul>
                 ) : (
-                  <div className="bg-muted/40 mt-4 rounded-md border border-dashed p-5">
+                  <div className={styles.emptySurface}>
                     <p className="text-sm font-semibold">
                       No active deliverables queued yet
                     </p>
@@ -565,7 +703,12 @@ export function ControlPanelBody() {
                       above, or open Client Inbox to submit a request.
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Button asChild size="sm" variant="outline">
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        className={styles.brandActionBtn}
+                      >
                         <Link
                           href={buildChatPromptHref({
                             isClient,
@@ -586,7 +729,9 @@ export function ControlPanelBody() {
 
               <div className={styles.sheetCard}>
                 <p className={pageStyles.eyebrow}>Approvals &amp; Cadence</p>
-                <h2 className="mt-0.5 text-lg">Review Before Publishing</h2>
+                <h2 className="mt-0.5 text-lg font-bold">
+                  Review Before Publishing
+                </h2>
                 <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">
                   Nothing publishes to your live site, ads, or social channels
                   without explicit approval. Use these shortcuts to review
@@ -643,14 +788,14 @@ export function ControlPanelBody() {
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className={pageStyles.eyebrow}>Call Recaps</p>
-                    <h2 className="mt-0.5 text-lg">
+                    <h2 className="mt-0.5 text-lg font-bold">
                       Meetings &amp; Call Notes
                     </h2>
                   </div>
                   <StatusTag tone="idle">Not connected</StatusTag>
                 </div>
                 <div
-                  className="bg-muted/40 mt-4 rounded-md border border-dashed p-5"
+                  className={styles.emptySurface}
                   data-testid="meetings-empty-state"
                 >
                   <div className="flex items-start gap-3">
@@ -668,7 +813,12 @@ export function ControlPanelBody() {
                         generate a structured recap and owner action plan.
                       </p>
                       <div className="mt-3">
-                        <Button asChild size="sm" variant="outline">
+                        <Button
+                          asChild
+                          size="sm"
+                          variant="outline"
+                          className={styles.brandActionBtn}
+                        >
                           <Link
                             href={buildChatPromptHref({
                               isClient,
@@ -687,7 +837,7 @@ export function ControlPanelBody() {
 
               <div className={styles.sheetCard}>
                 <p className={pageStyles.eyebrow}>Follow-Through</p>
-                <h2 className="mt-0.5 text-lg">Open Action Items</h2>
+                <h2 className="mt-0.5 text-lg font-bold">Open Action Items</h2>
                 <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
                   Track real follow-ups from your calls right here. Items save
                   locally in your browser for this workspace.
@@ -725,7 +875,7 @@ export function ControlPanelBody() {
                           className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"
                         >
                           {item.done ? (
-                            <CheckCircle2Icon className="text-primary size-4 shrink-0" />
+                            <CheckCircle2Icon className="size-4 shrink-0 text-[#1F7A66] dark:text-[#33A98F]" />
                           ) : (
                             <CircleIcon className="text-muted-foreground size-4 shrink-0" />
                           )}
@@ -760,7 +910,9 @@ export function ControlPanelBody() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className={pageStyles.eyebrow}>Lead &amp; Channel Proof</p>
-                  <h2 className="mt-0.5 text-lg">Results &amp; Reporting</h2>
+                  <h2 className="mt-0.5 text-lg font-bold">
+                    Results &amp; Reporting
+                  </h2>
                   <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
                     Live spend, traffic, and lead match-back metrics appear once
                     your channels are connected. No placeholder or estimated KPI
@@ -768,13 +920,18 @@ export function ControlPanelBody() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button asChild size="sm">
+                  <Button asChild size="sm" className={styles.heroBtnPrimary}>
                     <Link href="/workspace/reports">
                       <BarChart3Icon className="size-4" />
                       Open Reports &amp; Leads
                     </Link>
                   </Button>
-                  <Button asChild size="sm" variant="outline">
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="outline"
+                    className={styles.brandActionBtn}
+                  >
                     <Link
                       href={buildChatPromptHref({
                         isClient,
