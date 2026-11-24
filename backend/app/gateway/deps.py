@@ -562,6 +562,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             from deerflow.persistence.fleet import FleetBindingRepository
             from deerflow.persistence.mcp_tasks import McpTaskRepository
             from deerflow.persistence.projects import ProjectDocumentRepository, ProjectRepository
+            from deerflow.persistence.reports import ReportsRepository
             from deerflow.persistence.scheduled_task_runs import (
                 ScheduledTaskRunRepository,
             )
@@ -579,6 +580,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.academy_progress_repo = AcademyProgressRepository(sf)
             app.state.fleet_binding_repo = FleetBindingRepository(sf)
             app.state.pending_action_repo = PendingActionRepository(sf)
+            app.state.reports_repo = ReportsRepository(sf)
             app.state.scheduled_task_repo = ScheduledTaskRepository(
                 sf,
                 run_repository=app.state.run_store,
@@ -600,6 +602,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.entitlement_repo = None
             app.state.academy_progress_repo = None
             app.state.pending_action_repo = None
+            app.state.reports_repo = None
             app.state.subagent_batch_repo = None
             app.state.scheduled_task_repo = None
             app.state.scheduled_task_run_repo = None
@@ -720,6 +723,7 @@ get_entitlement_repo = _require("entitlement_repo", "Entitlement")
 get_academy_progress_repo = _require("academy_progress_repo", "Academy")
 get_fleet_binding_repo = _require("fleet_binding_repo", "Fleet")
 get_pending_action_repo = _require("pending_action_repo", "Approvals")
+get_reports_repo = _require("reports_repo", "Reports")
 
 
 def get_store(request: Request):

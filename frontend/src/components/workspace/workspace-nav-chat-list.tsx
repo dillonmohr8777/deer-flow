@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BarChart3,
   BotIcon,
   GraduationCap,
   Info,
@@ -186,6 +187,17 @@ export function WorkspaceNavChatList() {
               <Link className="text-muted-foreground" href="/workspace/inbox">
                 <Inbox />
                 <span>Client inbox</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname.startsWith("/workspace/reports")}
+              asChild
+            >
+              <Link className="text-muted-foreground" href="/workspace/reports">
+                <BarChart3 />
+                <span>Reports &amp; Leads</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

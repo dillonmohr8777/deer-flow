@@ -185,6 +185,7 @@ describe("the client sidebar", () => {
     expect(screen.getByText("The Momo Daily")).not.toBeNull();
     for (const name of [
       "Approvals",
+      "Reports & Leads",
       "Command Center",
       "OpenAI crew",
       "Workflows",
@@ -243,6 +244,7 @@ describe("the internal sidebar", () => {
       const links = hrefs(container);
       for (const href of [
         "/workspace/agents/momobot-max/chats/new",
+        "/workspace/reports",
         "/workspace/scheduled-tasks",
         "/workspace/chats",
         // Oct 24: everyone on the team approves their own sends here.

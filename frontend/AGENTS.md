@@ -434,3 +434,5 @@ fallback; `core/agents/hooks.dom.test.tsx` and `agents-feature-disabled.spec.ts`
 cover discovery, disabled results and recovery.
 
 Resolved clients may use the workspace picker for their private legacy chats. Gateway membership gates list/select. Keep private and dedicated searches separate; never infer shared legacy ownership.
+
+`/workspace/reports` renders the staff-only workspace Reports & Leads screen (`components/workspace/reports/`, `core/reports/`). Query keys include the authenticated user and active workspace ID; pending or unavailable feeds render explicit `Pending` / `Unavailable` labels rather than `0`, named-lead match-back rows use a container-query responsive table, and Google Doc review attachments defer validation feedback until blur/submit. Unit and DOM coverage live in `tests/unit/components/workspace/reports-data.test.ts` and `reports.dom.test.tsx`.
