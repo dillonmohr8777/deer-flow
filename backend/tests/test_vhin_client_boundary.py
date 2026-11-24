@@ -20,15 +20,75 @@ def extension_route_calls():
     service = Service({"data_dir": "/synthetic-placement", "organization_id": "placement", "allowed_user_ids": ["owner"], "placement_confirmer_user_ids": ["owner"]})
     for route in build_router(service).routes:
         if isinstance(route, APIRoute):
-            path = route.path.replace("{state}", "FL").replace("{asset:path}", "index.html")
+            path = route.path.replace("{state}", "FL").replace("{asset:path}", "index.html").replace("{day}", "7").replace("{audience}", "family")
             path = re.sub(r"\{[^}]+\}", "x", path)
             for method in route.methods - {"HEAD", "OPTIONS"}:
                 yield method, path
 
 
+def test_public_monday_pulse_route_works_without_session_cookie_and_validates_hmac(tmp_path, monkeypatch):
+    from types import SimpleNamespace as _NS
+
+    from app.gateway.app import create_app
+    from app.gateway.routers import vhin_pulse
+
+    monkeypatch.setenv("VHIN_PULSE_SECRET", "test-only")
+    monkeypatch.delenv("DEER_FLOW_AUTH_DISABLED", raising=False)
+    service = Service(
+        {
+            "data_dir": str(tmp_path),
+            "organization_id": "placement",
+            "allowed_user_ids": ["owner"],
+            "placement_confirmer_user_ids": ["owner"],
+        }
+    )
+    service.ready = True
+    # Seed one contracted community directly via store
+    from vhin_placement.api import create_record
+    from vhin_placement.pulse import create_pulse_token
+    from vhin_placement.store import now, put
+
+    store = service.store_for("owner")
+    with store.transaction() as conn:
+        home = put(
+            conn,
+            "community",
+            create_record({"name": "Synthetic Pulse Home", "city": "Brandon", "category": "Assisted Living Facility", "contract_status": "contracted"}),
+        )
+    token, _, _ = create_pulse_token(home["id"], "test-only", now())
+
+    app = create_app()
+    app.state.extensions = _NS(services=(service,))
+    app.include_router(vhin_pulse.router)
+    client = TestClient(app)  # ZERO session cookies, ZERO CSRF header
+
+    get_res = client.get(f"/api/public/vhin-pulse/{token}")
+    assert get_res.status_code == 200
+    assert "Synthetic Pulse Home" in get_res.text
+    assert "Available Private Rooms" in get_res.text
+    assert "Available Semi-Private Rooms (Male)" in get_res.text
+    assert "Available Semi-Private Rooms (Female)" in get_res.text
+
+    bad_sig = client.get(f"/api/public/vhin-pulse/{token[:-4]}AAAA")
+    assert bad_sig.status_code == 400
+
+    post_res = client.post(
+        f"/api/public/vhin-pulse/{token}",
+        data={
+            "private_rooms": "1",
+            "semi_private_male_rooms": "0",
+            "semi_private_female_rooms": "2",
+            "rate_changed": "yes",
+            "rate_change_note": "Private suites +$200/mo",
+        },
+    )
+    assert post_res.status_code == 200
+    assert "Thank you, Synthetic Pulse Home is updated" in post_res.text
+
+
 def test_optional_placement_route_inventory_is_explicitly_admitted():
     calls = list(extension_route_calls())
-    assert len(calls) == 23
+    assert len(calls) == 29
     assert all(is_client_allowed_route(method, path) for method, path in calls)
 
 

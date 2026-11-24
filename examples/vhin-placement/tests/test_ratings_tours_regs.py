@@ -68,40 +68,46 @@ def verify(client, community_id, vacancies):
 # ---------------------------------------------------------------- star ratings
 
 
-def test_stars_need_contract_and_owner(owner, coordinator):
+def test_stars_require_owner_and_work_independent_of_contract(owner, coordinator):
     home = add_community(owner, "Synthetic Oaks")
     assert home["contract_status"] == "not_contracted"
+    assert home["contracted"] is False
+    assert "UNCONTRACTED" in home["contract_warning"]
     assert home["owner_rating"] == {"stars": None, "label": "Not yet rated by the owner"}
-    early = post(owner, f"/communities/{home['id']}/rating", {"stars": 3})
-    assert early.status_code == 409 and "contracted" in early.json()["detail"]
-    assert post(coordinator, f"/communities/{home['id']}/contract", {"status": "contracted", "agreement_ref": "x", "human_confirmed": True}).status_code == 403
-    assert post(owner, f"/communities/{home['id']}/contract", {"status": "contracted", "human_confirmed": True}).status_code == 422
-    assert contract(owner, home["id"]).status_code == 200
-    assert post(coordinator, f"/communities/{home['id']}/rating", {"stars": 2}).status_code == 403
+    # Coordinator cannot rate or set contract; owner can rate BEFORE contracting.
+    assert post(coordinator, f"/communities/{home['id']}/rating", {"stars": 3}).status_code == 403
     for bad in (0, 4, 5, "3", 2.5):
         assert post(owner, f"/communities/{home['id']}/rating", {"stars": bad}).status_code == 422, bad
-    rated = post(owner, f"/communities/{home['id']}/rating", {"stars": 2, "note": "Clean, responsive staff"})
-    assert rated.status_code == 200, rated.text
-    assert rated.json()["owner_rating"]["label"] == "2 of 3 stars"
-    assert rated.json()["owner_rating"]["rated_by"] == "owner"
+    rated_before_contract = post(owner, f"/communities/{home['id']}/rating", {"stars": 2, "note": "Clean, responsive staff"})
+    assert rated_before_contract.status_code == 200, rated_before_contract.text
+    assert rated_before_contract.json()["owner_rating"]["label"] == "2 of 3 stars"
+    assert rated_before_contract.json()["owner_rating"]["note"] == "Clean, responsive staff"
+    assert rated_before_contract.json()["owner_rating"]["rated_by"] == "owner"
+    assert post(coordinator, f"/communities/{home['id']}/contract", {"status": "contracted", "agreement_ref": "x", "human_confirmed": True}).status_code == 403
+    assert post(owner, f"/communities/{home['id']}/contract", {"status": "contracted", "human_confirmed": True}).status_code == 422
+    contracted = contract(owner, home["id"])
+    assert contracted.status_code == 200
+    assert contracted.json()["contract_warning"] is None
+    assert contracted.json()["owner_rating"]["stars"] == 2
     state = coordinator.get("/api/vhin/state").json()
     assert state["communities"][0]["owner_rating"]["stars"] == 2  # the coordinator sees the same record
     assert any(event["action"].startswith("community.rating") for event in state["audit"])
 
 
-def test_stars_clear_when_contract_ends(owner):
+def test_stars_persist_when_contract_ends(owner):
     home = add_community(owner, "Synthetic Pines")
     contract(owner, home["id"])
-    post(owner, f"/communities/{home['id']}/rating", {"stars": 3})
+    post(owner, f"/communities/{home['id']}/rating", {"stars": 3, "note": "Great tour"})
     ended = contract(owner, home["id"], status="not_contracted", ref=None)
     assert ended.status_code == 200
-    assert ended.json()["owner_rating"]["stars"] is None
+    assert ended.json()["owner_rating"]["stars"] == 3
+    assert "UNCONTRACTED" in ended.json()["contract_warning"]
 
 
 # ---------------------------------------------------------------- recommendations
 
 
-def test_top_three_fit_first_then_openings_distance_and_stars(owner):
+def test_top_three_contract_first_then_owner_stars_openings_and_distance(owner):
     add_community(owner, "Near Unrated", miles=1.0)
     far_three = add_community(owner, "Far Three Star", miles=9.0)
     mid_one = add_community(owner, "Mid One Star", miles=4.0)
@@ -117,15 +123,20 @@ def test_top_three_fit_first_then_openings_distance_and_stars(owner):
 
     result = owner.get("/api/vhin/recommendations", params={"city": "Brandon", "services": "assisted"}).json()
     names = [r["name"] for r in result["recommendations"]]
-    # confirmed openings first, then nearest; a verified-full home falls to the back
-    assert names == ["Far Three Star", "Near Unrated", "Mid One Star"]
+    # Contracted homes rank first (ordered by 1-3 star rating desc), then uncontracted (flagged).
+    assert names == ["Far Three Star", "Mid One Star", "Near Unrated"]
     assert len(names) == 3 and result["fit_count"] == 5
     by_name = {r["name"]: r for r in result["recommendations"]}
     assert by_name["Far Three Star"]["owner_rating"]["label"] == "3 of 3 stars"
+    assert by_name["Far Three Star"]["contract_warning"] is None
     assert by_name["Mid One Star"]["owner_rating"]["label"] == "1 of 3 stars"
     assert by_name["Near Unrated"]["owner_rating"]["label"] == "Not yet rated by the owner"
+    assert "UNCONTRACTED" in by_name["Near Unrated"]["contract_warning"]
     assert "current vacancy" in by_name["Near Unrated"]["checks_needed"]
     assert "current vacancy" not in by_name["Far Three Star"]["checks_needed"]
+
+    contracted_only = owner.get("/api/vhin/recommendations", params={"city": "Brandon", "contracted_only": "true"}).json()
+    assert [r["name"] for r in contracted_only["recommendations"]] == ["Far Three Star", "Mid One Star"]
 
     capped = owner.get("/api/vhin/recommendations", params={"max_miles": 5}).json()
     assert unknown_distance["id"] not in [r["id"] for r in capped["recommendations"]]
@@ -137,7 +148,6 @@ def test_stars_break_ties_but_never_outrank_fit(owner):
     a = add_community(owner, "Same Miles A", miles=3.0)
     b = add_community(owner, "Same Miles B", miles=3.0)
     add_community(owner, "Five Star Elsewhere", city="Tampa", miles=3.0)
-    contract(owner, b["id"])
     post(owner, f"/communities/{b['id']}/rating", {"stars": 3})
     names = [r["name"] for r in owner.get("/api/vhin/recommendations", params={"city": "Brandon"}).json()["recommendations"]]
     assert names == ["Same Miles B", "Same Miles A"]

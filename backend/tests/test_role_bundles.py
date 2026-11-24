@@ -15,7 +15,7 @@ EXPECTED_IDENTITIES = {
     "mac-frederick": "Mac Frederick",
     "jason-fallon": "Jason Fallon",
     "melissa-silber": "Melissa Silber",
-    "vhin-justin-grace": "VHIN Cares workflow for Justin Micheau + Grace Slagle",
+    "vhin-justin-grace": "VHIN Cares placement workflow for Justin Micheau",
 }
 EXPECTED_ROLE_IDS = set(EXPECTED_IDENTITIES)
 EXPECTED_SCENARIOS = {

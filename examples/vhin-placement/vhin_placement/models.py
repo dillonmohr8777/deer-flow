@@ -7,6 +7,9 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, Stric
 
 Text = Annotated[str, Field(min_length=1, max_length=2000)]
 Money = Annotated[StrictInt, Field(ge=1, le=100_000_000)]
+RoomVacancyBucket = Literal["0", "1", "2", "3", "4", "5+"]
+PulseChannel = Literal["email", "sms", "both"]
+SourceKind = Literal["florida_health_finder", "owner_added", "master_sheet"]
 
 
 def check_email(value):
@@ -87,21 +90,68 @@ class Community(Input):
     name: Name
     city: Text
     services: Annotated[list[Annotated[str, Field(min_length=1, max_length=100)]], Field(max_length=50)] = []
+    care_levels: Annotated[list[Annotated[str, Field(min_length=1, max_length=100)]], Field(max_length=20)] = []
     licensed_beds: Annotated[StrictInt, Field(ge=0, le=10000)] | None = None
-    source_url: HttpUrl
-    observed_at: AwareDatetime
+    source_url: HttpUrl | None = None
+    observed_at: AwareDatetime | None = None
+    source_kind: SourceKind = "owner_added"
+    ahca_license: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    address: Annotated[str, Field(min_length=1, max_length=300)] | None = None
     category: Annotated[str, Field(min_length=1, max_length=100)] | None = None
     miles_from_office: Annotated[float, Field(ge=0, le=500)] | None = None
+    private_rate_range: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    semi_private_rate_range: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    community_fee: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    accepts_medicaid: bool | None = None
+    accepts_va: bool | None = None
+    vhin_owned: bool = False
     contact_name: Name | None = None
     contact_email: Annotated[str, Field(max_length=254)] | None = None
     contact_phone: Annotated[str, Field(max_length=40)] | None = None
+    contact_sms_phone: Annotated[str, Field(max_length=40)] | None = None
+    preferred_pulse_channel: PulseChannel = "email"
 
     @field_validator("contact_email")
     @classmethod
     def valid_contact_email(cls, value):
         return check_email(value)
 
-    @field_validator("contact_phone")
+    @field_validator("contact_phone", "contact_sms_phone")
+    @classmethod
+    def valid_contact_phone(cls, value):
+        return check_phone(value)
+
+
+class CommunityPatch(Input):
+    """Update operational community metadata without clobbering ratings, contracts, or availability."""
+
+    city: Text | None = None
+    services: Annotated[list[Annotated[str, Field(min_length=1, max_length=100)]], Field(max_length=50)] | None = None
+    care_levels: Annotated[list[Annotated[str, Field(min_length=1, max_length=100)]], Field(max_length=20)] | None = None
+    licensed_beds: Annotated[StrictInt, Field(ge=0, le=10000)] | None = None
+    source_url: HttpUrl | None = None
+    ahca_license: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    address: Annotated[str, Field(min_length=1, max_length=300)] | None = None
+    category: Annotated[str, Field(min_length=1, max_length=100)] | None = None
+    miles_from_office: Annotated[float, Field(ge=0, le=500)] | None = None
+    private_rate_range: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    semi_private_rate_range: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    community_fee: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    accepts_medicaid: bool | None = None
+    accepts_va: bool | None = None
+    vhin_owned: bool | None = None
+    contact_name: Name | None = None
+    contact_email: Annotated[str, Field(max_length=254)] | None = None
+    contact_phone: Annotated[str, Field(max_length=40)] | None = None
+    contact_sms_phone: Annotated[str, Field(max_length=40)] | None = None
+    preferred_pulse_channel: PulseChannel | None = None
+
+    @field_validator("contact_email")
+    @classmethod
+    def valid_contact_email(cls, value):
+        return check_email(value)
+
+    @field_validator("contact_phone", "contact_sms_phone")
     @classmethod
     def valid_contact_phone(cls, value):
         return check_phone(value)
@@ -122,10 +172,55 @@ class ContractUpdate(Input):
 
 
 class Rating(Input):
-    """The owner's own 1 to 3 star rating, only for communities they have contracted."""
+    """The owner's own private 1 to 3 star in-person tour rating (independent of contract status)."""
 
     stars: Annotated[StrictInt, Field(ge=1, le=3)]
-    note: Annotated[str, Field(max_length=500)] = ""
+    note: Annotated[str, Field(max_length=1000)] = ""
+
+
+class PulseSubmission(Input):
+    """Weekly Monday zero-typing vacancy pulse submitted by a contracted ALF/AFCH/Memory Care home."""
+
+    private_rooms: RoomVacancyBucket
+    semi_private_male_rooms: RoomVacancyBucket
+    semi_private_female_rooms: RoomVacancyBucket
+    rate_changed: bool = False
+    rate_change_note: Annotated[str, Field(max_length=500)] = ""
+
+    @model_validator(mode="after")
+    def clear_note_when_unchanged(self):
+        if not self.rate_changed:
+            self.rate_change_note = ""
+        return self
+
+
+class DirectorySyncItem(Input):
+    """One public Florida Health Finder directory row for non-destructive monthly upsert."""
+
+    name: Name
+    city: Text
+    category: Annotated[str, Field(min_length=1, max_length=100)] | None = None
+    licensed_beds: Annotated[StrictInt, Field(ge=0, le=10000)] | None = None
+    ahca_license: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    address: Annotated[str, Field(min_length=1, max_length=300)] | None = None
+    miles_from_office: Annotated[float, Field(ge=0, le=500)] | None = None
+    contact_phone: Annotated[str, Field(max_length=40)] | None = None
+    source_url: HttpUrl | None = None
+    services: Annotated[list[Annotated[str, Field(min_length=1, max_length=100)]], Field(max_length=50)] = []
+    care_levels: Annotated[list[Annotated[str, Field(min_length=1, max_length=100)]], Field(max_length=20)] = []
+
+    @field_validator("contact_phone")
+    @classmethod
+    def valid_contact_phone(cls, value):
+        return check_phone(value)
+
+
+class DirectorySyncRequest(Input):
+    """Monthly or on-demand Florida Health Finder batch refresh (never overwrites owner ratings/contracts/custom homes)."""
+
+    source_label: Annotated[str, Field(min_length=1, max_length=120)] = "florida_health_finder"
+    observed_at: AwareDatetime | None = None
+    items: Annotated[list[DirectorySyncItem], Field(min_length=1, max_length=2000)]
 
 
 class TourPlan(Input):
@@ -213,6 +308,13 @@ class LedgerEntry(Input):
     receipt_ref: Text
 
 
+class CheckinUpdate(Input):
+    """Mark one post-placement Day 7/30/60 draft check-in complete or skipped (never auto-sends)."""
+
+    status: Literal["completed", "skipped"]
+    note: Annotated[str, Field(max_length=500)] = ""
+
+
 def contacts(record):
     phone = "".join(filter(str.isdigit, record.get("phone") or ""))
     if len(phone) == 11 and phone.startswith("1"):
@@ -221,17 +323,15 @@ def contacts(record):
 
 
 def missing_info(record):
-    missing = [key for key in ("responsible_contact", "location", "budget_cents", "care_needs", "timing") if not record.get(key)]
+    missing = [name for name in ("location", "budget_cents", "care_needs", "timing") if record.get(name) is None]
     if not contacts(record):
         missing.append("phone_or_email")
     preference = record.get("contact_preference", "none")
-    if preference == "none":
+    if preference == "none" or not record.get(preference):
         missing.append("contact_preference")
-    elif not record.get(preference):
-        missing.append(preference)
     return missing
 
 
-def before_now(value: datetime, now: datetime):
-    if value > now:
-        raise ValueError("observation or verification cannot be in the future")
+def before_now(stamp: datetime, current: datetime):
+    if stamp > current:
+        raise ValueError("timestamp cannot be in the future")
