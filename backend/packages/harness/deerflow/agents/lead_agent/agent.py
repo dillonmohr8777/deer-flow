@@ -1032,6 +1032,22 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
 
     if tool_names is not None and matching_client_work_plan_access(cfg) is not None:
         tool_names = [*tool_names, *CLIENT_WORK_PLAN_TOOL_NAMES]
+    if cfg.get(CLIENT_WORKSPACE_CEILING_KEY) is True and tool_names is not None and not is_bootstrap and not cfg.get("channel_name"):
+        from deerflow.extensions import get_agent_build_extensions, resolve_run_extensions
+        from deerflow.extensions.plugin_tools import plugin_tool_name
+
+        loaded_ext = resolve_run_extensions(cfg) or get_agent_build_extensions()
+        org_id = cfg.get("organization_id")
+        actor_id = cfg.get("actor_user_id")
+        if loaded_ext is not None and isinstance(org_id, str) and isinstance(actor_id, str):
+            authorized_namespaces: set[str] = set()
+            for svc in getattr(loaded_ext, "services", ()):
+                if getattr(svc, "organization_id", None) == org_id and actor_id in getattr(svc, "allowed_user_ids", ()):
+                    authorized_namespaces.add("vhin")
+            if authorized_namespaces:
+                for _source, plugin in getattr(loaded_ext, "plugins", ()):
+                    if plugin.namespace in authorized_namespaces and plugin.tools:
+                        tool_names = [*tool_names, *(plugin_tool_name(plugin.namespace, decl.name) for decl in plugin.tools)]
     public_news_channel = cfg.get("public_news_channel") is True
     if public_news_channel:
         if is_bootstrap or agent_name != "ai-tech-news" or agent_config is None:

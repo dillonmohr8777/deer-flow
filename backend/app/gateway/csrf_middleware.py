@@ -54,9 +54,9 @@ def should_check_csrf(request: Request) -> bool:
     # Exempt host-owned endpoints that implement their own request posture.
     if path in _CSRF_EXEMPT_EXACT_PATHS:
         return False
-    # Inbound webhooks authenticate themselves via provider-specific signatures
-    # (e.g. GitHub's X-Hub-Signature-256), not the CSRF double-submit cookie.
-    if route_path.startswith("/api/webhooks/"):
+    # Inbound webhooks and signed public facility pulse forms authenticate via
+    # HMAC signatures, not the CSRF double-submit cookie.
+    if route_path.startswith(("/api/webhooks/", "/api/public/vhin-pulse/")):
         return False
     return True
 

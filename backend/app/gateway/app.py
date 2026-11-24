@@ -67,6 +67,7 @@ from app.gateway.routers import (
     trash,
     uploads,
     user_preferences,
+    vhin_pulse,
     workflows,
     workspace_branding,
     workspaces,
@@ -1500,6 +1501,10 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
         logger.info("GitHub webhooks route mounted at /api/webhooks/github")
     else:
         logger.warning("GitHub webhooks route NOT mounted: GITHUB_WEBHOOK_SECRET unset and DEER_FLOW_ALLOW_UNVERIFIED_GITHUB_WEBHOOKS not set. /api/webhooks/github will respond 404. Configure either env var to enable the route.")
+
+    if vhin_pulse.is_route_enabled():
+        app.include_router(vhin_pulse.router)
+        logger.info("VHIN public Monday facility pulse route mounted at /api/public/vhin-pulse/{token}")
 
     @app.get("/health", tags=["health"])
     async def health_check() -> dict[str, str]:

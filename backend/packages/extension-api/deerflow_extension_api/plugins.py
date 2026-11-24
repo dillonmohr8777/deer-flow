@@ -31,10 +31,12 @@ class ToolContext(ActionContext):
     """Host-bound identity for a model tool call.
 
     Resource ownership remains the plugin provider's responsibility,
-    using principal.user_id.
+    using principal.user_id, actor_user_id, and organization_id.
     """
 
     thread_id: str | None
+    actor_user_id: str | None = None
+    organization_id: str | None = None
 
 
 @dataclass(frozen=True)

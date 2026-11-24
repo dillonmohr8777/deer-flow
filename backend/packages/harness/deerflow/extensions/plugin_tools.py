@@ -70,10 +70,14 @@ def _build_tool(source, plugin, declaration):
             if len(json.dumps(payload, allow_nan=False).encode()) > 256 * 1024 or not validator.is_valid(payload):
                 raise ToolException("Invalid plugin tool input.")
             context = runtime.context if isinstance(runtime.context, Mapping) else {}
+            actor_user_id = context.get("actor_user_id") if isinstance(context.get("actor_user_id"), str) else None
+            organization_id = context.get("organization_id") if isinstance(context.get("organization_id"), str) else None
             tool_context = ToolContext(
                 ExtensionPrincipal(resolve_runtime_user_id(runtime)),
                 MappingProxyType(settings),
                 context.get("thread_id"),
+                actor_user_id=actor_user_id,
+                organization_id=organization_id,
             )
             async with asyncio.timeout(30):
                 result = await declaration.handler(MappingProxyType(payload), tool_context)

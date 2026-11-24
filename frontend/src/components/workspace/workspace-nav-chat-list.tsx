@@ -51,7 +51,13 @@ import { WorkspaceSelector } from "./workspace-selector";
  * subscription), the MomoBot lineup and About, nothing internal. (New chat
  * lives in the sidebar header.)
  */
-function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
+function ClientNavList({
+  showBrandKit,
+  showPlacementDesk,
+}: {
+  showBrandKit: boolean;
+  showPlacementDesk: boolean;
+}) {
   const { t } = useI18n();
   const pathname = usePathname();
   return (
@@ -66,6 +72,18 @@ function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
+
+        {showPlacementDesk && (
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              {/* Served by the gateway placement extension, not Next.js: use a plain anchor for a full page load. */}
+              <a className="text-muted-foreground" href="/api/vhin/dashboard/">
+                <LampDesk />
+                <span>Placement desk</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
 
         <SidebarMenuItem>
           <SidebarMenuButton isActive={pathname === "/workspace/chats"} asChild>
@@ -143,8 +161,16 @@ export function WorkspaceNavChatList() {
     enabled: deskEnabled,
   });
   const waitingCount = deskEnabled ? (waitingApproval.data?.length ?? 0) : 0;
+  const placementDeskAvailable =
+    agentsEnabled && agents.some((agent) => agent.name === "vhin-max-plus");
   if (unresolved) return null;
-  if (isClient) return <ClientNavList showBrandKit={Boolean(brandKit)} />;
+  if (isClient)
+    return (
+      <ClientNavList
+        showBrandKit={Boolean(brandKit)}
+        showPlacementDesk={placementDeskAvailable}
+      />
+    );
   // Oct 22 (Dillon: "too many things on the sidebar ... make it easier"): the
   // team sees MomoBot Max and the everyday pages; admin tools sit in one group.
   return (
