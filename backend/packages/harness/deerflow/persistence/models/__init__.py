@@ -40,6 +40,12 @@ from deerflow.persistence.organizations.invitation import InvitationRow
 from deerflow.persistence.organizations.model import OrganizationDelegationRow, OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.personal_access_tokens.model import PersonalAccessTokenRow
 from deerflow.persistence.projects.model import ProjectDocumentRow, ProjectRow
+from deerflow.persistence.reports.model import (
+    ReportConnectorBindingRow,
+    ReportLeadRecordRow,
+    ReportReviewDocRow,
+    ReportWorkspaceSettingRow,
+)
 from deerflow.persistence.run.model import RunChangeClockRow, RunRow
 from deerflow.persistence.scheduled_task_runs.model import ScheduledTaskRunRow
 from deerflow.persistence.scheduled_tasks.model import ScheduledTaskRow
@@ -80,6 +86,10 @@ __all__ = [
     "PersonalAccessTokenRow",
     "ProjectDocumentRow",
     "ProjectRow",
+    "ReportConnectorBindingRow",
+    "ReportLeadRecordRow",
+    "ReportReviewDocRow",
+    "ReportWorkspaceSettingRow",
     "RunEventRow",
     "RunChangeClockRow",
     "RunRow",

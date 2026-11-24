@@ -182,29 +182,9 @@ More specific `AGENTS.md` files in backend code directories contain the subsyste
 
 ### Harness / App Split
 
-The backend is split into two layers with a strict dependency direction:
-
-- **Harness** (`packages/harness/deerflow/`): Publishable agent framework package (`deerflow-harness`). Import prefix: `deerflow.*`. Contains agent orchestration, tools, sandbox, models, MCP, skills, config — everything needed to build and run agents.
-- **App** (`app/`): Unpublished application code. Import prefix: `app.*`. Contains the FastAPI Gateway API and IM channel integrations (Feishu, Slack, Telegram, DingTalk).
-
-**Dependency rule**: App imports deerflow, but deerflow never imports app. This boundary is enforced by `tests/test_harness_boundary.py` which runs in CI.
-
-**Import conventions**:
-```python
-# Harness internal
-from deerflow.agents import make_lead_agent
-from deerflow.models import create_chat_model
-
-# App internal
-from app.gateway.app import app
-from app.channels.service import start_channel_service
-
-# App → Harness (allowed)
-from deerflow.config import get_app_config
-
-# Harness → App (FORBIDDEN — enforced by test_harness_boundary.py)
-# from app.gateway.routers.uploads import ...  # ← will fail CI
-```
+Two layers with a strict dependency direction (enforced in CI by `tests/test_harness_boundary.py`):
+- **Harness** (`packages/harness/deerflow/`, `deerflow.*`): publishable agent framework (`deerflow-harness` — orchestration, tools, sandbox, models, MCP, skills, config). **Never imports `app.*`.**
+- **App** (`app/`, `app.*`): Gateway API and IM channels (Feishu, Slack, Telegram, DingTalk). Allowed to import `deerflow.*`.
 
 Package import hygiene: the `deerflow.agents` and `deerflow.subagents` package
 roots expose heavyweight graph/executor entrypoints lazily. The
@@ -274,31 +254,7 @@ scheduled-task or subagent completion statuses or create an acceptance gate.
 
 ### Test-Driven Development (TDD) — MANDATORY
 
-**Every new feature or bug fix MUST be accompanied by unit tests. No exceptions.**
-
-- Write tests in `backend/tests/` following the existing naming convention `test_<feature>.py`
-- Run both offline targets before and after your change: `make test` and `make test-blocking-io`
-- Tests must pass before a feature is considered complete
-- For lightweight config/utility modules, prefer pure unit tests with no external dependencies
-- If a module causes circular import issues in tests, add a `sys.modules` mock in `tests/conftest.py` (see existing example for `deerflow.subagents.executor`)
-
-```bash
-# Run default offline tests
-make test
-
-# Run strict blocking-I/O tests
-make test-blocking-io
-
-# Explicit live integration tests (requires config.yaml and credentials;
-# calls real APIs and may create local side effects)
-make test-live
-
-# Run a specific test file
-PYTHONPATH=. uv run pytest tests/test_<feature>.py -v
-```
-
-Keep live tests opt-in via `DEER_FLOW_RUN_LIVE_TESTS=1`; guard POSIX-only
-markers with `os.name` for Windows collection.
+Every feature or bug fix requires unit tests in `backend/tests/test_<feature>.py`. Run `make test` and `make test-blocking-io` before and after changes (single file: `PYTHONPATH=. uv run pytest tests/test_<feature>.py -v`; live tests opt-in via `make test-live` / `DEER_FLOW_RUN_LIVE_TESTS=1`). Prefer pure unit tests with no external dependencies; guard POSIX-only markers with `os.name`; add `sys.modules` mocks in `tests/conftest.py` for circular imports.
 
 Jina logging tests use dummy keys (`tests/test_jina_client.py`).
 Jina/Browserless/InfoQuest resolve URLs without rebuilding HTML.
@@ -325,25 +281,9 @@ Run `make dev` from the repo root to start all services at `http://localhost:202
 - `/api/*` (other) → Gateway API (8001)
 - `/` (non-API) → Frontend (3000)
 
-### Running Backend Services Separately
+### Running Backend Separately & Frontend Env
 
-From the **backend** directory:
-
-```bash
-# Gateway API
-make gateway
-```
-
-Direct access (without nginx):
-- Gateway: `http://localhost:8001`
-
-### Frontend Configuration
-
-The frontend uses environment variables to connect to backend services:
-- `NEXT_PUBLIC_LANGGRAPH_BASE_URL` - Defaults to `/api/langgraph` (through nginx)
-- `NEXT_PUBLIC_BACKEND_BASE_URL` - Defaults to empty string (through nginx)
-
-When using `make dev` from root, the frontend automatically connects through nginx.
+Run `make gateway` from `backend/` for direct Gateway access (`http://localhost:8001`). Frontend defaults route through nginx (`NEXT_PUBLIC_LANGGRAPH_BASE_URL=/api/langgraph`, `NEXT_PUBLIC_BACKEND_BASE_URL=""`).
 
 ## Key Features
 
@@ -457,3 +397,7 @@ work is reused on retry. See `docs/CLIENT_PORTAL.md`. Tests:
 Built-in tool backed by the pure module `deerflow/factcheck/core.py`: extracts numeric, date and named-source claims from an outbound draft and checks each against run evidence (successful tool outputs plus caller-supplied `evidence`). Verdicts: supported (with pointer), contradicted, unsupported, unverifiable. Gate: any contradicted -> `block`, any unsupported/unverifiable -> `flag`, else `pass`. Rules: missing data is never 0, "up/down X%" needs before/after values from one source, platform labels must match the evidence's source. Deterministic first; a model judge runs only for ambiguous claims and only when `use_model=true`. Integrators (e.g. approvals) call `verify_draft(draft, evidence).to_dict()` and refuse to enqueue when `gate == "block"`. Tests: `tests/test_factcheck.py`.
 
 Migration pilot recovery must preserve later unrelated target writes and refuse changed migrated rows or missing write evidence. Keep read-only input/reject reconciliation and fresh-process resume checks in `test_momentum_migration_pilot.py`; see `docs/MIGRATION_PILOT.md`.
+
+## Workspace Reports & Leads (`/api/reports`)
+
+Staff-only, workspace-scoped reporting router (`app/gateway/routers/reports.py`) backed by `deerflow/reports/` (Plane 0 read-only connector adapters + strict schema invariants) and `deerflow/persistence/reports/` (migration `0055_reports_leads`). Every query scopes strictly by the server-resolved active `organization_id` and blocks `client` role callers (403). Verified lead totals are strict integers covering `form`, `call`, and `appointment` only (clicks/impressions/sessions are rejected with 422), and missing or unavailable lead feeds emit `None` totals with explicit `pending`/`unavailable` states rather than zero. Google Doc review attachments validate HTTPS `docs.google.com`/`drive.google.com` URLs and record audit events on create/update. Tests: `tests/test_reports_leads.py`.

@@ -1,0 +1,486 @@
+/*
+ * Reports & Leads workspace view.
+ * Uses semantic theme tokens with MomoBot Paper overrides under
+ * :root:not(.dark)[data-treatment="paper"]. No hard-coded hex values.
+ */
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: var(--container-width-lg, 1024px);
+  margin-inline: auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+@media (min-width: 768px) {
+  .frame {
+    padding: 2rem 2rem 3.5rem;
+  }
+}
+
+.headerRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.workspaceBadge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Asymmetric KPI band: hero Verified Leads sheet + compact split grid */
+.kpiBand {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .kpiBand {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.65fr);
+    align-items: stretch;
+  }
+}
+
+.heroSheet {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1.25rem 1.35rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.heroTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.heroValue {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+:global(:root:not(.dark)[data-treatment="paper"]) .heroValue {
+  font-family: var(--m-font-serif);
+  color: var(--paper-ink);
+}
+
+.heroNote {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--muted-foreground);
+}
+
+.splitGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.splitCell {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 1rem 1.1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  min-width: 0;
+}
+
+.splitValue {
+  font-size: 1.625rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+:global(:root:not(.dark)[data-treatment="paper"]) .splitValue {
+  font-family: var(--m-font-serif);
+  color: var(--paper-ink);
+}
+
+.splitSub {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+/* Main section containers */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.25rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  min-width: 0;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sectionTitle {
+  font-size: 1.25rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+}
+
+/* Responsive data table (modern-web-guidance: responsive-table) */
+.tableWrapper {
+  overflow: auto;
+  max-inline-size: 100%;
+  max-block-size: min(520px, 75vh);
+  container-type: inline-size;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.tableWrapper:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.leadsTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+  --label-2: "Type";
+  --label-3: "Channel";
+  --label-4: "Source";
+  --label-5: "Match-back";
+  --label-6: "Date";
+}
+
+.tableCaption {
+  text-align: left;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+}
+
+.leadsTable thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  background: var(--muted);
+}
+
+.leadsTable thead th {
+  text-align: left;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.leadsTable tbody th,
+.leadsTable tbody td {
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  text-align: left;
+}
+
+.leadsTable tbody th {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--card);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.leadsTable tbody tr:last-child th,
+.leadsTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.leadSubline {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted-foreground);
+  margin-top: 0.15rem;
+}
+
+@container (width < 600px) {
+  .leadsTable,
+  .leadsTable thead,
+  .leadsTable tbody,
+  .leadsTable tr,
+  .leadsTable th,
+  .leadsTable td {
+    display: block;
+  }
+
+  .leadsTable thead {
+    display: none;
+  }
+
+  .leadsTable tbody tr {
+    margin-block-end: 0.85rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .leadsTable tbody th {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 2;
+    background: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .leadsTable tbody td {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-bottom: 1px dashed var(--border);
+  }
+
+  .leadsTable tbody td:nth-child(2)::before {
+    content: var(--label-2) ": ";
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+
+  .leadsTable tbody td:nth-child(3)::before {
+    content: var(--label-3) ": ";
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+
+  .leadsTable tbody td:nth-child(4)::before {
+    content: var(--label-4) ": ";
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+
+  .leadsTable tbody td:nth-child(5)::before {
+    content: var(--label-5) ": ";
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+
+  .leadsTable tbody td:nth-child(6)::before {
+    content: var(--label-6) ": ";
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+}
+
+/* Lower two-column split: Connectors + Google Doc Review */
+.lowerGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+@media (min-width: 900px) {
+  .lowerGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    align-items: start;
+  }
+}
+
+.connectorList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.connectorRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+}
+
+.connectorTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.connectorName {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--foreground);
+}
+
+.connectorMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+/* Review Doc form + queue (modern-web-guidance: validate-input-after-interaction) */
+.reviewForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fieldLabel {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.fieldHint {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.fieldError {
+  display: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--destructive);
+}
+
+.fieldErrorVisible {
+  display: block;
+}
+
+.reviewInput:is(:user-invalid, .userInvalidFallback) {
+  border-color: var(--destructive);
+}
+
+.reviewInput:is(:user-invalid, .userInvalidFallback) + .fieldError {
+  display: block;
+}
+
+.reviewDocList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.reviewDocCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+}
+
+.reviewDocHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.reviewDocLink {
+  font-weight: 700;
+  font-size: 0.9375rem;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-word;
+}
+
+.commentList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  list-style: none;
+  padding: 0.5rem 0 0;
+  margin: 0;
+  border-top: 1px solid var(--border);
+}
+
+.commentItem {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--foreground);
+}
+
+.commentMeta {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.reviewActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.visuallyHidden:where(:not(:focus-within, :active)) {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
