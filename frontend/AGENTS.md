@@ -11,15 +11,11 @@ DeerFlow Frontend is a Next.js 16 web interface for an AI agent system. It commu
 ### Core dependencies
 
 - **LangGraph SDK** (`@langchain/langgraph-sdk` ^1.5.3) — Agent orchestration and streaming
-- **LangChain Core** (`@langchain/core` ^1.1.15) — Fundamental AI building blocks
-- **TanStack Query** (`@tanstack/react-query` ^5.90.17) — Server state management
-- **UI**: Shadcn UI, MagicUI, React Bits, and Vercel AI SDK elements (generated from registries — see Code Style)
+- **LangChain Core** (`@langchain/core` ^1.1.15) — Core AI primitives
+- **TanStack Query** (`@tanstack/react-query` ^5.90.17) — Server state
+- **UI**: Shadcn UI, MagicUI, React Bits, Vercel AI SDK elements (registry-generated; see Code Style)
 
-`pnpm-workspace.yaml` overrides vulnerable `@xmldom/xmldom` 0.9.x releases to
-0.9.12 for GHSA-965w-775f-mr7g. Nextra pulls it in through MathJax and
-`speech-rule-engine@4.1.2`, which pins 0.9.8. Keep the override until the
-upstream dependency chain resolves a patched version without it; regenerate
-`pnpm-lock.yaml` and verify the docs build when changing this constraint.
+`pnpm-workspace.yaml` overrides `@xmldom/xmldom` 0.9.x to 0.9.12 (GHSA-965w-775f-mr7g, pulled via Nextra/MathJax/`speech-rule-engine@4.1.2`). Keep until upstream patches it; regenerate `pnpm-lock.yaml` and verify docs build if changed.
 
 ## Commands
 
@@ -36,26 +32,13 @@ upstream dependency chain resolves a patched version without it; regenerate
 | `pnpm typecheck` | TypeScript type check (`tsc --noEmit`)        |
 | `pnpm start`     | Start production server                       |
 
-Unit tests live under `tests/unit/` and mirror the `src/` layout (e.g., `tests/unit/core/api/stream-mode.test.ts` tests `src/core/api/stream-mode.ts`). Powered by Rstest; import source modules via the `@/` path alias.
+Unit tests live under `tests/unit/` mirroring `src/` (Rstest, `@/` alias). Webpack is the default dev bundler; pass `DEER_FLOW_DEV_BUNDLER=turbo` with `pnpm dev` to diagnose bundler issues with Turbopack.
 
-Webpack is the default development bundler. Use `DEER_FLOW_DEV_BUNDLER=turbo` with `pnpm dev` to opt in to Turbopack when diagnosing a local Next.js bundler issue.
+Rstest splits into two projects (`rstest.config.ts`): `*.test.ts(x)` runs in **node** (default for pure logic); `*.dom.test.ts(x)` runs in **happy-dom** (3x slower; reserve for `renderHook`, components, and hooks requiring real React effects/cleanup/store re-renders instead of mocking `react`).
 
-Rstest runs them as two projects (`rstest.config.ts`). `*.test.ts` / `*.test.tsx` run in a plain **node** environment — that is nearly the whole suite, and it is the default for anything that is pure logic. `*.dom.test.ts` / `*.dom.test.tsx` run in **happy-dom**, for tests that need a document: hooks driven through `renderHook` from `@testing-library/react`, and components. Keep the split — a DOM environment costs roughly 3x the runtime of the node suite, so tests that do not render should not opt into it. A hook whose behavior only exists under real React (effect ordering, cleanup on unmount, re-render on store change) belongs in a `.dom.test.*` file rather than a node test that mocks `react` itself.
+E2E tests live under `tests/e2e/` (Playwright Chromium, `playwright.config.ts`), mocking backend APIs with `page.route()`. Auth recovery fixtures use context routes so worker-owned requests reach mocks after the PWA worker claims the page; keep active-worker recovery coverage at desktop/mobile widths, exact retry counts, and registration gate without altering production auth or disabling the worker. `tests/e2e/design-surfaces.spec.ts` is opt-in (`DESIGN_SHOTS=1`), capturing 1440×900 and 390×844 surfaces into `DESIGN_SHOTS_DIR` (`/login` uses `DESIGN_SIGNED_OUT_URL` with `DEER_FLOW_AUTH_DISABLED=0` and an unreachable gateway; `DESIGN_SHOTS_DEBUG=1` logs unmocked calls; `DESIGN_SHOTS_ONLY=a,b` filters surfaces). Real-backend auth tests `tests/e2e-real-backend/auth-disabled-contract.spec.ts` and `backend/tests/test_auth_me_permissions.py` pin the full route-permission list (including `projects:read/write/delete`); update both when adding permissions.
 
-E2E tests live under `tests/e2e/` and use Playwright with Chromium. They mock all backend APIs via `page.route()` network interception and test real page interactions (navigation, chat input, streaming responses). Config: `playwright.config.ts`.
-Auth recovery fixtures use context routes so worker-owned network requests reach
-the same mock after the public PWA worker claims the page. Keep explicit active
-worker recovery coverage at desktop/mobile widths, the exact retry counts and
-registration gate; do not alter production auth or disable the worker to mask it.
-`tests/e2e/design-surfaces.spec.ts` is an opt-in design-review harness, skipped unless `DESIGN_SHOTS=1`: it captures the signed-in surfaces at 1440×900 and 390×844 into `DESIGN_SHOTS_DIR` against the mocked API. `/login` needs a second server started with `DEER_FLOW_AUTH_DISABLED=0` and an unreachable gateway, passed as `DESIGN_SIGNED_OUT_URL`; `DESIGN_SHOTS_DEBUG=1` logs unmocked API calls. `DESIGN_SHOTS_ONLY=name,name` limits a run to the named surfaces. The real-backend auth contract in `tests/e2e-real-backend/auth-disabled-contract.spec.ts` and `backend/tests/test_auth_me_permissions.py` pin the complete route-permission list; update both when adding registered permissions (including `projects:read/write/delete`).
-
-The dedicated `run-history.ts` hook replaces the unpaged runs hook. Show counts
-only after a successful history read, never during initial loading or errors.
-Scheduled run history uses task/page query keys and the existing live offset API.
-Fetch 51 rows to display 50 plus a next-page sentinel; never append pages. Only
-page zero polls or refreshes on focus/reconnect. Task switches reset to page zero,
-and consumed AbortSignals cancel obsolete reads. Live offsets are not snapshots;
-explicit mutations or navigation may observe newly inserted runs.
+`run-history.ts` replaces the unpaged runs hook: show counts only after a successful read, never during loading/errors. Scheduled run history uses task/page query keys over the live offset API, fetches 51 rows (50 + next-page sentinel, never appends), polls/refreshes only page 0, resets to page 0 on task switch, and cancels obsolete reads via AbortSignal (live offsets may observe newly inserted runs on mutations/navigation).
 
 ## Architecture
 
@@ -278,63 +261,19 @@ shared-MCP administrator checks remain authoritative; this adds no personal scop
 
 ## Desk (private instance only)
 
-`/workspace/desk` is the owner's home on the private instance. It exists only when
-`/api/features` reports `desk.enabled`, which the Gateway derives from
-`config.yaml -> private_workspace.enabled` (default false). With the flag on,
-`/workspace` redirects to Desk (`core/features/server.ts`, fail closed) and the
-sidebar gains a Desk link; with it off, the route replaces itself with Command
-Center before rendering anything Desk-shaped. Desk only reads existing APIs
-(scheduled tasks, clients and their fleet bindings, fleet templates, console
-usage, and the Momo Board's `GET /api/board/threads?status=drafted`);
-department grouping and schedule matching live in
-`components/workspace/desk/desk-data.ts`. The Approvals panel and the sidebar's
-Board badge both read that same drafted-threads query (e4): a count of threads
-waiting on the owner, plus an "After hours" flag when an `urgent`-triage thread
-is waiting outside 8am-8pm ET (`isAfterHoursET`/`hasUrgentAfterHoursApproval` in
-`desk-data.ts`). No external send is triggered by either alert.
-`tests/e2e/desk.spec.ts` proves both flag states, the fresh-instance empty
-states, and the approvals count/badge wiring.
+`/workspace/desk` renders only when `/api/features` reports `desk.enabled` (from `config.yaml -> private_workspace.enabled`, default false). When on, `/workspace` redirects to Desk (`core/features/server.ts`, fail closed) and adds the sidebar link; when off, the route replaces to Command Center before rendering. Desk reads existing APIs (scheduled tasks, clients/fleet bindings, fleet templates, console usage, and `GET /api/board/threads?status=drafted`); grouping and schedule matching live in `components/workspace/desk/desk-data.ts`. The Approvals panel and sidebar Board badge share that drafted-threads query: count waiting on owner plus an "After hours" flag for `urgent` threads outside 8am-8pm ET (`isAfterHoursET`/`hasUrgentAfterHoursApproval`), with no external sends. `tests/e2e/desk.spec.ts` covers both flag states, empty states, and badge wiring.
 
 ## Team and AI Academy (Momentum staff only)
 
-`/workspace/team` (staff channels) and `/workspace/academy` (AI training) render
-only when `/api/features` reports `momentum_internal.enabled`, which the Gateway
-computes per caller: `momentum_internal.enabled`, the active workspace's slug
-listed in `momentum_internal.organization_slugs` (the agency's own workspace),
-**and** a staff role (`owner`/`admin`/`member`) in it. Client workspaces on the
-same instance never qualify. Anyone else is replaced to
-Command Center and the sidebar links are hidden. The data comes from `/api/team`
-and `/api/academy`, which enforce the same rule server-side (404), so lesson
-content is never shipped to a client. `core/team` and `core/academy` wrap the
-APIs; `components/workspace/team/team-data.ts` and `core/academy/progress.ts`
-hold the pure logic. The channel view is keyed by channel id so a draft never
-follows you into another channel. `tests/e2e/team-academy.spec.ts` covers both
-flag states and checks for horizontal overflow at 390/768/1440.
+`/workspace/team` and `/workspace/academy` render only when `/api/features` reports `momentum_internal.enabled` (gateway checks flag, workspace slug in `momentum_internal.organization_slugs`, and staff role `owner`/`admin`/`member`; client workspaces never qualify; others replace to Command Center with links hidden). `/api/team` and `/api/academy` enforce the same 404 gate server-side. Wrappers live in `core/team` and `core/academy`, pure logic in `components/workspace/team/team-data.ts` and `core/academy/progress.ts`; channel views key by channel id so drafts do not leak across channels. `tests/e2e/team-academy.spec.ts` covers flag states and 390/768/1440 overflow.
 
 ## MomoBot Agents and About (`/workspace/lineup`, `/workspace/about`)
 
-Render the private kit served by `/api/momobot-brand/*` (`core/momobot-brand`, `components/workspace/lineup`); the sidebar items appear only when that API answers. No kit text, art or price is committed: copy and assets come from the server folder. Prices render only through `priceLabel` when the server sends `show_pricing: true`; a null amount reads "Not priced", and packages are never summed. `tests/e2e/momobot-lineup.spec.ts` uses a synthetic kit unless `LINEUP_KIT_DIR` is set.
+Render the private kit from `/api/momobot-brand/*` (`core/momobot-brand`, `components/workspace/lineup`); sidebar items appear only when that API answers. No kit text, art, or price is committed. Prices render only via `priceLabel` when `show_pricing: true` (null renders "Not priced"; never sum packages). `tests/e2e/momobot-lineup.spec.ts` uses a synthetic kit unless `LINEUP_KIT_DIR` is set.
 
 ## Invite teammate (Settings > Invite teammate)
 
-Owners and admins of a shared workspace mint invites from Settings instead of
-calling the API. `components/workspace/settings/invite-settings-page.tsx` posts
-`{organization_id, email, role}` (`member`, `admin` or `client`) to
-`POST /api/v1/auth/invitations` through `core/invitations/api.ts`, using the
-shared `fetch` wrapper so the CSRF header is added. The workspace list comes
-from `GET /api/workspaces`, which returns shared workspaces only; the form
-offers the ones where the caller is `owner`/`admin`, defaulting to the active
-workspace, and shows a plain "only owners and admins" message otherwise. The
-Gateway stays the authority, so a 403 is still handled. The 201 response carries
-the one-time `token`, shown once as `${origin}/invite#token=...` with a copy
-button. The token lives only in component state: it is never put in the URL
-query, `localStorage`, `sessionStorage`, logs or analytics, and it is dropped on
-"Invite another person" or when the dialog closes. Failures map to fixed
-messages (`classifyInviteFailure`): the frozen 403, other 403, 409, 422, 503 and
-network. Listing and revoking invites are not in the UI yet.
-`tests/unit/core/invitations/api.test.ts` and
-`tests/unit/components/workspace/settings/invite-settings-page.dom.test.tsx`
-cover it.
+Shared-workspace owners/admins mint invites in `components/workspace/settings/invite-settings-page.tsx`, posting `{organization_id, email, role}` (`member`/`admin`/`client`) to `POST /api/v1/auth/invitations` via `core/invitations/api.ts` (shared CSRF `fetch` wrapper). `GET /api/workspaces` lists shared workspaces; the form offers workspaces where the caller is `owner`/`admin` (defaulting to active) and shows an owners/admins-only notice otherwise while still handling gateway 403s. The 201 one-time `token` renders once as `${origin}/invite#token=...` with copy, stays in component state only (never query/storage/logs/analytics), and clears on reset/close. `classifyInviteFailure` maps frozen 403, other 403, 409, 422, 503, and network errors. Listing/revoking invites is not in the UI yet. Covered by `tests/unit/core/invitations/api.test.ts` and `tests/unit/components/workspace/settings/invite-settings-page.dom.test.tsx`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

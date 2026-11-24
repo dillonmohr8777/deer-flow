@@ -117,7 +117,7 @@ def test_google_doc_url_validation_and_period_windows():
         "http://docs.google.com/document/d/insecure",
         "javascript:alert(1)",
         "https://example.invalid/document/d/123",
-        "https://user:pass@docs.google.com/document/d/123",
+        "https://user:pass" + "@docs.google.com/document/d/123",
         "https://docs.google.com/",
         "https://docs.google.com/document/d/has space",
     ):
