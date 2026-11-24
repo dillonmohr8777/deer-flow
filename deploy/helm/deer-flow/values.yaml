@@ -65,8 +65,6 @@ gateway:
 # -- Frontend (Next.js) deployment.
 frontend:
   replicas: 1
-  # -- Public origin used for robots.txt, sitemap.xml, llms.txt, and canonical URLs.
-  siteUrl: ""
   autoscaling:
     enabled: false
     minReplicas: 1
