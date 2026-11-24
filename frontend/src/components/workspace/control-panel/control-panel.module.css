@@ -1,0 +1,215 @@
+.frame {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  width: 100%;
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+@media (min-width: 640px) {
+  .frame {
+    padding: 2rem 2rem 3.5rem;
+  }
+}
+
+.hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+:global(:root:not(.dark)[data-treatment="paper"]) .hero {
+  border-bottom-color: color-mix(in srgb, var(--paper-line) 55%, transparent);
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.875rem;
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.875rem;
+}
+
+@media (min-width: 640px) {
+  .actionGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .actionGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.actionCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.125rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.actionCard:hover {
+  border-color: var(--primary);
+}
+
+:global(:root:not(.dark)[data-treatment="paper"]) .actionCard {
+  background: var(--paper-cream-hi);
+  border-color: color-mix(in srgb, var(--paper-line) 70%, transparent);
+  border-radius: 2px 5px 3px 6px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--paper-ink) 10%, transparent);
+}
+
+:global(:root:not(.dark)[data-treatment="paper"]) .actionCard:hover {
+  border-color: var(--paper-royal);
+}
+
+.cardTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--foreground);
+}
+
+.cardDesc {
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--muted-foreground);
+}
+
+.promptPreview {
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 4px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+:global(:root:not(.dark)[data-treatment="paper"]) .promptPreview {
+  background: var(--paper-cream);
+  color: var(--paper-ink-muted);
+}
+
+.tabsList {
+  display: flex;
+  flex-wrap: wrap;
+  height: auto;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.panelGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 900px) {
+  .panelGrid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  }
+}
+
+.sheetCard {
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+}
+
+:global(:root:not(.dark)[data-treatment="paper"]) .sheetCard {
+  background: var(--paper-cream-hi);
+  border-color: var(--paper-line);
+  border-radius: 2px 5px 3px 6px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--paper-ink) 10%, transparent);
+}
+
+.checklistRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.checklistRow:first-child {
+  border-top: none;
+  padding-top: 0.25rem;
+}
+
+.roadmapGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.875rem;
+}
+
+@media (min-width: 768px) {
+  .roadmapGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.connectionGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .connectionGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .connectionGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.connectionPill {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+}
+
+:global(:root:not(.dark)[data-treatment="paper"]) .connectionPill {
+  background: var(--paper-cream);
+  border-color: color-mix(in srgb, var(--paper-line) 60%, transparent);
+  border-radius: 4px;
+}

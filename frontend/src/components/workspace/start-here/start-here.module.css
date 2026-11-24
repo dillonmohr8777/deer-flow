@@ -1,0 +1,106 @@
+.frame {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  width: 100%;
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+@media (min-width: 640px) {
+  .frame {
+    padding: 2rem 2rem 3.5rem;
+  }
+}
+
+.headerRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.progressCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.125rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+}
+
+:global(:root:not(.dark)[data-treatment="paper"]) .progressCard {
+  background: var(--paper-cream-hi);
+  border-color: var(--paper-line);
+  border-radius: 2px 5px 3px 6px;
+}
+
+.lessonCard {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+:global(:root:not(.dark)[data-treatment="paper"]) .lessonCard {
+  background: var(--paper-cream-hi);
+  border-color: color-mix(in srgb, var(--paper-line) 75%, transparent);
+  border-radius: 2px 5px 3px 6px;
+}
+
+.lessonSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.95rem 1.125rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.lessonSummary::-webkit-details-marker {
+  display: none;
+}
+
+.lessonBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 0 1.125rem 1.125rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.95rem;
+}
+
+.promptGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.875rem;
+}
+
+@media (min-width: 768px) {
+  .promptGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.promptCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.125rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+}
+
+:global(:root:not(.dark)[data-treatment="paper"]) .promptCard {
+  background: var(--paper-cream-hi);
+  border-color: color-mix(in srgb, var(--paper-line) 70%, transparent);
+  border-radius: 2px 5px 3px 6px;
+}

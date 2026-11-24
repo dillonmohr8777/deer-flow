@@ -2,6 +2,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef } from "react";
 
 import { usePromptInputController } from "@/components/ai-elements/prompt-input";
+import { parsePrefillPrompt } from "@/components/workspace/control-panel/control-panel-data";
 import { useI18n } from "@/core/i18n/hooks";
 
 /**
@@ -13,10 +14,17 @@ export function useSpecificChatMode() {
   const searchParams = useSearchParams();
   const promptInputController = usePromptInputController();
   const inputInitialValue = useMemo(() => {
-    if (threadIdFromPath !== "new" || searchParams.get("mode") !== "skill") {
+    if (threadIdFromPath !== "new") {
       return undefined;
     }
-    return t.inputBox.createSkillPrompt;
+    const promptParam = parsePrefillPrompt(searchParams.get("prompt"));
+    if (promptParam) {
+      return promptParam;
+    }
+    if (searchParams.get("mode") === "skill") {
+      return t.inputBox.createSkillPrompt;
+    }
+    return undefined;
   }, [threadIdFromPath, searchParams, t.inputBox.createSkillPrompt]);
   const lastInitialValueRef = useRef<string | undefined>(undefined);
   const setInputRef = useRef(promptInputController.textInput.setInput);

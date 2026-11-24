@@ -118,6 +118,7 @@ import {
   readSpeechRecognitionTranscript,
   shouldRestartSpeechRecognition,
   type BrowserSpeechRecognition,
+  type SpeechRecognitionConstructor,
   type SpeechRecognitionErrorKind,
 } from "@/core/voice-input/speech-recognition";
 import { isIMEComposing } from "@/lib/ime";
@@ -1509,13 +1510,17 @@ export function InputBox({
       (status === "streaming" ||
         slashSkillQuery !== null ||
         !canPolishInput(textInput.value ?? "")));
-  const speechRecognitionConstructor = useMemo(
-    () =>
+  const [speechRecognitionConstructor, setSpeechRecognitionConstructor] =
+    useState<SpeechRecognitionConstructor | null>(() =>
       typeof window === "undefined"
         ? null
         : getSpeechRecognitionConstructor(window),
-    [],
-  );
+    );
+  useEffect(() => {
+    setSpeechRecognitionConstructor(() =>
+      getSpeechRecognitionConstructor(window),
+    );
+  }, []);
   const voiceInputSupported = speechRecognitionConstructor !== null;
 
   const getVoiceInputErrorMessage = useCallback(
@@ -2573,6 +2578,20 @@ export function InputBox({
               supported={voiceInputSupported}
               onToggle={toggleVoiceInput}
             />
+            {voiceListening && (
+              <span
+                role="status"
+                aria-live="polite"
+                data-testid="voice-input-status"
+                className="text-primary bg-primary/10 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+              >
+                <span
+                  className="bg-primary size-2 animate-pulse rounded-full"
+                  aria-hidden="true"
+                />
+                Listening...
+              </span>
+            )}
             {!isClient && (
               <Tooltip
                 content={
@@ -3067,18 +3086,22 @@ function VoiceInputButton({
         aria-label={label}
         aria-pressed={listening}
         className={cn(
-          "px-2!",
-          listening && "text-primary bg-primary/10 hover:bg-primary/15",
+          "gap-1.5 px-2.5!",
+          listening &&
+            "text-primary bg-primary/12 hover:bg-primary/18 ring-primary/30 ring-1",
         )}
         data-testid="voice-input-button"
         disabled={(disabled ?? false) || !supported}
         onClick={onToggle}
       >
         {listening ? (
-          <SquareIcon className="size-3 fill-current" />
+          <SquareIcon className="size-3.5 fill-current" />
         ) : (
-          <MicIcon className="size-3" />
+          <MicIcon className="size-4" />
         )}
+        <span className="hidden text-xs font-medium sm:inline">
+          {listening ? "Stop" : "Voice"}
+        </span>
       </PromptInputButton>
     </Tooltip>
   );

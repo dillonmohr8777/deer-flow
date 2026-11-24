@@ -4,6 +4,7 @@ import {
   BotIcon,
   GraduationCap,
   Info,
+  LayoutDashboard,
   UsersRound,
   Hash,
   CalendarClock,
@@ -59,6 +60,21 @@ function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
       <WorkspaceSelector />
       <SidebarMenu>
         <SidebarMenuItem>
+          <SidebarMenuButton
+            isActive={pathname === "/workspace/control-panel"}
+            asChild
+          >
+            <Link
+              className="text-muted-foreground"
+              href="/workspace/control-panel"
+            >
+              <LayoutDashboard />
+              <span>Control Panel</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+
+        <SidebarMenuItem>
           <SidebarMenuButton isActive={pathname === "/workspace/inbox"} asChild>
             <Link className="text-muted-foreground" href="/workspace/inbox">
               <Inbox />
@@ -75,6 +91,22 @@ function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
+
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            isActive={pathname === "/workspace/start-here"}
+            asChild
+          >
+            <Link
+              className="text-muted-foreground"
+              href="/workspace/start-here"
+            >
+              <GraduationCap />
+              <span>Start Here / Academy</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+
         <SidebarMenuItem>
           <SidebarMenuButton
             isActive={pathname.startsWith(MOMO_DAILY_PATH)}
@@ -151,6 +183,20 @@ export function WorkspaceNavChatList() {
     <>
       <SidebarGroup className="pt-1">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname === "/workspace/control-panel"}
+              asChild
+            >
+              <Link
+                className="text-muted-foreground"
+                href="/workspace/control-panel"
+              >
+                <LayoutDashboard />
+                <span>Control Panel</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           {maxAvailable && (
             <SidebarMenuItem>
               <SidebarMenuButton
@@ -200,6 +246,20 @@ export function WorkspaceNavChatList() {
               >
                 <CalendarClock />
                 <span>{t.sidebar.scheduledTasks}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname === "/workspace/start-here"}
+              asChild
+            >
+              <Link
+                className="text-muted-foreground"
+                href="/workspace/start-here"
+              >
+                <GraduationCap />
+                <span>Start Here / Academy</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

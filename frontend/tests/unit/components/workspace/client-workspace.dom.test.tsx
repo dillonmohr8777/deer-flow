@@ -168,21 +168,25 @@ describe("experience mode access", () => {
 });
 
 describe("the client sidebar", () => {
-  it("shows Chats, The Momo Daily, MomoBot Agents and About, and nothing internal", () => {
+  it("shows Control Panel, Client inbox, Chats, Start Here, The Momo Daily, MomoBot Agents and About, and nothing internal", () => {
     // Even if the Gateway were to report every internal feature on.
     mocks.desk = true;
     mocks.internal = true;
     mocks.openai = true;
     const { container } = renderAs("client", <WorkspaceNavChatList />);
     expect(hrefs(container)).toEqual([
+      "/workspace/control-panel",
       "/workspace/inbox",
       "/workspace/chats",
+      "/workspace/start-here",
       "/daily",
       "/workspace/lineup",
       "/workspace/about",
     ]);
     // The Momo Daily is part of the base subscription every client gets.
     expect(screen.getByText("The Momo Daily")).not.toBeNull();
+    expect(screen.getByText("Control Panel")).not.toBeNull();
+    expect(screen.getByText("Start Here / Academy")).not.toBeNull();
     for (const name of [
       "Approvals",
       "Command Center",
@@ -204,8 +208,10 @@ describe("the client sidebar", () => {
     mocks.brandKit = false;
     const { container } = renderAs("client", <WorkspaceNavChatList />);
     expect(hrefs(container)).toEqual([
+      "/workspace/control-panel",
       "/workspace/inbox",
       "/workspace/chats",
+      "/workspace/start-here",
       "/daily",
     ]);
   });
@@ -242,9 +248,11 @@ describe("the internal sidebar", () => {
       const { container } = renderAs(role, <WorkspaceNavChatList />);
       const links = hrefs(container);
       for (const href of [
+        "/workspace/control-panel",
         "/workspace/agents/momobot-max/chats/new",
         "/workspace/scheduled-tasks",
         "/workspace/chats",
+        "/workspace/start-here",
         // Oct 24: everyone on the team approves their own sends here.
         "/workspace/approvals",
       ]) {
@@ -328,6 +336,9 @@ describe("opening an internal page directly", () => {
   });
 
   it.each([
+    "/workspace/control-panel",
+    "/workspace/start-here",
+    "/workspace/inbox",
     "/workspace/chats",
     "/workspace/chats/t-1",
     "/workspace/agents/momobot-max/chats/new",

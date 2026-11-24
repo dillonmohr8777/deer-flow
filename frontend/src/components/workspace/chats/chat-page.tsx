@@ -1,13 +1,14 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Folder } from "lucide-react";
+import { Code2Icon, Folder } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { type PromptInputMessage } from "@/components/ai-elements/prompt-input";
+import { Button } from "@/components/ui/button";
 import { ArtifactTrigger } from "@/components/workspace/artifacts";
 import { BrowserTrigger } from "@/components/workspace/browser-view";
 import { MomentumGlyph } from "@/components/workspace/command-center/momentum-glyph";
@@ -37,6 +38,7 @@ import { ThreadSubagentBatches } from "@/components/workspace/thread-subagent-ba
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoList } from "@/components/workspace/todo-list";
 import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicator";
+import { Tooltip } from "@/components/workspace/tooltip";
 import { useActiveGoal } from "@/components/workspace/use-active-goal";
 import { Welcome } from "@/components/workspace/welcome";
 import { WorkspaceSidebarTrigger } from "@/components/workspace/workspace-sidebar-trigger";
@@ -63,7 +65,11 @@ import { isHiddenFromUIMessage } from "@/core/messages/utils";
 import { useModels } from "@/core/models/hooks";
 import { useNotification } from "@/core/notification/hooks";
 import { useProject } from "@/core/projects";
-import { useLocalSettings, useThreadSettings } from "@/core/settings";
+import {
+  useCleanClientMode,
+  useLocalSettings,
+  useThreadSettings,
+} from "@/core/settings";
 import { resolveThreadContext } from "@/core/settings/store";
 import { createThread } from "@/core/threads/api";
 import {
@@ -116,11 +122,17 @@ export default function ChatPage() {
   const queryClient = useQueryClient();
   const [settings, setSettings] = useThreadSettings(threadId);
   const [localSettings, setLocalSettings] = useLocalSettings();
+  const {
+    cleanClientMode,
+    canToggleDeveloperDetails,
+    showDeveloperDetails,
+    setShowDeveloperDetails,
+  } = useCleanClientMode();
   const { enabled: browserControlEnabled } = useBrowserControlEnabled();
   const { models, tokenUsageEnabled } = useModels();
   const threadTokenUsage = useThreadTokenUsage(
     isNewThread || isMock ? undefined : threadId,
-    { enabled: !isMock && !isClient },
+    { enabled: !isMock && !cleanClientMode },
   );
   const threadMetadata = useThreadMetadata(threadId, {
     enabled: !isNewThread && !isMock,
@@ -421,9 +433,10 @@ export default function ChatPage() {
     [branchThread, isMock, isNewThread, router, t, threadId],
   );
 
-  const tokenUsageInlineMode = tokenUsageEnabled
-    ? localSettings.tokenUsage.inlineMode
-    : "off";
+  const tokenUsageInlineMode =
+    !cleanClientMode && tokenUsageEnabled
+      ? localSettings.tokenUsage.inlineMode
+      : "off";
   const hasTodos = (thread.values.todos?.length ?? 0) > 0;
   const browserEnabled =
     !isNewThread && !isMock && browserControlEnabled && !isClient;
@@ -509,7 +522,7 @@ export default function ChatPage() {
                 {!isNewThread && !isMock && !isClient && (
                   <ThreadScheduledTasksLink threadId={threadId} />
                 )}
-                {isClient ? null : tokenUsageEnabled ? (
+                {cleanClientMode ? null : tokenUsageEnabled ? (
                   <TokenUsageIndicator
                     threadId={isNewThread ? undefined : threadId}
                     backendUsage={backendTokenUsage}
@@ -524,6 +537,33 @@ export default function ChatPage() {
                   />
                 ) : (
                   <ContextUsageBadge contextUsage={contextUsage} />
+                )}
+                {!isMock && canToggleDeveloperDetails && (
+                  <Tooltip
+                    content={
+                      showDeveloperDetails
+                        ? "Hide developer details (Clean Client Mode)"
+                        : "Show developer details (tokens & file diffs)"
+                    }
+                  >
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant={showDeveloperDetails ? "secondary" : "ghost"}
+                      aria-label={
+                        showDeveloperDetails
+                          ? "Hide developer details"
+                          : "Show developer details"
+                      }
+                      aria-pressed={showDeveloperDetails}
+                      data-testid="developer-details-toggle"
+                      onClick={() =>
+                        setShowDeveloperDetails(!showDeveloperDetails)
+                      }
+                    >
+                      <Code2Icon className="size-4" />
+                    </Button>
+                  </Tooltip>
                 )}
                 <SidecarTrigger />
                 {browserEnabled && <BrowserTrigger />}

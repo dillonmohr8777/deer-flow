@@ -1,0 +1,189 @@
+import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import type { ReactNode } from "react";
+
+import { ControlPanelBody } from "@/components/workspace/control-panel/control-panel";
+import {
+  buildChatPromptHref,
+  CREATE_SOMETHING_CARDS,
+  parsePrefillPrompt,
+} from "@/components/workspace/control-panel/control-panel-data";
+import { AuthProvider } from "@/core/auth/AuthProvider";
+import type { User } from "@/core/auth/types";
+
+rs.mock("next/navigation", () => ({
+  useRouter: () => ({ push: rs.fn(), replace: rs.fn(), refresh: rs.fn() }),
+  usePathname: () => "/workspace/control-panel",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+rs.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: string;
+    children: ReactNode;
+  }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
+rs.mock("@/core/agents/hooks", () => ({
+  useAgents: () => ({
+    agents: [{ name: "sandbox-agent", builtin: false }],
+    isLoading: false,
+  }),
+}));
+
+rs.mock("@/core/workspaces/hooks", () => ({
+  useWorkspaceSelection: () => ({
+    data: {
+      active_workspace_id: "ws-1",
+      workspaces: [{ id: "ws-1", name: "Sandbox Workspace", role: "member" }],
+    },
+    isLoading: false,
+    busy: false,
+    error: null,
+    selectWorkspace: rs.fn(),
+  }),
+}));
+
+rs.mock("@/core/api/fetcher", () => ({
+  fetch: rs.fn().mockResolvedValue({
+    ok: false,
+    json: async () => ({}),
+  }),
+  redirectOnUnauthorized: rs.fn(),
+  setLoggingOut: rs.fn(),
+}));
+
+function renderControlPanel(role: User["system_role"] = "client") {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider
+        initialUser={
+          { id: "u-cp", email: "fixture-owner", system_role: role } as User
+        }
+      >
+        <ControlPanelBody />
+      </AuthProvider>
+    </QueryClientProvider>,
+  );
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
+
+afterEach(cleanup);
+
+describe("Client Control Panel", () => {
+  it("renders all 6 1-click Create Something action cards with pre-filled chat links", () => {
+    renderControlPanel("client");
+
+    expect(screen.getByRole("heading", { name: "Control Panel" })).toBeTruthy();
+    expect(screen.getByText("Sandbox Workspace")).toBeTruthy();
+
+    const createGrid = screen.getByTestId("create-something-grid");
+    for (const card of CREATE_SOMETHING_CARDS) {
+      expect(within(createGrid).getByText(card.title)).toBeTruthy();
+    }
+
+    const startLinks = screen.getAllByRole("link", { name: /Start in Chat/i });
+    expect(startLinks.length).toBe(6);
+    expect(startLinks[0]?.getAttribute("href")).toContain(
+      "/workspace/agents/sandbox-agent/chats/new?prompt=",
+    );
+  });
+
+  it("renders all 4 portal tabs and honest empty/readiness states", () => {
+    renderControlPanel("client");
+
+    expect(
+      screen.getByRole("tab", { name: /Kickoff & Roadmap/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("tab", { name: /Weekly Plan & Approvals/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("tab", { name: /Meetings & Action Plans/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("tab", { name: /Results & Reporting/i }),
+    ).toBeTruthy();
+
+    // Check off Day-1 item
+    const firstCheck = screen.getByRole("checkbox", {
+      name: "Complete your Business Profile",
+    });
+    expect(firstCheck.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(firstCheck);
+    expect(firstCheck.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("1 of 5 done")).toBeTruthy();
+
+    // Switch to Meetings & Action Plans
+    const meetingsTab = screen.getByRole("tab", {
+      name: /Meetings & Action Plans/i,
+    });
+    fireEvent.mouseDown(meetingsTab);
+    fireEvent.click(meetingsTab);
+    expect(
+      screen.getByText("Connect Fireflies or upload call notes"),
+    ).toBeTruthy();
+
+    // Switch to Results & Reporting
+    const reportingTab = screen.getByRole("tab", {
+      name: /Results & Reporting/i,
+    });
+    fireEvent.mouseDown(reportingTab);
+    fireEvent.click(reportingTab);
+    const reportsLink = screen.getByRole("link", {
+      name: /Open Reports & Leads/i,
+    });
+    expect(reportsLink.getAttribute("href")).toBe("/workspace/reports");
+
+    for (const channel of [
+      "Google Ads",
+      "GA4",
+      "Search Console",
+      "Meta Ads",
+      "WhatConverts",
+      "Buffer",
+    ]) {
+      expect(screen.getByText(channel)).toBeTruthy();
+    }
+  });
+
+  it("builds bounded chat prompt URLs cleanly for clients and staff", () => {
+    expect(
+      buildChatPromptHref({
+        isClient: false,
+        agents: [],
+        prompt: "Build my page",
+      }),
+    ).toBe("/workspace/chats/new?prompt=Build%20my%20page");
+    expect(
+      buildChatPromptHref({
+        isClient: true,
+        agents: [{ name: "my-agent", builtin: false }],
+        prompt: "Hello",
+      }),
+    ).toBe("/workspace/agents/my-agent/chats/new?prompt=Hello");
+    expect(parsePrefillPrompt("   ")).toBeUndefined();
+    expect(parsePrefillPrompt("Draft an article")).toBe("Draft an article");
+  });
+});

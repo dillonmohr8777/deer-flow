@@ -71,7 +71,7 @@ import {
   type StreamMetadataSnapshot,
 } from "@/core/messages/utils";
 import { getWorkspaceChangeAnchorGroupIndices } from "@/core/messages/workspace-change-anchor";
-import { useLocalSettings } from "@/core/settings";
+import { useCleanClientMode, useLocalSettings } from "@/core/settings";
 import {
   buildMessageSidecarContext,
   type SidecarContext,
@@ -358,6 +358,7 @@ export function MessageList({
   // A client sees the answer only: no subagent cards or workspace-change
   // badges, whose data (run events, file changes) the Gateway keeps internal.
   const isClient = useIsClient();
+  const { cleanClientMode } = useCleanClientMode();
   const sidecar = useMaybeSidecar();
   const [{ context: activeContext }] = useLocalSettings();
   const [selectionToolbar, setSelectionToolbar] =
@@ -1018,6 +1019,10 @@ export function MessageList({
       inlineDebug?: boolean;
       debugMessageIds?: string[];
     }) => {
+      if (cleanClientMode) {
+        return null;
+      }
+
       if (tokenUsageInlineMode === "per_turn") {
         return (
           <MessageTokenUsageList
@@ -1056,6 +1061,7 @@ export function MessageList({
       activeContext.experience_mode,
       activeContext.model_name,
       activeContext.reasoning_effort,
+      cleanClientMode,
       showTokenDebugSummaries,
       thread.isLoading,
       tokenDebugSteps,
@@ -1189,6 +1195,7 @@ export function MessageList({
                           showCopyButton={group.type !== "assistant"}
                           showWorkspaceChanges={
                             !isClient &&
+                            !cleanClientMode &&
                             workspaceChangeAnchorGroupIndices.has(groupIndex)
                           }
                           canEdit={

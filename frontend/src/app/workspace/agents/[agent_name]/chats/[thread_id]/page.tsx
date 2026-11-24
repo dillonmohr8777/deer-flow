@@ -1,6 +1,6 @@
 "use client";
 
-import { BotIcon, PlusSquare } from "lucide-react";
+import { BotIcon, Code2Icon, PlusSquare } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -10,6 +10,7 @@ import { AgentWelcome } from "@/components/workspace/agent-welcome";
 import { ArtifactTrigger } from "@/components/workspace/artifacts";
 import { BrowserTrigger } from "@/components/workspace/browser-view";
 import { ChatBox, useThreadChat } from "@/components/workspace/chats";
+import { useSpecificChatMode } from "@/components/workspace/chats/use-chat-mode";
 import { ContextUsageBadge } from "@/components/workspace/context-usage-badge";
 import { ExportTrigger } from "@/components/workspace/export-trigger";
 import { GoalStatus } from "@/components/workspace/goal-status";
@@ -60,7 +61,11 @@ import {
 import { isHiddenFromUIMessage } from "@/core/messages/utils";
 import { useModels } from "@/core/models/hooks";
 import { useNotification } from "@/core/notification/hooks";
-import { useLocalSettings, useThreadSettings } from "@/core/settings";
+import {
+  useCleanClientMode,
+  useLocalSettings,
+  useThreadSettings,
+} from "@/core/settings";
 import { resolveThreadContext } from "@/core/settings/store";
 import {
   useThreadMetadata,
@@ -98,12 +103,18 @@ export default function AgentChatPage() {
   const [isWelcomeMode, setIsWelcomeMode] = useState(isNewThread);
   const [settings, setSettings] = useThreadSettings(threadId);
   const [localSettings, setLocalSettings] = useLocalSettings();
+  const {
+    cleanClientMode,
+    canToggleDeveloperDetails,
+    showDeveloperDetails,
+    setShowDeveloperDetails,
+  } = useCleanClientMode();
   const { enabled: browserControlEnabled } = useBrowserControlEnabled();
   const { scopeSelectionEnabled } = useKnowledgeBaseEnabled();
   const { tokenUsageEnabled } = useModels();
   const threadTokenUsage = useThreadTokenUsage(
     isNewThread || isMock ? undefined : threadId,
-    { enabled: !isMock && !isClient },
+    { enabled: !isMock && !cleanClientMode },
   );
   const threadMetadata = useThreadMetadata(threadId, {
     enabled: !isNewThread && !isMock,
@@ -111,6 +122,7 @@ export default function AgentChatPage() {
   });
   const backendTokenUsage = threadTokenUsageToTokenUsage(threadTokenUsage.data);
   const contextUsage = selectContextUsage(threadTokenUsage.data);
+  useSpecificChatMode();
 
   const { showNotification } = useNotification();
   const selectorVisible =
@@ -314,9 +326,10 @@ export default function AgentChatPage() {
     [currentKnowledgeScopeSnapshot, editAndRegenerateMessage, threadId],
   );
 
-  const tokenUsageInlineMode = tokenUsageEnabled
-    ? localSettings.tokenUsage.inlineMode
-    : "off";
+  const tokenUsageInlineMode =
+    !cleanClientMode && tokenUsageEnabled
+      ? localSettings.tokenUsage.inlineMode
+      : "off";
   const hasTodos = (thread.values.todos?.length ?? 0) > 0;
   const agentBrowserEnabled =
     agent !== null &&
@@ -409,7 +422,7 @@ export default function AgentChatPage() {
                     <span className="hidden sm:inline">{t.agents.newChat}</span>
                   </Button>
                 </Tooltip>
-                {isClient ? null : tokenUsageEnabled ? (
+                {cleanClientMode ? null : tokenUsageEnabled ? (
                   <TokenUsageIndicator
                     threadId={isNewThread ? undefined : threadId}
                     backendUsage={backendTokenUsage}
@@ -424,6 +437,33 @@ export default function AgentChatPage() {
                   />
                 ) : (
                   <ContextUsageBadge contextUsage={contextUsage} />
+                )}
+                {!isMock && canToggleDeveloperDetails && (
+                  <Tooltip
+                    content={
+                      showDeveloperDetails
+                        ? "Hide developer details (Clean Client Mode)"
+                        : "Show developer details (tokens & file diffs)"
+                    }
+                  >
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant={showDeveloperDetails ? "secondary" : "ghost"}
+                      aria-label={
+                        showDeveloperDetails
+                          ? "Hide developer details"
+                          : "Show developer details"
+                      }
+                      aria-pressed={showDeveloperDetails}
+                      data-testid="developer-details-toggle"
+                      onClick={() =>
+                        setShowDeveloperDetails(!showDeveloperDetails)
+                      }
+                    >
+                      <Code2Icon className="size-4" />
+                    </Button>
+                  </Tooltip>
                 )}
                 <SidecarTrigger />
                 {browserEnabled && <BrowserTrigger />}
