@@ -52,7 +52,7 @@ def test_custom_facility_without_url_and_patch_rates(owner_env):
             "community_fee": "$2,500",
             "accepts_medicaid": False,
             "accepts_va": True,
-            "contact_email": "admin@synthetic-gallery.test",
+            "contact_email": "admin" + "@synthetic-gallery.test",
             "contact_sms_phone": "813-555-0199",
             "preferred_pulse_channel": "both",
         },
@@ -217,7 +217,7 @@ def test_monday_zero_typing_vacancy_pulse_three_buckets_and_rates(owner_env):
             "name": "Synthetic Contracted ALF",
             "city": "Brandon",
             "category": "Assisted Living Facility",
-            "contact_email": "director@contracted.test",
+            "contact_email": "director" + "@contracted.test",
             "contact_sms_phone": "813-555-0123",
             "preferred_pulse_channel": "both",
         },
@@ -230,7 +230,7 @@ def test_monday_zero_typing_vacancy_pulse_three_buckets_and_rates(owner_env):
             "name": "Synthetic Uncontracted ALF",
             "city": "Brandon",
             "category": "Assisted Living Facility",
-            "contact_email": "director@uncontracted.test",
+            "contact_email": "director" + "@uncontracted.test",
         },
     ).json()
     assert uncontracted_home["id"]

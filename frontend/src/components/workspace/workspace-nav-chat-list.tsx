@@ -77,6 +77,7 @@ function ClientNavList({
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               {/* Served by the gateway placement extension, not Next.js: use a plain anchor for a full page load. */}
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- /api/vhin/dashboard/ is not a Next.js route */}
               <a className="text-muted-foreground" href="/api/vhin/dashboard/">
                 <LampDesk />
                 <span>Placement desk</span>
