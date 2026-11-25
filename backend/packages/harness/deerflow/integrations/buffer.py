@@ -501,7 +501,12 @@ def _normalize_assets(raw_assets: Any) -> tuple[dict[str, Any], ...]:
         if "metadata" in body and body["metadata"] is not None:
             if not isinstance(body["metadata"], dict):
                 raise InvalidPayloadError(f"{prefix}.metadata must be an object")
-            entry["metadata"] = body["metadata"]
+            meta_clean = dict(body["metadata"])
+            if meta_clean.get("animatedThumbnail") is not None:
+                meta_clean["animatedThumbnail"] = _validate_http_url(
+                    meta_clean["animatedThumbnail"], f"{prefix}.metadata.animatedThumbnail"
+                )
+            entry["metadata"] = meta_clean
         normalized.append({kind: entry})
     return tuple(normalized)
 
@@ -558,6 +563,46 @@ def _normalize_gbp_action_button(raw: Any, field_name: str) -> str:
     if normalized not in GBP_ACTION_TYPES:
         raise InvalidPayloadError(f"{field_name} must be one of: {', '.join(GBP_ACTION_TYPES)}")
     return normalized
+
+
+def _normalize_link_attachment(raw: Any, field_prefix: str) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise InvalidPayloadError(f"{field_prefix} must be an object")
+    bad_keys = [k for k in raw if k not in _LINK_ATTACHMENT_KEYS]
+    if bad_keys:
+        raise InvalidPayloadError(f"Unsupported {field_prefix} fields: {', '.join(sorted(bad_keys))}")
+    cleaned: dict[str, Any] = {"url": _validate_http_url(raw.get("url"), f"{field_prefix}.url")}
+    for text_field in ("title", "description"):
+        if raw.get(text_field) is not None:
+            if not isinstance(raw[text_field], str):
+                raise InvalidPayloadError(f"{field_prefix}.{text_field} must be a string")
+            cleaned[text_field] = raw[text_field]
+    if raw.get("thumbnail") is not None:
+        thumb = raw["thumbnail"]
+        if isinstance(thumb, str):
+            cleaned["thumbnail"] = {"url": _validate_http_url(thumb, f"{field_prefix}.thumbnail")}
+        elif isinstance(thumb, dict):
+            bad_thumb = [k for k in thumb if k != "url"]
+            if bad_thumb:
+                raise InvalidPayloadError(f"Unsupported {field_prefix}.thumbnail fields: {', '.join(sorted(bad_thumb))}")
+            cleaned["thumbnail"] = {"url": _validate_http_url(thumb.get("url"), f"{field_prefix}.thumbnail.url")}
+        else:
+            raise InvalidPayloadError(f"{field_prefix}.thumbnail must be an HTTP(S) URL or {{'url': ...}} object")
+    return cleaned
+
+
+def _normalize_annotations(raw: Any, *, url_key: str, field_prefix: str) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        raise InvalidPayloadError(f"{field_prefix} must be a list")
+    cleaned: list[dict[str, Any]] = []
+    for idx, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise InvalidPayloadError(f"{field_prefix}[{idx}] must be an object")
+        entry = dict(item)
+        if entry.get(url_key) is not None:
+            entry[url_key] = _validate_http_url(entry[url_key], f"{field_prefix}[{idx}].{url_key}")
+        cleaned.append(entry)
+    return cleaned
 
 
 def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool) -> dict[str, Any]:
@@ -705,18 +750,9 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
         if link_attachment is not None:
             if has_assets:
                 raise InvalidPayloadError("LinkedIn linkAttachment cannot be combined with non-empty assets")
-            if not isinstance(link_attachment, dict):
-                raise InvalidPayloadError("LinkedIn linkAttachment must be an object")
-            bad_la = [k for k in link_attachment if k not in _LINK_ATTACHMENT_KEYS]
-            if bad_la:
-                raise InvalidPayloadError(f"Unsupported LinkedIn linkAttachment fields: {', '.join(sorted(bad_la))}")
-            la_clean = dict(link_attachment)
-            la_clean["url"] = _validate_http_url(la_clean.get("url"), "metadata.linkedin.linkAttachment.url")
-            cleaned["linkAttachment"] = la_clean
+            cleaned["linkAttachment"] = _normalize_link_attachment(link_attachment, "metadata.linkedin.linkAttachment")
         if "annotations" in section and section["annotations"] is not None:
-            if not isinstance(section["annotations"], list):
-                raise InvalidPayloadError("LinkedIn annotations must be a list")
-            cleaned["annotations"] = section["annotations"]
+            cleaned["annotations"] = _normalize_annotations(section["annotations"], url_key="link", field_prefix="metadata.linkedin.annotations")
 
     elif service == "facebook":
         if section.get("type") is not None and section.get("post_type") is not None:
@@ -740,18 +776,9 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
         if link_attachment is not None:
             if has_assets:
                 raise InvalidPayloadError("Facebook linkAttachment cannot be combined with non-empty assets")
-            if not isinstance(link_attachment, dict):
-                raise InvalidPayloadError("Facebook linkAttachment must be an object")
-            bad_la = [k for k in link_attachment if k not in _LINK_ATTACHMENT_KEYS]
-            if bad_la:
-                raise InvalidPayloadError(f"Unsupported Facebook linkAttachment fields: {', '.join(sorted(bad_la))}")
-            la_clean = dict(link_attachment)
-            la_clean["url"] = _validate_http_url(la_clean.get("url"), "metadata.facebook.linkAttachment.url")
-            cleaned["linkAttachment"] = la_clean
+            cleaned["linkAttachment"] = _normalize_link_attachment(link_attachment, "metadata.facebook.linkAttachment")
         if "annotations" in section and section["annotations"] is not None:
-            if not isinstance(section["annotations"], list):
-                raise InvalidPayloadError("Facebook annotations must be a list")
-            cleaned["annotations"] = section["annotations"]
+            cleaned["annotations"] = _normalize_annotations(section["annotations"], url_key="url", field_prefix="metadata.facebook.annotations")
         if cleaned and "type" not in cleaned:
             cleaned["type"] = "post"
 

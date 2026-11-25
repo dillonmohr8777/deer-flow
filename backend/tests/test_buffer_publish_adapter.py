@@ -1658,3 +1658,45 @@ async def test_buffer_post_status_error_returns_failed_outcome_with_post_id_for_
     assert outcome.detail["post_id"] == "post_err_77"
     assert outcome.detail["post_status"] == "error"
     assert "post_err_77" in (outcome.error or "")
+
+
+def test_link_attachment_thumbnail_and_annotation_urls_reject_embedded_credentials():
+    cred_url = "https://user:pass" + "@cdn.example.com/thumb.png"
+    for svc in ("linkedin", "facebook"):
+        # Valid string or object thumbnail normalizes to LinkAttachmentThumbnailInput {url}.
+        req = build_post_request(
+            "ch_1",
+            {
+                "service": svc,
+                "text": "Post with thumb",
+                "metadata": {"linkAttachment": {"url": "https://example.com/a", "thumbnail": "https://cdn.example.com/t.png"}},
+            },
+        )
+        assert req.to_graphql_input()["metadata"][svc]["linkAttachment"]["thumbnail"] == {"url": "https://cdn.example.com/t.png"}
+
+        # Embedded credentials in either string or object thumbnail are rejected.
+        with pytest.raises(InvalidPayloadError, match="embedded credentials"):
+            build_post_request(
+                "ch_1",
+                {"service": svc, "text": "Bad", "metadata": {"linkAttachment": {"url": "https://example.com/a", "thumbnail": cred_url}}},
+            )
+        with pytest.raises(InvalidPayloadError, match="embedded credentials"):
+            build_post_request(
+                "ch_1",
+                {"service": svc, "text": "Bad", "metadata": {"linkAttachment": {"url": "https://example.com/a", "thumbnail": {"url": cred_url}}}},
+            )
+
+    # Embedded credentials in annotations and asset animatedThumbnail are also rejected.
+    with pytest.raises(InvalidPayloadError, match="embedded credentials"):
+        build_post_request("ch_1", {"service": "linkedin", "text": "Ann", "metadata": {"annotations": [{"link": cred_url}]}})
+    with pytest.raises(InvalidPayloadError, match="embedded credentials"):
+        build_post_request("ch_1", {"service": "facebook", "text": "Ann", "metadata": {"annotations": [{"url": cred_url}]}})
+    with pytest.raises(InvalidPayloadError, match="embedded credentials"):
+        build_post_request(
+            "ch_1",
+            {
+                "service": "facebook",
+                "text": "Anim",
+                "assets": [{"type": "image", "url": "https://cdn.example.com/a.jpg", "metadata": {"animatedThumbnail": cred_url}}],
+            },
+        )
