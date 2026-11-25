@@ -826,3 +826,159 @@ def test_scrub_secret_redacts_key_and_bearer():
     assert KEY not in cleaned
     assert "abc123456" not in cleaned
     assert "[redacted]" in cleaned
+
+
+@async_test
+async def test_workspace_binding_blocks_cross_workspace_and_multi_org_discovery():
+    def _multi_org_handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "account": {
+                            "id": "acc_1",
+                            "organizations": [
+                                {"id": "org_alpha", "name": "Alpha"},
+                                {"id": "org_beta", "name": "Beta"},
+                            ],
+                        }
+                    }
+                },
+            )
+        if "GetChannels" in query:
+            org_id = body["variables"]["organizationId"]
+            if org_id == "org_alpha":
+                return httpx.Response(
+                    200,
+                    json={"data": {"channels": [{"id": "ch_alpha", "name": "A", "displayName": "A", "service": "linkedin", "isQueuePaused": False}]}},
+                )
+            return httpx.Response(
+                200,
+                json={"data": {"channels": [{"id": "ch_beta", "name": "B", "displayName": "B", "service": "linkedin", "isQueuePaused": False}]}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "createPost": {
+                        "__typename": "PostActionSuccess",
+                        "post": {"id": "post_alpha_1", "text": "Scoped", "status": "scheduled", "dueAt": None, "externalLink": None},
+                    }
+                }
+            },
+        )
+
+    # 1) Unbound multi-org client refuses account-wide channel discovery.
+    t_multi, cap_multi = _mock_transport(_multi_org_handler)
+    client_multi = BufferGraphQLClient(api_key=KEY, transport=t_multi)
+    with pytest.raises(BufferMutationError) as exc_org:
+        await client_multi.create_post(build_post_request("ch_beta", {"service": "linkedin", "text": "Unbound"}))
+    assert exc_org.value.error_type == "OrganizationBindingRequired"
+    assert len(cap_multi) == 1
+
+    # 2) Approval carrying workspace_id fails closed if no workspace binding map is configured.
+    t_unbound, cap_unbound = _mock_transport(_multi_org_handler)
+    adapter_unbound = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_unbound),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY},
+    )
+    ws_action = {**_action(target="ch_alpha", payload={"service": "linkedin", "text": "Scoped"}), "organization_id": "ws_alpha"}
+    res_unbound = await adapter_unbound.execute(ws_action)
+    assert res_unbound.status == "failed"
+    assert res_unbound.detail["state"] == "workspace_not_bound"
+    assert cap_unbound == []
+
+    # 3) Explicit workspace channel + org binding blocks cross-workspace channel and allows own channel.
+    env_bound = {
+        "BUFFER_API_KEY": KEY,
+        "BUFFER_WORKSPACE_CHANNELS": json.dumps({"ws_alpha": ["ch_alpha"], "ws_beta": ["ch_beta"]}),
+        "BUFFER_WORKSPACE_ORGANIZATIONS": json.dumps({"ws_alpha": "org_alpha", "ws_beta": "org_beta"}),
+    }
+    t_bound, cap_bound = _mock_transport(_multi_org_handler)
+    adapter_bound = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_bound),
+        env_getter=lambda: env_bound,
+    )
+    cross = await adapter_bound.execute({**_action(target="ch_beta", payload={"service": "linkedin", "text": "Cross"}), "organization_id": "ws_alpha"})
+    assert cross.status == "failed"
+    assert cross.detail["state"] == "workspace_channel_not_allowed"
+    assert cap_bound == []
+
+    allowed = await adapter_bound.execute(ws_action)
+    assert allowed.status == "executed"
+    assert allowed.detail["post_id"] == "post_alpha_1"
+    # Skips GetOrganizations completely because org_alpha is pinned directly.
+    assert [c["body"]["query"] for c in cap_bound] == [GET_CHANNELS_QUERY, CREATE_POST_MUTATION]
+    assert cap_bound[0]["body"]["variables"] == {"organizationId": "org_alpha"}
+
+
+@async_test
+@parametrize(
+    "mutation_response",
+    [
+        httpx.Response(200, json={"data": {}}),
+        httpx.Response(200, json={"data": {"createPost": {"__typename": "PostActionSuccess", "post": {}}}}),
+        httpx.Response(
+            200,
+            json={
+                "errors": [{"message": "Partial downstream error"}],
+                "data": {"createPost": {"__typename": "PostActionSuccess", "post": {"id": "post_1"}}},
+            },
+        ),
+        httpx.Response(200, json={"errors": [{"message": "Field error"}], "data": {"createPost": None}}),
+        httpx.Response(200, json={"data": {"createPost": {"__typename": "UnexpectedUnionVariant"}}}),
+        httpx.Response(200, text="not-valid-json"),
+    ],
+)
+async def test_ambiguous_post_mutation_responses_return_outcome_unknown(mutation_response: httpx.Response):
+    def _handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={"data": {"channels": [{"id": "ch_1", "name": "li", "displayName": "LI", "service": "linkedin", "isQueuePaused": False}]}},
+            )
+        return mutation_response
+
+    transport, _ = _mock_transport(_handler)
+    adapter = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY},
+    )
+    outcome = await adapter.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "Ambiguous"}))
+    assert outcome.status == "approved"
+    assert outcome.detail["state"] == "outcome_unknown"
+    assert (outcome.error or "").startswith("outcome_unknown:")
+
+
+@async_test
+async def test_dry_run_receipt_redacts_signed_asset_and_metadata_url_query_params():
+    transport, captured = _mock_transport(lambda _r, _b: httpx.Response(200, json={"data": {}}))
+    adapter = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY, "BUFFER_DRY_RUN": "true"},
+    )
+    outcome = await adapter.execute(
+        _action(
+            target="ch_fb_01",
+            payload={
+                "service": "facebook",
+                "text": "Preview with signed link https://cdn.example.com/dl?access_token=topsecret999",
+                "assets": [{"type": "image", "url": "https://cdn.example.com/media/patio.jpg?X-Amz-Signature=sig12345&token=abc"}],
+                "metadata": {"type": "post", "first_comment": f"Check https://example.com/p?sig=xyz {KEY}"},
+            },
+        )
+    )
+    assert outcome.status == "approved"
+    assert outcome.detail["state"] == "dry_run"
+    assert captured == []
+    serialized = json.dumps(outcome.detail)
+    assert "sig12345" not in serialized
+    assert "topsecret999" not in serialized
+    assert "sig=xyz" not in serialized
+    assert KEY not in serialized
+    assert outcome.detail["graphql_input"]["assets"] == [{"image": {"url": "https://cdn.example.com/media/patio.jpg?[redacted]"}}]

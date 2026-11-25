@@ -14,6 +14,7 @@ Safety invariants:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
@@ -21,7 +22,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 
@@ -37,6 +38,8 @@ BUFFER_API_URL_ENV = "BUFFER_API_URL"
 BUFFER_DRY_RUN_ENV = "BUFFER_DRY_RUN"
 BUFFER_ORGANIZATION_ID_ENV = "BUFFER_ORGANIZATION_ID"
 BUFFER_ALLOWED_CHANNEL_IDS_ENV = "BUFFER_ALLOWED_CHANNEL_IDS"
+BUFFER_WORKSPACE_CHANNELS_ENV = "BUFFER_WORKSPACE_CHANNELS"
+BUFFER_WORKSPACE_ORGANIZATIONS_ENV = "BUFFER_WORKSPACE_ORGANIZATIONS"
 
 TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
@@ -257,7 +260,7 @@ class BufferPostResult:
     graphql_input: dict[str, Any] | None = None
     timestamp_utc: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
-    def to_receipt(self, *, action_id: str | None = None) -> dict[str, Any]:
+    def to_receipt(self, *, action_id: str | None = None, secret: str | None = None) -> dict[str, Any]:
         receipt: dict[str, Any] = {
             "provider": self.provider,
             "state": self.status,
@@ -279,8 +282,38 @@ class BufferPostResult:
         if action_id is not None:
             receipt["action_id"] = action_id
         if self.dry_run and self.graphql_input is not None:
-            receipt["graphql_input"] = self.graphql_input
+            receipt["graphql_input"] = sanitize_receipt_value(self.graphql_input, secret=secret)
         return receipt
+
+
+_HTTP_URL_INLINE_RE = re.compile(r"https?://[^\s'\"<>]+", re.IGNORECASE)
+
+
+def redact_url_credentials(url: str) -> str:
+    """Strip query strings, fragments, and embedded userinfo from an HTTP(S) URL for safe receipt storage."""
+    parsed = urlparse(url)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return url
+    host = parsed.hostname or ""
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    netloc = f"{host}:{parsed.port}" if parsed.port else host
+    query = "[redacted]" if parsed.query else ""
+    return urlunparse((parsed.scheme, netloc, parsed.path, "", query, ""))
+
+
+def sanitize_receipt_value(value: Any, secret: str | None = None) -> Any:
+    """Recursively scrub secrets and query-bearing URL credentials before persisting a dry-run receipt."""
+    if isinstance(value, str):
+        cleaned = _HTTP_URL_INLINE_RE.sub(lambda m: redact_url_credentials(m.group(0)), value)
+        return scrub_secret(cleaned, secret)
+    if isinstance(value, list):
+        return [sanitize_receipt_value(item, secret) for item in value]
+    if isinstance(value, tuple):
+        return [sanitize_receipt_value(item, secret) for item in value]
+    if isinstance(value, dict):
+        return {str(k): sanitize_receipt_value(v, secret) for k, v in value.items()}
+    return value
 
 
 def scrub_secret(text: str, secret: str | None = None) -> str:
@@ -304,6 +337,53 @@ def parse_allowed_channel_ids(env: Mapping[str, str] | None = None) -> frozenset
         return None
     raw = source.get(BUFFER_ALLOWED_CHANNEL_IDS_ENV) or ""
     return frozenset(item.strip() for item in raw.split(",") if item.strip())
+
+
+def parse_workspace_channel_map(env: Mapping[str, str] | None = None) -> dict[str, frozenset[str]] | None:
+    """Parse ``BUFFER_WORKSPACE_CHANNELS`` JSON mapping ``{workspace_id: [channel_ids]}``; fail closed if invalid."""
+    source = os.environ if env is None else env
+    if BUFFER_WORKSPACE_CHANNELS_ENV not in source:
+        return None
+    raw = (source.get(BUFFER_WORKSPACE_CHANNELS_ENV) or "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except ValueError as exc:
+        raise InvalidPayloadError("BUFFER_WORKSPACE_CHANNELS must be valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise InvalidPayloadError("BUFFER_WORKSPACE_CHANNELS must be a JSON object")
+    out: dict[str, frozenset[str]] = {}
+    for ws_id, channels in parsed.items():
+        ws = str(ws_id or "").strip()
+        if not ws or not isinstance(channels, list) or not all(isinstance(c, str) for c in channels):
+            raise InvalidPayloadError("BUFFER_WORKSPACE_CHANNELS entries must map workspace IDs to lists of channel IDs")
+        out[ws] = frozenset(c.strip() for c in channels if c.strip())
+    return out
+
+
+def parse_workspace_org_map(env: Mapping[str, str] | None = None) -> dict[str, str] | None:
+    """Parse ``BUFFER_WORKSPACE_ORGANIZATIONS`` JSON mapping ``{workspace_id: buffer_org_id}``; fail closed if invalid."""
+    source = os.environ if env is None else env
+    if BUFFER_WORKSPACE_ORGANIZATIONS_ENV not in source:
+        return None
+    raw = (source.get(BUFFER_WORKSPACE_ORGANIZATIONS_ENV) or "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except ValueError as exc:
+        raise InvalidPayloadError("BUFFER_WORKSPACE_ORGANIZATIONS must be valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise InvalidPayloadError("BUFFER_WORKSPACE_ORGANIZATIONS must be a JSON object")
+    out: dict[str, str] = {}
+    for ws_id, org_id in parsed.items():
+        ws = str(ws_id or "").strip()
+        org = str(org_id or "").strip() if isinstance(org_id, str) else ""
+        if not ws or not org:
+            raise InvalidPayloadError("BUFFER_WORKSPACE_ORGANIZATIONS entries must map workspace IDs to non-empty Buffer org IDs")
+        out[ws] = org
+    return out
 
 
 def normalize_service(raw: Any) -> str:
@@ -737,16 +817,22 @@ class BufferGraphQLClient:
             raise BufferAPIError("Buffer API returned invalid JSON", status_code=response.status_code) from exc
 
         if not isinstance(payload, dict):
+            if is_mutation:
+                raise BufferOutcomeUnknownError("Buffer returned unexpected non-object response after mutation; check Buffer before retrying")
             raise BufferAPIError("Buffer API returned unexpected response shape", status_code=response.status_code)
 
         errors = payload.get("errors")
+        data = payload.get("data")
         if isinstance(errors, list) and errors:
             messages = [scrub_secret(str(err.get("message") or err), buf_key) for err in errors if isinstance(err, dict)]
             summary = "; ".join(m for m in messages if m) or "GraphQL error"
+            if is_mutation and "data" in payload:
+                raise BufferOutcomeUnknownError(f"Buffer returned GraphQL errors with response data after mutation ({summary})")
             raise BufferGraphQLError(summary, errors=errors)
 
-        data = payload.get("data")
         if not isinstance(data, dict):
+            if is_mutation:
+                raise BufferOutcomeUnknownError("Buffer response missing data payload after mutation; check Buffer before retrying")
             raise BufferAPIError("Buffer API response missing data payload", status_code=response.status_code)
         return data, response.status_code, elapsed_ms
 
@@ -805,7 +891,13 @@ class BufferGraphQLClient:
                 )
         return channels
 
-    async def create_post(self, request: BufferPostRequest, *, dry_run: bool = False) -> BufferPostResult:
+    async def create_post(
+        self,
+        request: BufferPostRequest,
+        *,
+        dry_run: bool = False,
+        organization_id: str | None = None,
+    ) -> BufferPostResult:
         graphql_input = request.to_graphql_input()
         if dry_run or request.dry_run:
             return BufferPostResult(
@@ -822,11 +914,23 @@ class BufferGraphQLClient:
                 graphql_input=graphql_input,
             )
 
-        channels = await self.list_channels()
+        pinned_org_id = (organization_id or self._default_org_id or "").strip() or None
+        if pinned_org_id is None:
+            orgs = await self.list_organizations()
+            if len(orgs) == 0:
+                raise BufferMutationError("No Buffer organizations accessible on this account", error_type="OrganizationNotFound")
+            if len(orgs) > 1:
+                raise BufferMutationError(
+                    "Multiple Buffer organizations are accessible; explicit organization_id binding is required before publishing",
+                    error_type="OrganizationBindingRequired",
+                )
+            pinned_org_id = orgs[0].id
+
+        channels = await self.list_channels(organization_id=pinned_org_id)
         matched_channel = next((ch for ch in channels if ch.id == request.channel_id), None)
         if matched_channel is None:
             raise BufferMutationError(
-                f"Buffer channel {request.channel_id!r} was not found on this account",
+                f"Buffer channel {request.channel_id!r} was not found in bound Buffer organization {pinned_org_id!r}",
                 error_type="ChannelNotFound",
             )
         if matched_channel.service != request.service:
@@ -843,13 +947,17 @@ class BufferGraphQLClient:
         )
         result = data.get("createPost")
         if not isinstance(result, dict):
-            raise BufferAPIError("Buffer createPost response missing createPost payload", status_code=http_status)
+            raise BufferOutcomeUnknownError(
+                "Buffer createPost response missing createPost payload after mutation; check Buffer before retrying"
+            )
 
         typename = str(result.get("__typename") or "")
         post = result.get("post")
         if typename == "PostActionSuccess" or (not typename and isinstance(post, dict) and post.get("id")):
             if not isinstance(post, dict) or not post.get("id"):
-                raise BufferAPIError("Buffer PostActionSuccess missing post.id", status_code=http_status)
+                raise BufferOutcomeUnknownError(
+                    "Buffer PostActionSuccess response missing post.id after mutation; check Buffer before retrying"
+                )
             return BufferPostResult(
                 provider="buffer",
                 channel_id=request.channel_id,
@@ -868,5 +976,13 @@ class BufferGraphQLClient:
                 api_key_configured=True,
             )
 
-        message = scrub_secret(str(result.get("message") or "Buffer rejected createPost request"), self._key)
-        raise BufferMutationError(message, error_type=typename or "MutationError")
+        if typename.endswith("Error") and post is None:
+            message = scrub_secret(str(result.get("message") or "Buffer rejected createPost request"), self._key)
+            raise BufferMutationError(message, error_type=typename)
+
+        raise BufferOutcomeUnknownError(
+            scrub_secret(
+                f"Buffer returned ambiguous createPost response (__typename={typename or 'missing'}); check Buffer before retrying",
+                self._key,
+            )
+        )

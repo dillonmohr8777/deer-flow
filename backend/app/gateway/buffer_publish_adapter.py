@@ -39,6 +39,8 @@ from deerflow.integrations.buffer import (
     build_post_request,
     env_dry_run_enabled,
     parse_allowed_channel_ids,
+    parse_workspace_channel_map,
+    parse_workspace_org_map,
     scrub_secret,
 )
 
@@ -85,6 +87,23 @@ class BufferPublishAdapter:
             logger.warning("Buffer approval %s rejected at execution validation: %s", action_id, err)
             return AdapterOutcome("failed", receipt, error=err)
 
+        workspace_id = str(action.get("organization_id") or action.get("workspace_id") or "").strip()
+        try:
+            workspace_channels = parse_workspace_channel_map(env)
+            workspace_orgs = parse_workspace_org_map(env)
+        except InvalidPayloadError as exc:
+            err = scrub_secret(str(exc), buffer_key)
+            receipt = {
+                "provider": "buffer",
+                "state": "invalid_workspace_binding",
+                "action_id": action_id,
+                "channel_id": request.channel_id,
+                "service": request.service,
+                "timestamp_utc": datetime.now(UTC).isoformat(),
+            }
+            logger.warning("Buffer approval %s blocked by invalid workspace binding config: %s", action_id, err)
+            return AdapterOutcome("failed", receipt, error=err)
+
         allowed_channels = parse_allowed_channel_ids(env)
         if allowed_channels is not None and request.channel_id not in allowed_channels:
             err = f"Buffer channel {request.channel_id!r} is not in BUFFER_ALLOWED_CHANNEL_IDS"
@@ -104,13 +123,49 @@ class BufferPublishAdapter:
             )
             return AdapterOutcome("failed", receipt, error=err)
 
+        bound_buffer_org_id: str | None = None
+        if workspace_channels is not None:
+            ws_allowed = workspace_channels.get(workspace_id) if workspace_id else None
+            if not ws_allowed or request.channel_id not in ws_allowed:
+                err = f"Buffer channel {request.channel_id!r} is not bound to workspace {workspace_id or '<unset>'!r}"
+                receipt = {
+                    "provider": "buffer",
+                    "state": "workspace_channel_not_allowed",
+                    "action_id": action_id,
+                    "channel_id": request.channel_id,
+                    "service": request.service,
+                    "timestamp_utc": datetime.now(UTC).isoformat(),
+                }
+                logger.warning(
+                    "Buffer approval %s blocked by workspace channel binding (workspace=%s channel=%s)",
+                    action_id,
+                    workspace_id or "<unset>",
+                    request.channel_id,
+                )
+                return AdapterOutcome("failed", receipt, error=err)
+
+        if workspace_orgs is not None:
+            bound_buffer_org_id = workspace_orgs.get(workspace_id) if workspace_id else None
+            if not bound_buffer_org_id:
+                err = f"Workspace {workspace_id or '<unset>'!r} has no bound Buffer organization in BUFFER_WORKSPACE_ORGANIZATIONS"
+                receipt = {
+                    "provider": "buffer",
+                    "state": "workspace_not_bound",
+                    "action_id": action_id,
+                    "channel_id": request.channel_id,
+                    "service": request.service,
+                    "timestamp_utc": datetime.now(UTC).isoformat(),
+                }
+                logger.warning("Buffer approval %s blocked: workspace=%s has no Buffer org binding", action_id, workspace_id or "<unset>")
+                return AdapterOutcome("failed", receipt, error=err)
+
         # Operator env dry-run switch always wins over payload dry_run=False.
         is_dry_run = bool(self._dry_run_override) or env_dry_run_enabled(env) or request.dry_run
         client = self._client(env)
 
         if is_dry_run:
-            result = await client.create_post(request, dry_run=True)
-            receipt = result.to_receipt(action_id=action_id)
+            result = await client.create_post(request, dry_run=True, organization_id=bound_buffer_org_id)
+            receipt = result.to_receipt(action_id=action_id, secret=buffer_key)
             logger.info(
                 "Buffer dry-run receipt: action_id=%s channel_id=%s service=%s mode=%s save_to_draft=%s api_key_configured=%s",
                 action_id,
@@ -122,6 +177,22 @@ class BufferPublishAdapter:
             )
             # Status stays "approved" (never "executed") so dry-run is never mistaken for a live publish.
             return AdapterOutcome("approved", receipt)
+
+        if workspace_id and workspace_channels is None and workspace_orgs is None:
+            err = (
+                f"Workspace {workspace_id!r} has no explicit Buffer channel/organization binding "
+                "(configure BUFFER_WORKSPACE_CHANNELS or BUFFER_WORKSPACE_ORGANIZATIONS before live publishing)"
+            )
+            receipt = {
+                "provider": "buffer",
+                "state": "workspace_not_bound",
+                "action_id": action_id,
+                "channel_id": request.channel_id,
+                "service": request.service,
+                "timestamp_utc": datetime.now(UTC).isoformat(),
+            }
+            logger.warning("Buffer approval %s blocked: live publish requires explicit workspace binding", action_id)
+            return AdapterOutcome("failed", receipt, error=err)
 
         if not client.is_configured:
             err = "BUFFER_API_KEY is not configured; refusing to publish to Buffer"
@@ -159,7 +230,7 @@ class BufferPublishAdapter:
         }
 
         try:
-            result = await client.create_post(request, dry_run=False)
+            result = await client.create_post(request, dry_run=False, organization_id=bound_buffer_org_id)
         except BufferNotConfiguredError:
             err = "BUFFER_API_KEY is not configured; refusing to publish to Buffer"
             logger.warning("Buffer approval %s failed closed (unconfigured)", action_id)
