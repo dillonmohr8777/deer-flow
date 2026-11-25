@@ -345,3 +345,26 @@ class PendingActionRepository:
             if result.rowcount != 1:
                 return None
         return await self.get(action_id)
+
+    async def claim_buffer_execution(self, action_id: str, *, user_id: str | None | _AutoSentinel = AUTO) -> dict | None:
+        """Durably fence one Buffer publish attempt before transport; a crash leaves outcome_unknown, never retryable."""
+        uid = resolve_user_id(user_id, method_name="PendingActionRepository.claim_buffer_execution")
+        stmt = self._scope(
+            update(PendingActionRow).where(
+                PendingActionRow.id == action_id,
+                PendingActionRow.action_type == "buffer_post",
+                PendingActionRow.status == "approved",
+                PendingActionRow.execution_result.is_(None),
+            ),
+            uid,
+        ).values(
+            execution_result={"provider": "buffer", "state": "outcome_unknown", "attempted": True},
+            error="outcome_unknown: Buffer publish attempt claimed; reconcile Buffer before retrying",
+            updated_at=datetime.now(UTC),
+        )
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            await session.commit()
+            if result.rowcount != 1:
+                return None
+        return await self.get(action_id, user_id=uid)

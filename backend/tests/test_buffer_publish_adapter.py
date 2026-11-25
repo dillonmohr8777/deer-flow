@@ -69,6 +69,18 @@ def _live_env(*channels: str, workspace_id: str = "ws_default", extra: dict[str,
     return env
 
 
+def _one_shot_claimer():
+    claimed: set[str] = set()
+
+    async def _claim(action_id: str, _user_id: str | None) -> dict[str, Any] | None:
+        if action_id in claimed:
+            return None
+        claimed.add(action_id)
+        return {"id": action_id, "status": "approved", "execution_result": {"provider": "buffer", "state": "outcome_unknown", "attempted": True}}
+
+    return _claim
+
+
 def _mock_transport(handler):
     captured: list[dict[str, Any]] = []
 
@@ -484,6 +496,7 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
     adapter = BufferPublishAdapter(
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
         env_getter=lambda: _live_env(f"ch_{expected_service}"),
+        claim_execution=_one_shot_claimer(),
     )
 
     payload = {"service": service_in, **payload_extra}
@@ -642,6 +655,7 @@ async def test_mutation_error_and_secret_scrubbing(caplog):
     adapter = BufferPublishAdapter(
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
         env_getter=_live_env,
+        claim_execution=_one_shot_claimer(),
     )
     with caplog.at_level(logging.WARNING):
         outcome = await adapter.execute(_action(payload={"service": "linkedin", "text": "Hit cap", "mode": "addToQueue"}))
@@ -674,25 +688,25 @@ def test_client_rejects_insecure_remote_api_url_and_embedded_credentials():
 async def test_http_401_429_502_and_graphql_errors():
     # 401
     t401, _ = _mock_transport(lambda _r, _b: httpx.Response(401, json={"error": "unauthorized"}))
-    a401 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t401), env_getter=_live_env)
+    a401 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t401), env_getter=_live_env, claim_execution=_one_shot_claimer())
     r401 = await a401.execute(_action())
     assert r401.status == "failed" and r401.detail["state"] == "auth_failed"
 
     # 429 with Retry-After
     t429, _ = _mock_transport(lambda _r, _b: httpx.Response(429, headers={"Retry-After": "60"}, json={"error": "slow down"}))
-    a429 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t429), env_getter=_live_env)
+    a429 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t429), env_getter=_live_env, claim_execution=_one_shot_claimer())
     r429 = await a429.execute(_action())
     assert r429.status == "failed" and r429.detail["state"] == "rate_limited" and r429.detail["retry_after"] == "60"
 
     # 502
     t502, _ = _mock_transport(lambda _r, _b: httpx.Response(502, text="Bad Gateway"))
-    a502 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t502), env_getter=_live_env)
+    a502 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t502), env_getter=_live_env, claim_execution=_one_shot_claimer())
     r502 = await a502.execute(_action())
     assert r502.status == "failed" and r502.detail["state"] == "api_error" and r502.detail["http_status"] == 502
 
     # Top-level GraphQL errors
     tgql, _ = _mock_transport(lambda _r, _b: httpx.Response(200, json={"errors": [{"message": "Invalid field"}]}))
-    agql = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=tgql), env_getter=_live_env)
+    agql = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=tgql), env_getter=_live_env, claim_execution=_one_shot_claimer())
     rgql = await agql.execute(_action())
     assert rgql.status == "failed" and rgql.detail["state"] == "graphql_error" and "Invalid field" in (rgql.error or "")
 
@@ -733,14 +747,14 @@ async def test_read_timeout_on_mutation_returns_outcome_unknown_while_connect_er
         raise httpx.ConnectError("dns failure")
 
     timeout_client = BufferGraphQLClient(api_key=KEY, transport=httpx.MockTransport(_timeout_handler))
-    timeout_adapter = BufferPublishAdapter(client_factory=lambda: timeout_client, env_getter=_live_env)
+    timeout_adapter = BufferPublishAdapter(client_factory=lambda: timeout_client, env_getter=_live_env, claim_execution=_one_shot_claimer())
     out_unknown = await timeout_adapter.execute(_action())
     assert out_unknown.status == "approved"
     assert out_unknown.detail["state"] == "outcome_unknown"
     assert (out_unknown.error or "").startswith("outcome_unknown:")
 
     connect_client = BufferGraphQLClient(api_key=KEY, transport=httpx.MockTransport(_connect_handler))
-    connect_adapter = BufferPublishAdapter(client_factory=lambda: connect_client, env_getter=_live_env)
+    connect_adapter = BufferPublishAdapter(client_factory=lambda: connect_client, env_getter=_live_env, claim_execution=_one_shot_claimer())
     out_net = await connect_adapter.execute(_action())
     assert out_net.status == "failed"
     assert out_net.detail["state"] == "network_error"
@@ -766,7 +780,7 @@ async def test_daybreak_security_regressions_service_mismatch_allowlist_empty_me
         raise AssertionError("createPost must never be invoked when channel service mismatches")
 
     t_mis, cap_mis = _mock_transport(_mismatch_handler)
-    a_mis = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_mis), env_getter=_live_env)
+    a_mis = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_mis), env_getter=_live_env, claim_execution=_one_shot_claimer())
     res_mis = await a_mis.execute(_action(target="ch_fb", payload={"service": "linkedin", "text": "Wrong channel"}))
     assert res_mis.status == "failed"
     assert res_mis.detail["state"] == "mutation_rejected"
@@ -808,7 +822,7 @@ async def test_daybreak_security_regressions_service_mismatch_allowlist_empty_me
         return httpx.Response(502, text="Bad Gateway")
 
     t_502, _ = _mock_transport(_502_mut_handler)
-    a_502 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_502), env_getter=_live_env)
+    a_502 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_502), env_getter=_live_env, claim_execution=_one_shot_claimer())
     res_502 = await a_502.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "May have landed"}))
     assert res_502.status == "approved"
     assert res_502.detail["state"] == "outcome_unknown"
@@ -977,6 +991,7 @@ async def test_workspace_binding_blocks_cross_workspace_and_multi_org_discovery(
     adapter_bound = BufferPublishAdapter(
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_bound),
         env_getter=lambda: env_bound,
+        claim_execution=_one_shot_claimer(),
     )
     cross = await adapter_bound.execute({**_action(target="ch_beta", payload={"service": "linkedin", "text": "Cross"}), "organization_id": "ws_alpha"})
     assert cross.status == "failed"
@@ -1025,6 +1040,7 @@ async def test_ambiguous_post_mutation_responses_return_outcome_unknown(mutation
     adapter = BufferPublishAdapter(
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
         env_getter=_live_env,
+        claim_execution=_one_shot_claimer(),
     )
     outcome = await adapter.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "Ambiguous"}))
     assert outcome.status == "approved"
@@ -1095,6 +1111,7 @@ async def test_live_receipt_redacts_external_link_credentials_query_and_fragment
     adapter = BufferPublishAdapter(
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
         env_getter=_live_env,
+        claim_execution=_one_shot_claimer(),
     )
     outcome = await adapter.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "Live post"}))
     assert outcome.status == "executed"
@@ -1156,6 +1173,7 @@ async def test_malformed_url_in_text_or_external_link_never_crashes_receipt_gene
     a_live = BufferPublishAdapter(
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_live),
         env_getter=_live_env,
+        claim_execution=_one_shot_claimer(),
     )
     live_res = await a_live.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "Live post"}))
     assert live_res.status == "executed"
@@ -1184,3 +1202,96 @@ async def test_untrusted_url_target_rejected_without_leaking_query_into_receipt_
     assert "secret98765" not in json.dumps(outcome.detail)
     assert "secret98765" not in (outcome.error or "")
     assert "secret98765" not in caplog.text
+
+
+@async_test
+async def test_live_publish_fenced_by_pending_action_repository_blocks_duplicate_calls(monkeypatch):
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from deerflow.persistence import engine as db_engine
+    from deerflow.persistence.approvals import PendingActionRepository
+    from deerflow.persistence.base import Base
+    from deerflow.runtime.user_context import WorkspaceStorageContext, set_storage_context
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    sf = async_sessionmaker(engine, expire_on_commit=False)
+    repo = PendingActionRepository(sf)
+
+    def _handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={"data": {"channels": [{"id": "ch_1", "name": "li", "displayName": "LI", "service": "linkedin", "isQueuePaused": False}]}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "createPost": {
+                        "__typename": "PostActionSuccess",
+                        "post": {"id": "post_once", "text": "Once", "status": "scheduled", "dueAt": None, "externalLink": None},
+                    }
+                }
+            },
+        )
+
+    transport, captured = _mock_transport(_handler)
+    adapter = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=lambda: _live_env("ch_1", workspace_id="org_ws1"),
+    )
+
+    ctx_token = set_storage_context(WorkspaceStorageContext(actor_user_id="user_1", organization_id="org_ws1", storage_user_id="user_1"))
+    monkeypatch.setattr(db_engine, "get_session_factory", lambda: sf)
+    try:
+        pending = await repo.create(
+            action_type=ACTION_TYPE,
+            target="ch_1",
+            payload={"service": "linkedin", "text": "Only publish once"},
+            title="One-shot post",
+            user_id="user_1",
+            organization_id="org_ws1",
+        )
+        approved = await repo.decide(pending["id"], approve=True, decided_by="reviewer_1", user_id="user_1")
+        assert approved is not None
+
+        first = await adapter.execute(approved)
+        assert first.status == "executed"
+        assert first.detail["post_id"] == "post_once"
+        calls_after_first = len(captured)
+        assert calls_after_first == 3
+
+        # Verify durable outcome_unknown claim marker was persisted on the row before transport.
+        row_after_claim = await repo.get(pending["id"], user_id="user_1")
+        assert row_after_claim is not None
+        assert row_after_claim["execution_result"] == {"provider": "buffer", "state": "outcome_unknown", "attempted": True}
+
+        # Re-invoking the adapter with the same approved row (even before record_outcome) must be blocked by the durable claim.
+        second = await adapter.execute(approved)
+        assert second.status == "approved"
+        assert second.detail["state"] == "outcome_unknown"
+        assert len(captured) == calls_after_first
+    finally:
+        ctx_token.var.reset(ctx_token)
+        await engine.dispose()
+
+
+@async_test
+async def test_live_publish_fails_closed_when_execution_fence_unavailable(monkeypatch):
+    from deerflow.persistence import engine as db_engine
+
+    transport, captured = _mock_transport(lambda _r, _b: httpx.Response(200, json={"data": {}}))
+    adapter = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=_live_env,
+    )
+    monkeypatch.setattr(db_engine, "get_session_factory", lambda: None)
+    outcome = await adapter.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "No DB fence"}))
+    assert outcome.status == "failed"
+    assert outcome.detail["state"] == "execution_fence_unavailable"
+    assert captured == []

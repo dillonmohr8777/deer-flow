@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -57,10 +57,26 @@ class BufferPublishAdapter:
         client_factory: Callable[[], BufferGraphQLClient] | None = None,
         env_getter: Callable[[], Mapping[str, str]] | None = None,
         dry_run: bool | None = None,
+        claim_execution: Callable[[str, str | None], Awaitable[dict[str, Any] | None]] | None = None,
     ) -> None:
         self._client_factory = client_factory
         self._env_getter = env_getter
         self._dry_run_override = dry_run
+        self._claim_execution = claim_execution
+
+    async def _claim_live_execution(self, action_id: str, user_id: str | None) -> dict[str, Any] | None:
+        if self._claim_execution is not None:
+            return await self._claim_execution(action_id, user_id)
+        from deerflow.persistence.approvals import PendingActionRepository
+        from deerflow.persistence.engine import get_session_factory
+
+        factory = get_session_factory()
+        if factory is None:
+            raise RuntimeError("PendingActionRepository session factory is unavailable")
+        repo = PendingActionRepository(factory)
+        if user_id:
+            return await repo.claim_buffer_execution(action_id, user_id=user_id)
+        return await repo.claim_buffer_execution(action_id)
 
     def _env(self) -> Mapping[str, str]:
         return os.environ if self._env_getter is None else self._env_getter()
@@ -235,7 +251,7 @@ class BufferPublishAdapter:
         base_receipt = {
             "provider": "buffer",
             "action_id": action_id,
-            "channel_id": request.channel_id,
+            "channel_id": safe_channel_id,
             "service": request.service,
             "mode": request.mode,
             "scheduling_type": request.scheduling_type,
@@ -244,6 +260,34 @@ class BufferPublishAdapter:
             "api_key_configured": True,
             "timestamp_utc": datetime.now(UTC).isoformat(),
         }
+
+        if action.get("status") != "approved":
+            err = f"Buffer approval {action_id!r} is not in 'approved' status"
+            logger.warning("Buffer approval %s rejected: status=%s", action_id, action.get("status"))
+            return AdapterOutcome("failed", {**base_receipt, "state": "not_approved"}, error=err)
+
+        if action.get("execution_result") is not None:
+            err = "outcome_unknown: Buffer action already has an execution marker; reconcile Buffer before retrying"
+            logger.warning("Buffer approval %s blocked: execution_result already set", action_id)
+            return AdapterOutcome("approved", {**base_receipt, "state": "outcome_unknown"}, error=err)
+
+        if not action_id:
+            err = "Live Buffer publishing requires a non-empty approval action id for execution fencing"
+            logger.warning("Buffer approval blocked: missing action_id for live execution fence")
+            return AdapterOutcome("failed", {**base_receipt, "state": "execution_fence_unavailable"}, error=err)
+
+        action_user_id = str(action.get("user_id") or "").strip() or None
+        try:
+            claimed = await self._claim_live_execution(action_id, action_user_id)
+        except Exception as exc:
+            err = f"Could not durably claim Buffer approval {action_id!r} before publishing ({type(exc).__name__})"
+            logger.warning("Buffer approval %s blocked: execution fence unavailable (%s)", action_id, type(exc).__name__)
+            return AdapterOutcome("failed", {**base_receipt, "state": "execution_fence_unavailable"}, error=err)
+
+        if claimed is None:
+            err = "outcome_unknown: Buffer approval was already claimed or is no longer eligible; reconcile Buffer before retrying"
+            logger.warning("Buffer approval %s blocked: atomic execution claim returned None", action_id)
+            return AdapterOutcome("approved", {**base_receipt, "state": "outcome_unknown"}, error=err)
 
         try:
             result = await client.create_post(request, dry_run=False, organization_id=bound_buffer_org_id)
