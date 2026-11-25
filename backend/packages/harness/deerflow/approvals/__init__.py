@@ -12,6 +12,9 @@ from deerflow.approvals.workflow import (
     validate_payload,
 )
 
+# Register first-party approval action types shipped inside the harness.
+from deerflow.integrations import buffer as _buffer_approval_registration  # noqa: F401, E402
+
 __all__ = [
     "ACTION_TYPES",
     "ActionAdapter",
