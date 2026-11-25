@@ -215,7 +215,7 @@ export type ReportingConnection = {
   id: string;
   name: string;
   category: string;
-  status: "connected" | "not_connected";
+  status: "connected" | "not_connected" | "unknown";
   statusLabel: string;
   unlocks: string;
 };
@@ -225,24 +225,24 @@ export const REPORTING_CONNECTIONS: readonly ReportingConnection[] = [
     id: "google-ads",
     name: "Google Ads",
     category: "Paid search",
-    status: "not_connected",
-    statusLabel: "Not connected",
+    status: "unknown",
+    statusLabel: "Status unknown",
     unlocks: "Live spend, clicks, cost per lead, and search-term performance.",
   },
   {
     id: "ga4",
     name: "GA4",
     category: "Web analytics",
-    status: "not_connected",
-    statusLabel: "Not connected",
+    status: "unknown",
+    statusLabel: "Status unknown",
     unlocks: "Website sessions, key events, and landing page conversion rates.",
   },
   {
     id: "search-console",
     name: "Search Console",
     category: "Organic search",
-    status: "not_connected",
-    statusLabel: "Not connected",
+    status: "unknown",
+    statusLabel: "Status unknown",
     unlocks:
       "Top local search queries, clicks, impressions, and indexing health.",
   },
@@ -250,24 +250,24 @@ export const REPORTING_CONNECTIONS: readonly ReportingConnection[] = [
     id: "meta-ads",
     name: "Meta Ads",
     category: "Paid social",
-    status: "not_connected",
-    statusLabel: "Not connected",
+    status: "unknown",
+    statusLabel: "Status unknown",
     unlocks: "Facebook and Instagram reach, lead forms, and creative spend.",
   },
   {
     id: "whatconverts",
     name: "WhatConverts",
     category: "Lead tracking",
-    status: "not_connected",
-    statusLabel: "Not connected",
+    status: "unknown",
+    statusLabel: "Status unknown",
     unlocks: "Named calls, web forms, and lead-to-channel match-back.",
   },
   {
     id: "buffer",
     name: "Buffer",
     category: "Social publishing",
-    status: "not_connected",
-    statusLabel: "Not connected",
+    status: "unknown",
+    statusLabel: "Status unknown",
     unlocks: "Direct scheduled publishing after you approve a social draft.",
   },
 ];

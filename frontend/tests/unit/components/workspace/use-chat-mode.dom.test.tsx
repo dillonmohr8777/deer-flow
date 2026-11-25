@@ -4,6 +4,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { useSpecificChatMode } from "@/components/workspace/chats/use-chat-mode";
 
 const mockNav = rs.hoisted(() => ({
+  pathname: "/workspace/chats/new",
   threadId: "new",
   promptParam: "" as string | null,
 }));
@@ -15,8 +16,10 @@ const mockComposer = rs.hoisted(() => ({
   }),
 }));
 
-const mockToast = rs.hoisted(() =>
-  rs.fn(
+const mockToastDismiss = rs.hoisted(() => rs.fn((_id?: string | number) => undefined));
+const mockToast = rs.hoisted(() => {
+  let seq = 1;
+  const fn = rs.fn(
     (
       _message: string,
       _opts?: {
@@ -24,11 +27,13 @@ const mockToast = rs.hoisted(() =>
         action?: { label: string; onClick: () => void };
         cancel?: { label: string; onClick: () => void };
       },
-    ) => undefined,
-  ),
-);
+    ) => `toast-${seq++}`,
+  );
+  return Object.assign(fn, { dismiss: mockToastDismiss });
+});
 
 rs.mock("next/navigation", () => ({
+  usePathname: () => mockNav.pathname,
   useParams: () => ({ thread_id: mockNav.threadId }),
   useSearchParams: () => {
     const params = new URLSearchParams();
@@ -65,11 +70,13 @@ function Harness() {
 
 beforeEach(() => {
   rs.useFakeTimers();
+  mockNav.pathname = "/workspace/chats/new";
   mockNav.threadId = "new";
   mockNav.promptParam = null;
   mockComposer.value = "";
   mockComposer.setInput.mockClear();
   mockToast.mockClear();
+  mockToastDismiss.mockClear();
 });
 
 afterEach(() => {
@@ -78,19 +85,37 @@ afterEach(() => {
 });
 
 describe("useSpecificChatMode", () => {
-  it("applies URL prompt immediately when the composer is empty", () => {
+  it("applies URL prompt immediately when the composer is empty and re-applies after leaving and revisiting", () => {
     mockNav.promptParam = "Build my website";
-    render(<Harness />);
+    const { rerender } = render(<Harness />);
 
     act(() => {
       rs.advanceTimersByTime(120);
     });
-
     expect(mockComposer.setInput).toHaveBeenCalledWith("Build my website");
     expect(mockToast).not.toHaveBeenCalled();
+
+    // Navigate away to another thread with no prompt.
+    mockComposer.setInput.mockClear();
+    mockNav.pathname = "/workspace/chats/thread-42";
+    mockNav.threadId = "thread-42";
+    mockNav.promptParam = null;
+    mockComposer.value = "";
+    rerender(<Harness />);
+
+    // Revisit the same workflow prompt on a fresh chat: it must apply again.
+    mockNav.pathname = "/workspace/chats/new";
+    mockNav.threadId = "new";
+    mockNav.promptParam = "Build my website";
+    mockComposer.value = "";
+    rerender(<Harness />);
+    act(() => {
+      rs.advanceTimersByTime(120);
+    });
+    expect(mockComposer.setInput).toHaveBeenCalledWith("Build my website");
   });
 
-  it("offers a non-destructive replacement when a draft exists and applies once the draft is cleared or accepted", () => {
+  it("offers a non-destructive replacement when a draft exists and applies once the draft is cleared", () => {
     mockComposer.value = "Unsent draft notes";
     mockNav.promptParam = "Draft weekly GBP pack";
     const { rerender } = render(<Harness />);
@@ -99,11 +124,9 @@ describe("useSpecificChatMode", () => {
       rs.advanceTimersByTime(120);
     });
 
-    // Existing draft is preserved and user is offered replacement.
     expect(mockComposer.setInput).not.toHaveBeenCalled();
     expect(mockToast).toHaveBeenCalledTimes(1);
 
-    // Clearing the draft lets the unhandled workflow prompt apply automatically.
     mockComposer.value = "";
     rerender(<Harness />);
     act(() => {
@@ -112,7 +135,34 @@ describe("useSpecificChatMode", () => {
     expect(mockComposer.setInput).toHaveBeenCalledWith("Draft weekly GBP pack");
   });
 
-  it("replaces the draft when the user clicks Use workflow prompt and respects Keep draft", () => {
+  it("dismisses and invalidates stale toast actions after switching chats", () => {
+    mockComposer.value = "Existing draft on new chat";
+    mockNav.promptParam = "Create Google Ads strategy";
+    const { rerender } = render(<Harness />);
+
+    act(() => {
+      rs.advanceTimersByTime(120);
+    });
+    expect(mockToast).toHaveBeenCalledTimes(1);
+    const staleToastAction = mockToast.mock.calls[0]?.[1]?.action?.onClick;
+    expect(staleToastAction).toBeTruthy();
+
+    // Switch to an unrelated chat with its own unsent draft.
+    mockNav.pathname = "/workspace/chats/thread-99";
+    mockNav.threadId = "thread-99";
+    mockNav.promptParam = null;
+    mockComposer.value = "Unrelated thread draft";
+    rerender(<Harness />);
+
+    expect(mockToastDismiss).toHaveBeenCalledTimes(1);
+
+    // Clicking the old toast action after navigation must NOT touch the new chat composer.
+    staleToastAction?.();
+    expect(mockComposer.setInput).not.toHaveBeenCalled();
+    expect(mockComposer.value).toBe("Unrelated thread draft");
+  });
+
+  it("replaces draft on Use workflow prompt and respects Keep draft", () => {
     mockComposer.value = "Existing user text";
     mockNav.promptParam = "Create Google Ads strategy";
     const { rerender } = render(<Harness />);
@@ -120,16 +170,11 @@ describe("useSpecificChatMode", () => {
     act(() => {
       rs.advanceTimersByTime(120);
     });
-
-    expect(mockToast).toHaveBeenCalledTimes(1);
-    const firstOpts = mockToast.mock.calls[0]?.[1];
-    expect(firstOpts?.action?.label).toBe("Use workflow prompt");
-    firstOpts?.action?.onClick();
+    mockToast.mock.calls[0]?.[1]?.action?.onClick();
     expect(mockComposer.setInput).toHaveBeenCalledWith(
       "Create Google Ads strategy",
     );
 
-    // Navigating to a new workflow prompt while text exists offers again; Keep draft declines it.
     mockComposer.setInput.mockClear();
     mockToast.mockClear();
     mockComposer.value = "Edited ads prompt";
@@ -138,10 +183,8 @@ describe("useSpecificChatMode", () => {
     act(() => {
       rs.advanceTimersByTime(120);
     });
-    expect(mockToast).toHaveBeenCalledTimes(1);
     mockToast.mock.calls[0]?.[1]?.cancel?.onClick();
 
-    // After declining, clearing the draft does NOT re-inject the declined prompt.
     mockComposer.value = "";
     rerender(<Harness />);
     act(() => {

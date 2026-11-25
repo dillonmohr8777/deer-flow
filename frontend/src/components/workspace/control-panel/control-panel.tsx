@@ -266,6 +266,9 @@ export function ControlPanelBody() {
     staleTime: 30_000,
   });
 
+  const hasCheckedReportingStatus = REPORTING_CONNECTIONS.every(
+    (conn) => conn.status !== "unknown",
+  );
   const connectedReportingCount = REPORTING_CONNECTIONS.filter(
     (conn) => conn.status === "connected",
   ).length;
@@ -474,16 +477,18 @@ export function ControlPanelBody() {
         <div className={styles.summaryTile}>
           <span className={styles.summaryLabel}>Reporting Access</span>
           <span className={styles.summaryValue}>
-            {connectedReportingCount} / {REPORTING_CONNECTIONS.length} connected
+            {hasCheckedReportingStatus
+              ? `${connectedReportingCount} / ${REPORTING_CONNECTIONS.length} connected`
+              : "Status unknown"}
           </span>
           <button
             type="button"
             className={styles.summaryLink}
             onClick={() => setActiveTab("reporting")}
           >
-            {connectedReportingCount === 0
-              ? "Channels awaiting connection"
-              : "Review connection status"}
+            {hasCheckedReportingStatus
+              ? "Review connection status"
+              : `Review ${REPORTING_CONNECTIONS.length} supported channels`}
             <ArrowRightIcon className="size-3.5" />
           </button>
         </div>
@@ -1048,9 +1053,10 @@ export function ControlPanelBody() {
                     Results &amp; Reporting
                   </h2>
                   <p className="text-muted-foreground mt-1 max-w-2xl text-sm leading-relaxed">
-                    Live spend, traffic, and lead match-back metrics appear once
-                    your channels are connected. No placeholder or estimated KPI
-                    numbers are shown before real data is linked.
+                    Supported reporting and publishing channels for this
+                    workspace. Live connection status is not checked on this
+                    page yet, and no placeholder or estimated KPI numbers are
+                    shown before real data is linked.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

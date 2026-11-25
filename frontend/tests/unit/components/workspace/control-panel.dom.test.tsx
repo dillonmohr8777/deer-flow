@@ -154,8 +154,9 @@ describe("Client Control Panel", () => {
     const summary = screen.getByTestId("control-panel-summary");
     expect(within(summary).getByText("0 / 5")).toBeTruthy();
     expect(within(summary).getByText("0 / 5 lessons")).toBeTruthy();
-    expect(within(summary).getByText("0 / 6 connected")).toBeTruthy();
+    expect(within(summary).getByText("Status unknown")).toBeTruthy();
     expect(within(summary).queryByText(/channels ready/i)).toBeNull();
+    expect(within(summary).queryByText(/0 \/ 6 connected/i)).toBeNull();
     const academyLink = within(summary).getByRole("link", {
       name: /Open Start Here \/ Academy/i,
     });

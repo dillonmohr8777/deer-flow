@@ -1,4 +1,4 @@
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 
@@ -24,6 +24,7 @@ function focusTextareaAtEnd(expectedLength: number) {
  */
 export function useSpecificChatMode() {
   const { t } = useI18n();
+  const pathname = usePathname();
   const { thread_id: threadIdFromPath } = useParams<{ thread_id: string }>();
   const searchParams = useSearchParams();
   const promptInputController = usePromptInputController();
@@ -41,23 +42,53 @@ export function useSpecificChatMode() {
     return undefined;
   }, [threadIdFromPath, searchParams, t.inputBox.createSkillPrompt]);
 
+  const routePromptKey = inputInitialValue
+    ? `${pathname}::${threadIdFromPath}::${inputInitialValue}`
+    : undefined;
   const currentValue = promptInputController.textInput.value;
-  const handledValueRef = useRef<string | undefined>(undefined);
-  const offeredValueRef = useRef<string | undefined>(undefined);
+  const handledKeyRef = useRef<string | undefined>(undefined);
+  const offeredKeyRef = useRef<string | undefined>(undefined);
+  const activeOfferTokenRef = useRef(0);
+  const activeToastIdRef = useRef<string | number | undefined>(undefined);
   const currentValueRef = useRef(currentValue);
   currentValueRef.current = currentValue;
   const setInputRef = useRef(promptInputController.textInput.setInput);
   setInputRef.current = promptInputController.textInput.setInput;
 
+  // Invalidate any pending replacement toast whenever the route or requested
+  // prompt changes, and clear handled state when leaving a prefill route so
+  // returning to the same workflow later can prefill again.
   useEffect(() => {
-    if (!inputInitialValue) {
-      offeredValueRef.current = undefined;
+    activeOfferTokenRef.current += 1;
+    if (activeToastIdRef.current !== undefined) {
+      toast.dismiss(activeToastIdRef.current);
+      activeToastIdRef.current = undefined;
+    }
+    if (!routePromptKey) {
+      handledKeyRef.current = undefined;
+      offeredKeyRef.current = undefined;
+    }
+    return () => {
+      activeOfferTokenRef.current += 1;
+      if (activeToastIdRef.current !== undefined) {
+        toast.dismiss(activeToastIdRef.current);
+        activeToastIdRef.current = undefined;
+      }
+    };
+  }, [pathname, threadIdFromPath, routePromptKey]);
+
+  useEffect(() => {
+    if (!inputInitialValue || !routePromptKey) {
       return;
     }
-    if (handledValueRef.current === inputInitialValue) {
+    if (handledKeyRef.current === routePromptKey) {
       return;
     }
+    const offerToken = activeOfferTokenRef.current;
     const timer = setTimeout(() => {
+      if (activeOfferTokenRef.current !== offerToken) {
+        return;
+      }
       const textarea = document.querySelector("textarea");
       const existing = (
         currentValueRef.current.length > 0
@@ -65,29 +96,33 @@ export function useSpecificChatMode() {
           : (textarea?.value ?? "")
       ).trim();
       if (existing === inputInitialValue.trim()) {
-        handledValueRef.current = inputInitialValue;
-        offeredValueRef.current = undefined;
+        handledKeyRef.current = routePromptKey;
+        offeredKeyRef.current = undefined;
         return;
       }
       if (existing.length === 0) {
-        handledValueRef.current = inputInitialValue;
-        offeredValueRef.current = undefined;
+        handledKeyRef.current = routePromptKey;
+        offeredKeyRef.current = undefined;
         setInputRef.current(inputInitialValue);
         focusTextareaAtEnd(inputInitialValue.length);
         return;
       }
-      if (offeredValueRef.current === inputInitialValue) {
+      if (offeredKeyRef.current === routePromptKey) {
         return;
       }
-      offeredValueRef.current = inputInitialValue;
-      toast("Selected workflow prompt is ready", {
+      offeredKeyRef.current = routePromptKey;
+      activeToastIdRef.current = toast("Selected workflow prompt is ready", {
         description:
           "You already have an unsent draft in the composer. Replace it with this workflow prompt or keep your draft.",
         action: {
           label: "Use workflow prompt",
           onClick: () => {
-            handledValueRef.current = inputInitialValue;
-            offeredValueRef.current = undefined;
+            if (activeOfferTokenRef.current !== offerToken) {
+              return;
+            }
+            handledKeyRef.current = routePromptKey;
+            offeredKeyRef.current = undefined;
+            activeToastIdRef.current = undefined;
             setInputRef.current(inputInitialValue);
             focusTextareaAtEnd(inputInitialValue.length);
           },
@@ -95,12 +130,16 @@ export function useSpecificChatMode() {
         cancel: {
           label: "Keep draft",
           onClick: () => {
-            handledValueRef.current = inputInitialValue;
-            offeredValueRef.current = undefined;
+            if (activeOfferTokenRef.current !== offerToken) {
+              return;
+            }
+            handledKeyRef.current = routePromptKey;
+            offeredKeyRef.current = undefined;
+            activeToastIdRef.current = undefined;
           },
         },
       });
     }, 100);
     return () => clearTimeout(timer);
-  }, [inputInitialValue, currentValue]);
+  }, [inputInitialValue, routePromptKey, currentValue]);
 }
