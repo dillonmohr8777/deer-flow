@@ -525,6 +525,7 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
     [
         ("", {"service": "linkedin", "text": "No channel"}, "channel_id"),
         ("ch_1", {"service": "linkedin", "channel_id": "ch_2", "text": "Mismatch"}, "must match"),
+        ("https://example.com/media?sig=secret123", {"service": "linkedin", "text": "URL target"}, "alphanumeric"),
         ("ch_1", {"service": "myspace", "text": "Unknown"}, "Unsupported Buffer service"),
         ("ch_1", {"service": "linkedin", "text": "   "}, "non-empty payload.text or at least one asset"),
         ("ch_1", {"service": "instagram", "text": "No media"}, "at least one image or video asset"),
@@ -1161,3 +1162,25 @@ async def test_malformed_url_in_text_or_external_link_never_crashes_receipt_gene
     assert live_res.detail["post_id"] == "post_live_malformed"
     assert live_res.detail["external_link"] == "[redacted-url]"
     assert "leak888" not in json.dumps(live_res.detail)
+
+
+@async_test
+async def test_untrusted_url_target_rejected_without_leaking_query_into_receipt_or_logs(caplog):
+    transport, captured = _mock_transport(lambda _r, _b: httpx.Response(200, json={"data": {}}))
+    adapter = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY, "BUFFER_ALLOWED_CHANNEL_IDS": "ch_1"},
+    )
+    with caplog.at_level(logging.WARNING):
+        outcome = await adapter.execute(
+            _action(
+                target="https://example.com/media?sig=secret98765",
+                payload={"service": "linkedin", "text": "Bad target"},
+            )
+        )
+    assert outcome.status == "failed"
+    assert outcome.detail["state"] == "invalid_payload"
+    assert captured == []
+    assert "secret98765" not in json.dumps(outcome.detail)
+    assert "secret98765" not in (outcome.error or "")
+    assert "secret98765" not in caplog.text

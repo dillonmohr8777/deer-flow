@@ -287,6 +287,7 @@ class BufferPostResult:
 
 
 _HTTP_URL_INLINE_RE = re.compile(r"https?://[^\s'\"<>]+", re.IGNORECASE)
+_CHANNEL_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 def redact_url_credentials(url: str) -> str:
@@ -712,6 +713,8 @@ def build_post_request(target: str, payload: Any) -> BufferPostRequest:
     channel_id = target_id or payload_channel
     if not channel_id:
         raise InvalidPayloadError("Buffer post requires a non-empty target channel_id")
+    if not _CHANNEL_ID_RE.fullmatch(channel_id):
+        raise InvalidPayloadError("Buffer channel_id must be 1-128 alphanumeric, underscore, or hyphen characters")
 
     service = normalize_service(payload.get("service"))
 

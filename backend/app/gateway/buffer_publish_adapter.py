@@ -41,6 +41,7 @@ from deerflow.integrations.buffer import (
     parse_allowed_channel_ids,
     parse_workspace_channel_map,
     parse_workspace_org_map,
+    sanitize_receipt_value,
     scrub_secret,
 )
 
@@ -77,7 +78,7 @@ class BufferPublishAdapter:
         try:
             request = build_post_request(str(action.get("target") or ""), action.get("payload"))
         except InvalidPayloadError as exc:
-            err = scrub_secret(str(exc), buffer_key)
+            err = str(sanitize_receipt_value(str(exc), secret=buffer_key))
             receipt = {
                 "provider": "buffer",
                 "state": "invalid_payload",
@@ -87,17 +88,19 @@ class BufferPublishAdapter:
             logger.warning("Buffer approval %s rejected at execution validation: %s", action_id, err)
             return AdapterOutcome("failed", receipt, error=err)
 
+        safe_channel_id = str(sanitize_receipt_value(request.channel_id, secret=buffer_key))
         workspace_id = str(action.get("organization_id") or action.get("workspace_id") or "").strip()
+        safe_workspace_id = str(sanitize_receipt_value(workspace_id, secret=buffer_key))
         try:
             workspace_channels = parse_workspace_channel_map(env)
             workspace_orgs = parse_workspace_org_map(env)
         except InvalidPayloadError as exc:
-            err = scrub_secret(str(exc), buffer_key)
+            err = str(sanitize_receipt_value(str(exc), secret=buffer_key))
             receipt = {
                 "provider": "buffer",
                 "state": "invalid_workspace_binding",
                 "action_id": action_id,
-                "channel_id": request.channel_id,
+                "channel_id": safe_channel_id,
                 "service": request.service,
                 "timestamp_utc": datetime.now(UTC).isoformat(),
             }
@@ -106,19 +109,19 @@ class BufferPublishAdapter:
 
         allowed_channels = parse_allowed_channel_ids(env)
         if allowed_channels is not None and request.channel_id not in allowed_channels:
-            err = f"Buffer channel {request.channel_id!r} is not in BUFFER_ALLOWED_CHANNEL_IDS"
+            err = f"Buffer channel {safe_channel_id!r} is not in BUFFER_ALLOWED_CHANNEL_IDS"
             receipt = {
                 "provider": "buffer",
                 "state": "channel_not_allowed",
                 "action_id": action_id,
-                "channel_id": request.channel_id,
+                "channel_id": safe_channel_id,
                 "service": request.service,
                 "timestamp_utc": datetime.now(UTC).isoformat(),
             }
             logger.warning(
                 "Buffer approval %s blocked by channel allowlist (channel=%s service=%s)",
                 action_id,
-                request.channel_id,
+                safe_channel_id,
                 request.service,
             )
             return AdapterOutcome("failed", receipt, error=err)
@@ -127,36 +130,36 @@ class BufferPublishAdapter:
         if workspace_channels is not None:
             ws_allowed = workspace_channels.get(workspace_id) if workspace_id else None
             if not ws_allowed or request.channel_id not in ws_allowed:
-                err = f"Buffer channel {request.channel_id!r} is not bound to workspace {workspace_id or '<unset>'!r}"
+                err = f"Buffer channel {safe_channel_id!r} is not bound to workspace {safe_workspace_id or '<unset>'!r}"
                 receipt = {
                     "provider": "buffer",
                     "state": "workspace_channel_not_allowed",
                     "action_id": action_id,
-                    "channel_id": request.channel_id,
+                    "channel_id": safe_channel_id,
                     "service": request.service,
                     "timestamp_utc": datetime.now(UTC).isoformat(),
                 }
                 logger.warning(
                     "Buffer approval %s blocked by workspace channel binding (workspace=%s channel=%s)",
                     action_id,
-                    workspace_id or "<unset>",
-                    request.channel_id,
+                    safe_workspace_id or "<unset>",
+                    safe_channel_id,
                 )
                 return AdapterOutcome("failed", receipt, error=err)
 
         if workspace_orgs is not None:
             bound_buffer_org_id = workspace_orgs.get(workspace_id) if workspace_id else None
             if not bound_buffer_org_id:
-                err = f"Workspace {workspace_id or '<unset>'!r} has no bound Buffer organization in BUFFER_WORKSPACE_ORGANIZATIONS"
+                err = f"Workspace {safe_workspace_id or '<unset>'!r} has no bound Buffer organization in BUFFER_WORKSPACE_ORGANIZATIONS"
                 receipt = {
                     "provider": "buffer",
                     "state": "workspace_not_bound",
                     "action_id": action_id,
-                    "channel_id": request.channel_id,
+                    "channel_id": safe_channel_id,
                     "service": request.service,
                     "timestamp_utc": datetime.now(UTC).isoformat(),
                 }
-                logger.warning("Buffer approval %s blocked: workspace=%s has no Buffer org binding", action_id, workspace_id or "<unset>")
+                logger.warning("Buffer approval %s blocked: workspace=%s has no Buffer org binding", action_id, safe_workspace_id or "<unset>")
                 return AdapterOutcome("failed", receipt, error=err)
 
         # Operator env dry-run switch always wins over payload dry_run=False.
