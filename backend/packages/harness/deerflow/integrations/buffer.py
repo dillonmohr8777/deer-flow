@@ -298,9 +298,11 @@ def env_dry_run_enabled(env: Mapping[str, str] | None = None) -> bool:
     return source.get(BUFFER_DRY_RUN_ENV, "").strip().lower() in TRUTHY_ENV_VALUES
 
 
-def parse_allowed_channel_ids(env: Mapping[str, str] | None = None) -> frozenset[str]:
+def parse_allowed_channel_ids(env: Mapping[str, str] | None = None) -> frozenset[str] | None:
     source = os.environ if env is None else env
-    raw = source.get(BUFFER_ALLOWED_CHANNEL_IDS_ENV, "")
+    if BUFFER_ALLOWED_CHANNEL_IDS_ENV not in source:
+        return None
+    raw = source.get(BUFFER_ALLOWED_CHANNEL_IDS_ENV) or ""
     return frozenset(item.strip() for item in raw.split(",") if item.strip())
 
 
@@ -401,6 +403,8 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
         return {}
     if not isinstance(raw_meta, dict):
         raise InvalidPayloadError("payload.metadata must be an object")
+    if not raw_meta:
+        return {}
     meta_key = SUPPORTED_SERVICES[service]
     # Accept either {"google": {...}} / {"linkedin": {...}} or flat platform fields.
     unknown_top = set(raw_meta) - set(SUPPORTED_SERVICES.values())
@@ -712,6 +716,13 @@ class BufferGraphQLClient:
             retry_after = response.headers.get("Retry-After")
             suffix = f"; retry after {retry_after}s" if retry_after else ""
             raise BufferRateLimitError(f"Buffer API rate limit reached (HTTP 429{suffix})", retry_after=retry_after)
+        if response.status_code >= 500 and is_mutation:
+            raise BufferOutcomeUnknownError(
+                scrub_secret(
+                    f"Buffer API returned HTTP {response.status_code} after mutation; check Buffer before retrying",
+                    buf_key,
+                )
+            )
         if response.status_code >= 400:
             raise BufferAPIError(
                 scrub_secret(f"Buffer API returned HTTP {response.status_code}", buf_key),
@@ -809,6 +820,20 @@ class BufferGraphQLClient:
                 due_at=request.due_at,
                 api_key_configured=self.is_configured,
                 graphql_input=graphql_input,
+            )
+
+        channels = await self.list_channels()
+        matched_channel = next((ch for ch in channels if ch.id == request.channel_id), None)
+        if matched_channel is None:
+            raise BufferMutationError(
+                f"Buffer channel {request.channel_id!r} was not found on this account",
+                error_type="ChannelNotFound",
+            )
+        if matched_channel.service != request.service:
+            raise BufferMutationError(
+                f"Buffer channel {request.channel_id!r} belongs to service {matched_channel.service!r}, "
+                f"not approved service {request.service!r}",
+                error_type="ChannelServiceMismatch",
             )
 
         data, http_status, elapsed_ms = await self._post_graphql(

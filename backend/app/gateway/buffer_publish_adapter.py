@@ -86,7 +86,7 @@ class BufferPublishAdapter:
             return AdapterOutcome("failed", receipt, error=err)
 
         allowed_channels = parse_allowed_channel_ids(env)
-        if allowed_channels and request.channel_id not in allowed_channels:
+        if allowed_channels is not None and request.channel_id not in allowed_channels:
             err = f"Buffer channel {request.channel_id!r} is not in BUFFER_ALLOWED_CHANNEL_IDS"
             receipt = {
                 "provider": "buffer",

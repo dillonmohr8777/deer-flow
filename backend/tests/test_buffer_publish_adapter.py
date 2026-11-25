@@ -427,7 +427,21 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
     caplog,
 ):
     def _handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
-        assert body["query"] == CREATE_POST_MUTATION
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Test Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "channels": [
+                            {"id": f"ch_{expected_service}", "name": "test", "displayName": "Test", "service": expected_service, "isQueuePaused": False}
+                        ]
+                    }
+                },
+            )
+        assert query == CREATE_POST_MUTATION
         post_input = body["variables"]["input"]
         return httpx.Response(
             200,
@@ -459,9 +473,9 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
 
     assert outcome.status == "executed"
     assert outcome.error is None
-    assert len(captured) == 1
-    assert captured[0]["authorization"] == f"Bearer {KEY}"
-    sent_input = captured[0]["body"]["variables"]["input"]
+    assert len(captured) == 3
+    assert all(req["authorization"] == f"Bearer {KEY}" for req in captured)
+    sent_input = captured[-1]["body"]["variables"]["input"]
     assert sent_input["channelId"] == f"ch_{expected_service}"
     assert sent_input["schedulingType"] == "automatic"
     for key, expected_val in expected_input_subset.items():
@@ -552,7 +566,22 @@ def test_gbp_offer_and_event_metadata_validation():
 
 @async_test
 async def test_mutation_error_and_secret_scrubbing(caplog):
-    def _handler(_request: httpx.Request, _body: dict[str, Any]) -> httpx.Response:
+    def _handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Test Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "channels": [
+                            {"id": "ch_1", "name": "li", "displayName": "LI", "service": "linkedin", "isQueuePaused": False},
+                            {"id": "ch_gbp_001", "name": "li2", "displayName": "LI2", "service": "linkedin", "isQueuePaused": False},
+                        ]
+                    }
+                },
+            )
         return httpx.Response(
             200,
             json={
@@ -637,7 +666,23 @@ async def test_http_401_429_502_and_graphql_errors():
 
 @async_test
 async def test_read_timeout_on_mutation_returns_outcome_unknown_while_connect_error_fails():
-    async def _timeout_handler(_request: httpx.Request) -> httpx.Response:
+    async def _timeout_handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Test Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "channels": [
+                            {"id": "ch_1", "name": "li", "displayName": "LI", "service": "linkedin", "isQueuePaused": False},
+                            {"id": "ch_gbp_001", "name": "gbp", "displayName": "GBP", "service": "googlebusiness", "isQueuePaused": False},
+                        ]
+                    }
+                },
+            )
         raise httpx.ReadTimeout("timed out waiting for Buffer")
 
     async def _connect_handler(_request: httpx.Request) -> httpx.Response:
@@ -660,6 +705,70 @@ async def test_read_timeout_on_mutation_returns_outcome_unknown_while_connect_er
         await timeout_client.create_post(build_post_request("ch_1", {"service": "linkedin", "text": "Hi"}))
     with pytest.raises(BufferNetworkError):
         await connect_client.create_post(build_post_request("ch_1", {"service": "linkedin", "text": "Hi"}))
+
+
+@async_test
+async def test_daybreak_security_regressions_service_mismatch_allowlist_empty_metadata_5xx():
+    # 1) Cross-service mismatch blocks BEFORE createPost is sent.
+    def _mismatch_handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={"data": {"channels": [{"id": "ch_fb", "name": "fb", "displayName": "FB", "service": "facebook", "isQueuePaused": False}]}},
+            )
+        raise AssertionError("createPost must never be invoked when channel service mismatches")
+
+    t_mis, cap_mis = _mock_transport(_mismatch_handler)
+    a_mis = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_mis), env_getter=lambda: {"BUFFER_API_KEY": KEY})
+    res_mis = await a_mis.execute(_action(target="ch_fb", payload={"service": "linkedin", "text": "Wrong channel"}))
+    assert res_mis.status == "failed"
+    assert res_mis.detail["state"] == "mutation_rejected"
+    assert res_mis.detail["error_type"] == "ChannelServiceMismatch"
+    assert len(cap_mis) == 2
+
+    # 2) Whitespace/comma-only BUFFER_ALLOWED_CHANNEL_IDS fails closed (never falls open).
+    t_empty, cap_empty = _mock_transport(lambda _r, _b: httpx.Response(200, json={"data": {}}))
+    a_empty = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_empty),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY, "BUFFER_ALLOWED_CHANNEL_IDS": " , , "},
+    )
+    res_empty = await a_empty.execute(_action(target="ch_any", payload={"service": "linkedin", "text": "Blocked"}))
+    assert res_empty.status == "failed"
+    assert res_empty.detail["state"] == "channel_not_allowed"
+    assert cap_empty == []
+
+    # 3) Explicit empty metadata={} is accepted as absent optional metadata.
+    req_empty_meta = build_post_request("ch_1", {"service": "linkedin", "text": "Empty meta ok", "metadata": {}})
+    assert "metadata" not in req_empty_meta.to_graphql_input()
+
+    # 4) HTTP 5xx on createPost mutation returns outcome_unknown (prevents duplicate reposts).
+    def _502_mut_handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "channels": [
+                            {"id": "ch_1", "name": "li", "displayName": "LI", "service": "linkedin", "isQueuePaused": False},
+                            {"id": "ch_gbp_001", "name": "li2", "displayName": "LI2", "service": "linkedin", "isQueuePaused": False},
+                        ]
+                    }
+                },
+            )
+        return httpx.Response(502, text="Bad Gateway")
+
+    t_502, _ = _mock_transport(_502_mut_handler)
+    a_502 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_502), env_getter=lambda: {"BUFFER_API_KEY": KEY})
+    res_502 = await a_502.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "May have landed"}))
+    assert res_502.status == "approved"
+    assert res_502.detail["state"] == "outcome_unknown"
+    assert (res_502.error or "").startswith("outcome_unknown:")
 
 
 # --- Approvals wiring & Slack DM web-only guard ------------------------------
