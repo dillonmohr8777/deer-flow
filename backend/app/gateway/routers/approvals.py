@@ -105,10 +105,10 @@ class EvidenceIn(BaseModel):
 
 
 class LoopFilingRequest(BaseModel):
-    """A draft the Client Loop already made (Gmail/Slack draft exists) and wants reviewed here."""
+    """A draft the Client Loop already made (Gmail/Slack/Buffer draft exists) and wants reviewed here."""
 
     client: str = Field(min_length=1, max_length=128)
-    action_type: Literal["slack_message", "email", "ad_change", "other"]
+    action_type: Literal["slack_message", "email", "ad_change", "buffer_post", "other"]
     title: str = Field(max_length=255)
     target: str = Field(max_length=512)
     payload: dict[str, Any]

@@ -70,8 +70,10 @@ SHARE_MODES = ("addToQueue", "customScheduled", "shareNow", "shareNext")
 INPUT_MODES = ("draft", *SHARE_MODES)
 SCHEDULING_TYPES = ("automatic", "notification")
 ASSET_TYPES = ("image", "video", "document")
-GBP_POST_TYPES = ("post", "offer", "event")
+GBP_POST_TYPES = ("whats_new", "offer", "event")
+GBP_ACTION_TYPES = ("book", "call", "learn_more", "none", "order", "shop", "signup")
 FACEBOOK_POST_TYPES = ("post", "story", "reel")
+INSTAGRAM_POST_TYPES = ("post", "reel", "story", "carousel")
 
 _CREDENTIAL_KEY_RE = re.compile(
     r"(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization)?|bearer|password|passwd|secret|private[_-]?key|client[_-]?secret|cookie)",
@@ -469,23 +471,37 @@ def _normalize_assets(raw_assets: Any) -> tuple[dict[str, Any], ...]:
             body = item[kind]
             if not isinstance(body, dict):
                 raise InvalidPayloadError(f"payload.assets[{idx}].{kind} must be an object")
-            url = _validate_http_url(body.get("url"), f"payload.assets[{idx}].{kind}.url")
-            entry: dict[str, Any] = {"url": url}
-            if "metadata" in body and body["metadata"] is not None:
-                if not isinstance(body["metadata"], dict):
-                    raise InvalidPayloadError(f"payload.assets[{idx}].{kind}.metadata must be an object")
-                entry["metadata"] = body["metadata"]
-            normalized.append({kind: entry})
-            continue
-        kind = str(item.get("type") or "").strip().lower()
-        if kind not in ASSET_TYPES:
-            raise InvalidPayloadError(f"payload.assets[{idx}].type must be one of: image, video, document")
-        url = _validate_http_url(item.get("url"), f"payload.assets[{idx}].url")
-        entry = {"url": url}
-        if "metadata" in item and item["metadata"] is not None:
-            if not isinstance(item["metadata"], dict):
-                raise InvalidPayloadError(f"payload.assets[{idx}].metadata must be an object")
-            entry["metadata"] = item["metadata"]
+            prefix = f"payload.assets[{idx}].{kind}"
+        else:
+            kind = str(item.get("type") or "").strip().lower()
+            if kind not in ASSET_TYPES:
+                raise InvalidPayloadError(f"payload.assets[{idx}].type must be one of: image, video, document")
+            body = {k: v for k, v in item.items() if k != "type"}
+            prefix = f"payload.assets[{idx}]"
+
+        allowed_asset_keys = {"url", "thumbnailUrl", "thumbnail_url", "metadata"} | ({"title"} if kind == "document" else set())
+        unknown_asset_keys = [k for k in body if k not in allowed_asset_keys]
+        if unknown_asset_keys:
+            raise InvalidPayloadError(f"Unsupported {kind} asset fields at {prefix}: {', '.join(sorted(str(k) for k in unknown_asset_keys))}")
+        if body.get("thumbnailUrl") is not None and body.get("thumbnail_url") is not None:
+            raise InvalidPayloadError(f"{prefix} cannot specify both thumbnailUrl and thumbnail_url")
+
+        url = _validate_http_url(body.get("url"), f"{prefix}.url")
+        entry: dict[str, Any] = {"url": url}
+        thumb = body.get("thumbnailUrl") if body.get("thumbnailUrl") is not None else body.get("thumbnail_url")
+        if thumb is not None:
+            entry["thumbnailUrl"] = _validate_http_url(thumb, f"{prefix}.thumbnailUrl")
+        if kind == "document":
+            title = body.get("title")
+            if not isinstance(title, str) or not title.strip():
+                raise InvalidPayloadError(f"{prefix}.title must be a non-empty string for document assets")
+            if "thumbnailUrl" not in entry:
+                raise InvalidPayloadError(f"{prefix}.thumbnailUrl is required for document assets")
+            entry["title"] = title.strip()
+        if "metadata" in body and body["metadata"] is not None:
+            if not isinstance(body["metadata"], dict):
+                raise InvalidPayloadError(f"{prefix}.metadata must be an object")
+            entry["metadata"] = body["metadata"]
         normalized.append({kind: entry})
     return tuple(normalized)
 
@@ -510,9 +526,38 @@ _SERVICE_METADATA_FIELDS: dict[str, frozenset[str]] = {
     ),
     "linkedin": frozenset({"firstComment", "first_comment", "linkAttachment", "link_attachment", "annotations"}),
     "facebook": frozenset({"type", "post_type", "firstComment", "first_comment", "linkAttachment", "link_attachment", "annotations"}),
-    "instagram": frozenset({"shouldShareToFeed", "should_share_to_feed", "firstComment", "first_comment", "link", "geolocation", "isAiGenerated", "is_ai_generated"}),
-    "twitter": frozenset({"url", "link", "thread", "replyToId", "reply_to_id"}),
+    "instagram": frozenset(
+        {
+            "type",
+            "post_type",
+            "shouldShareToFeed",
+            "should_share_to_feed",
+            "firstComment",
+            "first_comment",
+            "link",
+            "geolocation",
+            "isAiGenerated",
+            "is_ai_generated",
+        }
+    ),
+    "twitter": frozenset({"isAiGenerated", "is_ai_generated", "retweet", "thread"}),
 }
+
+_GBP_WHATS_NEW_KEYS = frozenset({"button", "link"})
+_GBP_OFFER_KEYS = frozenset({"code", "endDate", "link", "startDate", "terms", "title"})
+_GBP_EVENT_KEYS = frozenset({"button", "endDate", "isFullDayEvent", "link", "startDate", "title"})
+_LINK_ATTACHMENT_KEYS = frozenset({"url", "title", "description", "thumbnail"})
+_RETWEET_KEYS = frozenset({"id", "comment"})
+_THREAD_ITEM_KEYS = frozenset({"text", "assets", "metadata"})
+
+
+def _normalize_gbp_action_button(raw: Any, field_name: str) -> str:
+    if not isinstance(raw, str) or not raw.strip():
+        raise InvalidPayloadError(f"{field_name} must be a non-empty string")
+    normalized = raw.strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized not in GBP_ACTION_TYPES:
+        raise InvalidPayloadError(f"{field_name} must be one of: {', '.join(GBP_ACTION_TYPES)}")
+    return normalized
 
 
 def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool) -> dict[str, Any]:
@@ -552,7 +597,8 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
     if service == "googlebusiness":
         if section.get("type") is not None and section.get("post_type") is not None:
             raise InvalidPayloadError("Google Business Profile metadata cannot specify both type and post_type")
-        post_type = str(section.get("type") or section.get("post_type") or "post").strip().lower()
+        raw_post_type = str(section.get("type") or section.get("post_type") or "whats_new").strip().lower()
+        post_type = "whats_new" if raw_post_type == "post" else raw_post_type
         if post_type not in GBP_POST_TYPES:
             raise InvalidPayloadError(f"Google Business Profile post type must be one of: {', '.join(GBP_POST_TYPES)}")
         cleaned["type"] = post_type
@@ -577,31 +623,69 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
         if whats_new is not None:
             if not isinstance(whats_new, dict):
                 raise InvalidPayloadError("Google Business Profile detailsWhatsNew must be an object")
-            wn_clean = dict(whats_new)
-            if "link" in wn_clean and wn_clean["link"] is not None:
-                wn_clean["link"] = _validate_http_url(wn_clean["link"], "metadata.google.detailsWhatsNew.link")
+            bad_wn = [k for k in whats_new if k not in _GBP_WHATS_NEW_KEYS]
+            if bad_wn:
+                raise InvalidPayloadError(f"Unsupported Google Business Profile detailsWhatsNew fields: {', '.join(sorted(bad_wn))}")
+            wn_clean: dict[str, Any] = {}
+            if whats_new.get("button") is not None:
+                wn_clean["button"] = _normalize_gbp_action_button(whats_new["button"], "metadata.google.detailsWhatsNew.button")
+            if whats_new.get("link") is not None:
+                wn_clean["link"] = _validate_http_url(whats_new["link"], "metadata.google.detailsWhatsNew.link")
             cleaned["detailsWhatsNew"] = wn_clean
         elif cta_button is not None or cta_link is not None:
             wn_clean = {}
             if cta_button is not None:
-                if not isinstance(cta_button, str) or not cta_button.strip():
-                    raise InvalidPayloadError("Google Business Profile CTA button must be a non-empty string")
-                wn_clean["button"] = cta_button.strip()
+                wn_clean["button"] = _normalize_gbp_action_button(cta_button, "metadata.google.cta_button")
             if cta_link is not None:
                 wn_clean["link"] = _validate_http_url(cta_link, "metadata.google.cta_link")
             cleaned["detailsWhatsNew"] = wn_clean
-        for detail_key, alt_key in (("detailsOffer", "details_offer"), ("detailsEvent", "details_event")):
-            if section.get(detail_key) is not None and section.get(alt_key) is not None:
-                raise InvalidPayloadError(f"Google Business Profile metadata cannot specify both {detail_key} and {alt_key}")
-            detail_val = section.get(detail_key) if section.get(detail_key) is not None else section.get(alt_key)
-            if detail_val is not None:
-                if not isinstance(detail_val, dict):
-                    raise InvalidPayloadError(f"Google Business Profile {detail_key} must be an object")
-                detail_clean = dict(detail_val)
-                for url_field in ("link", "redeemOnlineUrl"):
-                    if url_field in detail_clean and detail_clean[url_field] is not None:
-                        detail_clean[url_field] = _validate_http_url(detail_clean[url_field], f"metadata.google.{detail_key}.{url_field}")
-                cleaned[detail_key] = detail_clean
+        if section.get("detailsOffer") is not None and section.get("details_offer") is not None:
+            raise InvalidPayloadError("Google Business Profile metadata cannot specify both detailsOffer and details_offer")
+        offer_val = section.get("detailsOffer") if section.get("detailsOffer") is not None else section.get("details_offer")
+        if offer_val is not None:
+            if not isinstance(offer_val, dict):
+                raise InvalidPayloadError("Google Business Profile detailsOffer must be an object")
+            bad_offer = [k for k in offer_val if k not in _GBP_OFFER_KEYS]
+            if bad_offer:
+                raise InvalidPayloadError(f"Unsupported Google Business Profile detailsOffer fields: {', '.join(sorted(bad_offer))}")
+            offer_clean: dict[str, Any] = {}
+            for str_field in ("code", "terms", "title"):
+                if offer_val.get(str_field) is not None:
+                    if not isinstance(offer_val[str_field], str) or not offer_val[str_field].strip():
+                        raise InvalidPayloadError(f"metadata.google.detailsOffer.{str_field} must be a non-empty string")
+                    offer_clean[str_field] = offer_val[str_field].strip()
+            if offer_val.get("link") is not None:
+                offer_clean["link"] = _validate_http_url(offer_val["link"], "metadata.google.detailsOffer.link")
+            for dt_field in ("startDate", "endDate"):
+                if offer_val.get(dt_field) is not None:
+                    offer_clean[dt_field] = _normalize_due_at(offer_val[dt_field])
+            cleaned["detailsOffer"] = offer_clean
+        if section.get("detailsEvent") is not None and section.get("details_event") is not None:
+            raise InvalidPayloadError("Google Business Profile metadata cannot specify both detailsEvent and details_event")
+        event_val = section.get("detailsEvent") if section.get("detailsEvent") is not None else section.get("details_event")
+        if event_val is not None:
+            if not isinstance(event_val, dict):
+                raise InvalidPayloadError("Google Business Profile detailsEvent must be an object")
+            bad_event = [k for k in event_val if k not in _GBP_EVENT_KEYS]
+            if bad_event:
+                raise InvalidPayloadError(f"Unsupported Google Business Profile detailsEvent fields: {', '.join(sorted(bad_event))}")
+            event_clean: dict[str, Any] = {}
+            if event_val.get("title") is not None:
+                if not isinstance(event_val["title"], str) or not event_val["title"].strip():
+                    raise InvalidPayloadError("metadata.google.detailsEvent.title must be a non-empty string")
+                event_clean["title"] = event_val["title"].strip()
+            if event_val.get("button") is not None:
+                event_clean["button"] = _normalize_gbp_action_button(event_val["button"], "metadata.google.detailsEvent.button")
+            if event_val.get("link") is not None:
+                event_clean["link"] = _validate_http_url(event_val["link"], "metadata.google.detailsEvent.link")
+            for dt_field in ("startDate", "endDate"):
+                if event_val.get(dt_field) is not None:
+                    event_clean[dt_field] = _normalize_due_at(event_val[dt_field])
+            full_day = event_val.get("isFullDayEvent", False)
+            if not isinstance(full_day, bool):
+                raise InvalidPayloadError("metadata.google.detailsEvent.isFullDayEvent must be a boolean")
+            event_clean["isFullDayEvent"] = full_day
+            cleaned["detailsEvent"] = event_clean
 
     elif service == "linkedin":
         if section.get("firstComment") is not None and section.get("first_comment") is not None:
@@ -619,9 +703,11 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
                 raise InvalidPayloadError("LinkedIn linkAttachment cannot be combined with non-empty assets")
             if not isinstance(link_attachment, dict):
                 raise InvalidPayloadError("LinkedIn linkAttachment must be an object")
+            bad_la = [k for k in link_attachment if k not in _LINK_ATTACHMENT_KEYS]
+            if bad_la:
+                raise InvalidPayloadError(f"Unsupported LinkedIn linkAttachment fields: {', '.join(sorted(bad_la))}")
             la_clean = dict(link_attachment)
-            if "url" in la_clean and la_clean["url"] is not None:
-                la_clean["url"] = _validate_http_url(la_clean["url"], "metadata.linkedin.linkAttachment.url")
+            la_clean["url"] = _validate_http_url(la_clean.get("url"), "metadata.linkedin.linkAttachment.url")
             cleaned["linkAttachment"] = la_clean
         if "annotations" in section and section["annotations"] is not None:
             if not isinstance(section["annotations"], list):
@@ -652,16 +738,28 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
                 raise InvalidPayloadError("Facebook linkAttachment cannot be combined with non-empty assets")
             if not isinstance(link_attachment, dict):
                 raise InvalidPayloadError("Facebook linkAttachment must be an object")
+            bad_la = [k for k in link_attachment if k not in _LINK_ATTACHMENT_KEYS]
+            if bad_la:
+                raise InvalidPayloadError(f"Unsupported Facebook linkAttachment fields: {', '.join(sorted(bad_la))}")
             la_clean = dict(link_attachment)
-            if "url" in la_clean and la_clean["url"] is not None:
-                la_clean["url"] = _validate_http_url(la_clean["url"], "metadata.facebook.linkAttachment.url")
+            la_clean["url"] = _validate_http_url(la_clean.get("url"), "metadata.facebook.linkAttachment.url")
             cleaned["linkAttachment"] = la_clean
         if "annotations" in section and section["annotations"] is not None:
             if not isinstance(section["annotations"], list):
                 raise InvalidPayloadError("Facebook annotations must be a list")
             cleaned["annotations"] = section["annotations"]
+        if cleaned and "type" not in cleaned:
+            cleaned["type"] = "post"
 
     elif service == "instagram":
+        if section.get("type") is not None and section.get("post_type") is not None:
+            raise InvalidPayloadError("Instagram metadata cannot specify both type and post_type")
+        ig_type = section.get("type") if section.get("type") is not None else section.get("post_type")
+        if ig_type is not None:
+            normalized_ig_type = str(ig_type).strip().lower()
+            if normalized_ig_type not in INSTAGRAM_POST_TYPES:
+                raise InvalidPayloadError(f"Instagram post type must be one of: {', '.join(INSTAGRAM_POST_TYPES)}")
+            cleaned["type"] = normalized_ig_type
         if section.get("shouldShareToFeed") is not None and section.get("should_share_to_feed") is not None:
             raise InvalidPayloadError("Instagram metadata cannot specify both shouldShareToFeed and should_share_to_feed")
         share_to_feed = section.get("shouldShareToFeed") if section.get("shouldShareToFeed") is not None else section.get("should_share_to_feed")
@@ -689,15 +787,56 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
             if not isinstance(ai_flag, bool):
                 raise InvalidPayloadError("Instagram isAiGenerated must be a boolean")
             cleaned["isAiGenerated"] = ai_flag
+        if cleaned:
+            cleaned.setdefault("type", "post")
+            cleaned.setdefault("shouldShareToFeed", True)
 
     elif service == "twitter":
-        for key, value in section.items():
-            if value is None:
-                continue
-            if key in {"url", "link"}:
-                cleaned[key] = _validate_http_url(value, f"metadata.twitter.{key}")
-            else:
-                cleaned[key] = value
+        if section.get("isAiGenerated") is not None and section.get("is_ai_generated") is not None:
+            raise InvalidPayloadError("Twitter metadata cannot specify both isAiGenerated and is_ai_generated")
+        ai_flag = section.get("isAiGenerated") if section.get("isAiGenerated") is not None else section.get("is_ai_generated")
+        if ai_flag is not None:
+            if not isinstance(ai_flag, bool):
+                raise InvalidPayloadError("Twitter isAiGenerated must be a boolean")
+            cleaned["isAiGenerated"] = ai_flag
+        if section.get("retweet") is not None:
+            retweet = section["retweet"]
+            if not isinstance(retweet, dict):
+                raise InvalidPayloadError("Twitter retweet must be an object")
+            bad_rt = [k for k in retweet if k not in _RETWEET_KEYS]
+            if bad_rt:
+                raise InvalidPayloadError(f"Unsupported Twitter retweet fields: {', '.join(sorted(bad_rt))}")
+            rt_id = retweet.get("id")
+            if not isinstance(rt_id, str) or not rt_id.strip():
+                raise InvalidPayloadError("Twitter retweet.id must be a non-empty string")
+            rt_clean: dict[str, Any] = {"id": rt_id.strip()}
+            if retweet.get("comment") is not None:
+                if not isinstance(retweet["comment"], str):
+                    raise InvalidPayloadError("Twitter retweet.comment must be a string")
+                rt_clean["comment"] = retweet["comment"]
+            cleaned["retweet"] = rt_clean
+        if section.get("thread") is not None:
+            raw_thread = section["thread"]
+            if not isinstance(raw_thread, list):
+                raise InvalidPayloadError("Twitter thread must be a list of thread items")
+            thread_clean: list[dict[str, Any]] = []
+            for idx, item in enumerate(raw_thread):
+                if not isinstance(item, dict):
+                    raise InvalidPayloadError(f"Twitter thread[{idx}] must be an object")
+                bad_item = [k for k in item if k not in _THREAD_ITEM_KEYS]
+                if bad_item:
+                    raise InvalidPayloadError(f"Unsupported Twitter thread[{idx}] fields: {', '.join(sorted(bad_item))}")
+                t_entry: dict[str, Any] = {"assets": list(_normalize_assets(item.get("assets")))}
+                if item.get("text") is not None:
+                    if not isinstance(item["text"], str):
+                        raise InvalidPayloadError(f"Twitter thread[{idx}].text must be a string")
+                    t_entry["text"] = item["text"]
+                if item.get("metadata") is not None:
+                    if not isinstance(item["metadata"], dict):
+                        raise InvalidPayloadError(f"Twitter thread[{idx}].metadata must be an object")
+                    t_entry["metadata"] = dict(item["metadata"])
+                thread_clean.append(t_entry)
+            cleaned["thread"] = thread_clean
 
     return {meta_key: cleaned} if cleaned else {}
 

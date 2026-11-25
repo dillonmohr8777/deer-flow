@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 import pytest
+from org_isolation_fixtures import org_world  # noqa: F401
 
 from app.channels import slack_approvals as sa
 from app.gateway import approval_adapters
@@ -370,8 +371,8 @@ async def test_list_channels_with_explicit_organization_id_skips_org_query():
                 "dueAt": "2026-12-01T19:30:00Z",
                 "metadata": {
                     "google": {
-                        "type": "post",
-                        "detailsWhatsNew": {"button": "BOOK", "link": "https://example.com/book"},
+                        "type": "whats_new",
+                        "detailsWhatsNew": {"button": "book", "link": "https://example.com/book"},
                     }
                 },
             },
@@ -438,6 +439,7 @@ async def test_list_channels_with_explicit_organization_id_skips_org_query():
                 "assets": [{"image": {"url": "https://cdn.example.com/roof.jpg"}}],
                 "metadata": {
                     "instagram": {
+                        "type": "post",
                         "shouldShareToFeed": True,
                         "firstComment": "#phillycontractors",
                         "isAiGenerated": False,
@@ -627,7 +629,7 @@ def test_gbp_offer_and_event_metadata_validation():
             "metadata": {
                 "type": "offer",
                 "title": "Winter Roof Special",
-                "detailsOffer": {"couponCode": "ROOF20", "redeemOnlineUrl": "https://example.com/offer"},
+                "detailsOffer": {"code": "ROOF20", "link": "https://example.com/offer"},
             },
         },
     )
@@ -635,9 +637,92 @@ def test_gbp_offer_and_event_metadata_validation():
         "google": {
             "type": "offer",
             "title": "Winter Roof Special",
-            "detailsOffer": {"couponCode": "ROOF20", "redeemOnlineUrl": "https://example.com/offer"},
+            "detailsOffer": {"code": "ROOF20", "link": "https://example.com/offer"},
         }
     }
+
+    event_req = build_post_request(
+        "ch_gbp_9",
+        {
+            "service": "gbp",
+            "text": "Open House Saturday.",
+            "mode": "draft",
+            "metadata": {
+                "type": "event",
+                "title": "Spring Open House",
+                "detailsEvent": {
+                    "title": "Spring Open House",
+                    "button": "SIGNUP",
+                    "link": "https://example.com/rsvp",
+                    "startDate": "2026-12-05T14:00:00Z",
+                },
+            },
+        },
+    )
+    assert event_req.to_graphql_input()["metadata"] == {
+        "google": {
+            "type": "event",
+            "title": "Spring Open House",
+            "detailsEvent": {
+                "title": "Spring Open House",
+                "button": "signup",
+                "link": "https://example.com/rsvp",
+                "startDate": "2026-12-05T14:00:00Z",
+                "isFullDayEvent": False,
+            },
+        }
+    }
+
+    # Facebook and Instagram default required schema fields (`type`, `shouldShareToFeed`).
+    fb_req = build_post_request("ch_fb_1", {"service": "facebook", "text": "Hi", "metadata": {"first_comment": "Details"}})
+    assert fb_req.to_graphql_input()["metadata"] == {"facebook": {"type": "post", "firstComment": "Details"}}
+    ig_req = build_post_request(
+        "ch_ig_1",
+        {
+            "service": "instagram",
+            "text": "Reel",
+            "assets": [{"type": "video", "url": "https://cdn.example.com/v.mp4"}],
+            "metadata": {"type": "reel"},
+        },
+    )
+    assert ig_req.to_graphql_input()["metadata"] == {"instagram": {"type": "reel", "shouldShareToFeed": True}}
+
+    # Twitter live schema fields (isAiGenerated, retweet, thread) and document required fields.
+    x_req = build_post_request(
+        "ch_x_1",
+        {
+            "service": "x",
+            "text": "Thread start",
+            "metadata": {"is_ai_generated": False, "thread": [{"text": "Reply 2"}]},
+        },
+    )
+    assert x_req.to_graphql_input()["metadata"] == {
+        "twitter": {"isAiGenerated": False, "thread": [{"assets": [], "text": "Reply 2"}]}
+    }
+    doc_req = build_post_request(
+        "ch_li_1",
+        {
+            "service": "linkedin",
+            "text": "Deck",
+            "assets": [
+                {
+                    "type": "document",
+                    "url": "https://cdn.example.com/deck.pdf",
+                    "title": "Q4 Playbook",
+                    "thumbnail_url": "https://cdn.example.com/deck.png",
+                }
+            ],
+        },
+    )
+    assert doc_req.to_graphql_input()["assets"] == [
+        {
+            "document": {
+                "url": "https://cdn.example.com/deck.pdf",
+                "thumbnailUrl": "https://cdn.example.com/deck.png",
+                "title": "Q4 Playbook",
+            }
+        }
+    ]
 
 
 # --- Error taxonomy, outcome_unknown & zero-secret-leak ----------------------
@@ -1402,3 +1487,123 @@ async def test_loop_provenance_accepted_validated_and_excluded_from_graphql_inpu
             "ch_1",
             {"service": "linkedin", "text": "Hi", "loop": {"draft_ref": {"api_key": "nope"}}},
         )
+
+
+@async_test
+async def test_web_approvals_router_enforces_org_admin_and_executes_buffer_post_once(monkeypatch, org_world):  # noqa: F811
+    from datetime import UTC, datetime
+
+    from fastapi import FastAPI
+    from org_isolation_fixtures import ORG_A, ORG_S, USER_A, USER_B, USER_C, auth_headers
+
+    from app.gateway.auth_middleware import AuthMiddleware
+    from app.gateway.internal_auth import create_internal_auth_headers
+    from app.gateway.routers import approvals
+    from deerflow.persistence import engine as db_engine
+    from deerflow.persistence.approvals import PendingActionRepository
+    from deerflow.persistence.audit_events import AuditEventRepository
+    from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
+    from deerflow.persistence.organizations.model import OrganizationMemberRow
+    from deerflow.persistence.user.model import UserRow
+
+    def _handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={"data": {"channels": [{"id": "ch_router_1", "name": "li", "displayName": "LI", "service": "linkedin", "isQueuePaused": False}]}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "createPost": {
+                        "__typename": "PostActionSuccess",
+                        "post": {"id": "post_router_1", "text": "Approved via web inbox", "status": "scheduled", "dueAt": None, "externalLink": None},
+                    }
+                }
+            },
+        )
+
+    transport, captured = _mock_transport(_handler)
+    adapter = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=lambda: {
+            "BUFFER_API_KEY": KEY,
+            "BUFFER_WORKSPACE_CHANNELS": json.dumps({ORG_S: ["ch_router_1"], ORG_A: ["ch_router_1"]}),
+        },
+    )
+    monkeypatch.setitem(approval_adapters.ADAPTERS, ACTION_TYPE, adapter)
+    monkeypatch.setattr(db_engine, "get_session_factory", lambda: org_world)
+
+    now = datetime.now(UTC)
+    async with org_world() as session, session.begin():
+        session.add(UserRow(id="plain_buf", email="plain_buf" + "@example.com", password_hash=None, system_role="user", needs_setup=False, token_version=0, created_at=now))
+        session.add(OrganizationMemberRow(organization_id=ORG_S, user_id="plain_buf", role="member", status="active", created_at=now, updated_at=now))
+
+    app = FastAPI()
+    app.add_middleware(AuthMiddleware)
+    app.state.pending_action_repo = PendingActionRepository(org_world)
+    app.state.audit_repo = AuditEventRepository(org_world)
+    app.include_router(approvals.router)
+
+    # 1) Shared workspace: non-admin member gets 403, foreign user gets 404, owner/admin approves once, repeat gets 409.
+    shared_row = await PendingActionRepository(org_world).create(
+        action_type=ACTION_TYPE,
+        target="ch_router_1",
+        payload={"service": "linkedin", "text": "Approved via web inbox"},
+        title="Shared LinkedIn post",
+        user_id="storage-s",
+        organization_id=ORG_S,
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.post(f"/api/approvals/{shared_row['id']}/approve", headers=auth_headers("plain_buf", ORG_S))).status_code == 403
+        assert (await client.post(f"/api/approvals/{shared_row['id']}/approve", headers=auth_headers(USER_B))).status_code == 404
+        assert captured == []
+
+        ok = await client.post(f"/api/approvals/{shared_row['id']}/approve", headers=auth_headers(USER_C, ORG_S))
+        assert ok.status_code == 200, ok.text
+        body = ok.json()
+        assert body["status"] == "executed"
+        assert body["execution_result"]["post_id"] == "post_router_1"
+        calls_after_approve = len(captured)
+        assert calls_after_approve == 3
+
+        dup = await client.post(f"/api/approvals/{shared_row['id']}/approve", headers=auth_headers(USER_C, ORG_S))
+        assert dup.status_code == 409
+        assert len(captured) == calls_after_approve
+
+        # 2) Client Loop filing path (/api/approvals/propose) accepts buffer_post with loop provenance and owner can approve it.
+        did = await OrganizationDelegationRepository(org_world).grant(
+            organization_id=ORG_A,
+            subject_type="client_loop",
+            subject_id="loop",
+            owner_user_id=USER_A,
+            scopes=["approvals:propose"],
+        )
+        proposed = await client.post(
+            "/api/approvals/propose",
+            json={
+                "client": "acme-local",
+                "action_type": ACTION_TYPE,
+                "title": "Loop LinkedIn update",
+                "target": "ch_router_1",
+                "payload": {"service": "linkedin", "text": "Loop draft text"},
+                "source_link": "https://example.com/brief/9",
+                "draft_ref": {"id": "dr_9"},
+                "evidence": [{"source": "brief.md", "text": "Loop draft text"}],
+            },
+            headers=create_internal_auth_headers(delegation_id=did),
+        )
+        assert proposed.status_code == 201, proposed.text
+        loop_row = proposed.json()
+        assert loop_row["status"] == "pending"
+        assert loop_row["payload"]["loop"]["client"] == "acme-local"
+
+        loop_ok = await client.post(f"/api/approvals/{loop_row['id']}/approve", headers=auth_headers(USER_A))
+        assert loop_ok.status_code == 200, loop_ok.text
+        assert loop_ok.json()["status"] == "executed"
+        last_input = captured[-1]["body"]["variables"]["input"]
+        assert "loop" not in last_input
