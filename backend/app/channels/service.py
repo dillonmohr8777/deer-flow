@@ -210,6 +210,7 @@ class ChannelService:
             require_bound_identity=require_bound_identity,
             inbound_dedupe_store=make_inbound_dedupe_store(app_config),
             get_stream_bridge=get_stream_bridge,
+            channel_getter=self.get_channel,
         )
         self._channels: dict[str, Any] = {}  # name -> Channel instance
         self._config = config
@@ -521,6 +522,9 @@ class ChannelService:
         try:
             config = dict(config)
             config["channel_store"] = self.store
+            manager = getattr(self, "manager", None)
+            if manager is not None:
+                config["channel_manager"] = manager
             if name == "buzz" and "seen_event_store_path" not in config:
                 # Durable processed-event ids for the Buzz connector's replay
                 # guard. Wired here (like channel_store) rather than defaulted

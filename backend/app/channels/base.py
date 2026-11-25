@@ -372,6 +372,15 @@ class Channel(ABC):
                 except Exception:
                     logger.exception("[%s] failed to upload file %s", self.name, attachment.filename)
 
+    async def on_inbound_accepted(self, msg: InboundMessage) -> bool:
+        """Called by ChannelManager after inbound dedupe admits *msg*.
+
+        Return False to drop *msg* before dispatching it (for example, when the
+        user already stopped the request while it waited in the queue).
+        """
+        del msg
+        return True
+
     async def receive_file(self, msg: InboundMessage, thread_id: str, *, user_id: str | None = None) -> InboundMessage:
         """
         Optionally process and materialize inbound file attachments for this channel.
