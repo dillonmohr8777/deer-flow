@@ -645,7 +645,7 @@ async def test_mutation_error_and_secret_scrubbing(caplog):
                 "data": {
                     "createPost": {
                         "__typename": "LimitReachedError",
-                        "message": f"Queue limit reached for token Bearer {KEY}",
+                        "message": f"Queue limit reached for token Bearer {KEY} asset https://cdn.example.com/a.jpg?X-Amz-Signature=sig_leak_777",
                     }
                 }
             },
@@ -666,7 +666,9 @@ async def test_mutation_error_and_secret_scrubbing(caplog):
     assert "LimitReachedError" in (outcome.error or "")
     assert "[redacted]" in (outcome.error or "")
     assert KEY not in (outcome.error or "")
+    assert "sig_leak_777" not in (outcome.error or "")
     assert KEY not in caplog.text
+    assert "sig_leak_777" not in caplog.text
 
     with pytest.raises(BufferMutationError) as exc_mut:
         await BufferGraphQLClient(api_key=KEY, transport=transport).create_post(build_post_request("ch_1", {"service": "linkedin", "text": "Hit cap", "mode": "addToQueue"}))

@@ -310,10 +310,9 @@ def redact_url_credentials(url: str) -> str:
 
 
 def sanitize_receipt_value(value: Any, secret: str | None = None) -> Any:
-    """Recursively scrub secrets and query-bearing URL credentials before persisting a dry-run receipt."""
+    """Recursively scrub secrets and query-bearing URL credentials before persisting a receipt or error."""
     if isinstance(value, str):
-        cleaned = _HTTP_URL_INLINE_RE.sub(lambda m: redact_url_credentials(m.group(0)), value)
-        return scrub_secret(cleaned, secret)
+        return scrub_secret(value, secret)
     if isinstance(value, list):
         return [sanitize_receipt_value(item, secret) for item in value]
     if isinstance(value, tuple):
@@ -324,8 +323,8 @@ def sanitize_receipt_value(value: Any, secret: str | None = None) -> Any:
 
 
 def scrub_secret(text: str, secret: str | None = None) -> str:
-    """Remove any API key or inline bearer/secret tokens before logging or returning text."""
-    cleaned = text
+    """Remove any API key, inline bearer/secret tokens, and URL credentials/queries before logging or returning text."""
+    cleaned = _HTTP_URL_INLINE_RE.sub(lambda m: redact_url_credentials(m.group(0)), text)
     if secret:
         trimmed = secret.strip()
         if trimmed:
@@ -903,7 +902,7 @@ class BufferGraphQLClient:
             summary = "; ".join(m for m in messages if m) or "GraphQL error"
             if is_mutation and "data" in payload:
                 raise BufferOutcomeUnknownError(f"Buffer returned GraphQL errors with response data after mutation ({summary})")
-            raise BufferGraphQLError(summary, errors=errors)
+            raise BufferGraphQLError(summary, errors=sanitize_receipt_value(errors, secret=buf_key))
 
         if not isinstance(data, dict):
             if is_mutation:
