@@ -937,8 +937,8 @@ class BufferGraphQLClient:
         if isinstance(errors, list) and errors:
             messages = [scrub_secret(str(err.get("message") or err), buf_key) for err in errors if isinstance(err, dict)]
             summary = "; ".join(m for m in messages if m) or "GraphQL error"
-            if is_mutation and "data" in payload:
-                raise BufferOutcomeUnknownError(f"Buffer returned GraphQL errors with response data after mutation ({summary})")
+            if is_mutation:
+                raise BufferOutcomeUnknownError(f"Buffer returned GraphQL errors after mutation ({summary}); check Buffer before retrying")
             raise BufferGraphQLError(summary, errors=sanitize_receipt_value(errors, secret=buf_key))
 
         if not isinstance(data, dict):

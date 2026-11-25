@@ -1042,6 +1042,7 @@ async def test_workspace_binding_blocks_cross_workspace_and_multi_org_discovery(
             },
         ),
         httpx.Response(200, json={"errors": [{"message": "Field error"}], "data": {"createPost": None}}),
+        httpx.Response(200, json={"errors": [{"message": "Resolver error without data"}]}),
         httpx.Response(200, json={"data": {"createPost": {"__typename": "UnexpectedUnionVariant"}}}),
         httpx.Response(200, text="not-valid-json"),
     ],
