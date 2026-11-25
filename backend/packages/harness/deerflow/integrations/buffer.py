@@ -544,6 +544,8 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
 
     cleaned: dict[str, Any] = {}
     if service == "googlebusiness":
+        if section.get("type") is not None and section.get("post_type") is not None:
+            raise InvalidPayloadError("Google Business Profile metadata cannot specify both type and post_type")
         post_type = str(section.get("type") or section.get("post_type") or "post").strip().lower()
         if post_type not in GBP_POST_TYPES:
             raise InvalidPayloadError(f"Google Business Profile post type must be one of: {', '.join(GBP_POST_TYPES)}")
@@ -553,9 +555,19 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
             if not isinstance(title, str) or not title.strip():
                 raise InvalidPayloadError("Google Business Profile metadata.title must be a non-empty string")
             cleaned["title"] = title.strip()
-        whats_new = section.get("detailsWhatsNew") or section.get("details_whats_new")
-        cta_button = section.get("cta_button") or section.get("button")
-        cta_link = section.get("cta_link") or section.get("link")
+        if section.get("detailsWhatsNew") is not None and section.get("details_whats_new") is not None:
+            raise InvalidPayloadError("Google Business Profile metadata cannot specify both detailsWhatsNew and details_whats_new")
+        if section.get("cta_button") is not None and section.get("button") is not None:
+            raise InvalidPayloadError("Google Business Profile metadata cannot specify both cta_button and button")
+        if section.get("cta_link") is not None and section.get("link") is not None:
+            raise InvalidPayloadError("Google Business Profile metadata cannot specify both cta_link and link")
+        whats_new = section.get("detailsWhatsNew") if section.get("detailsWhatsNew") is not None else section.get("details_whats_new")
+        cta_button = section.get("cta_button") if section.get("cta_button") is not None else section.get("button")
+        cta_link = section.get("cta_link") if section.get("cta_link") is not None else section.get("link")
+        if whats_new is not None and (cta_button is not None or cta_link is not None):
+            raise InvalidPayloadError(
+                "Google Business Profile metadata cannot combine detailsWhatsNew with flat cta_button/button/cta_link/link fields"
+            )
         if whats_new is not None:
             if not isinstance(whats_new, dict):
                 raise InvalidPayloadError("Google Business Profile detailsWhatsNew must be an object")
@@ -573,7 +585,9 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
                 wn_clean["link"] = _validate_http_url(cta_link, "metadata.google.cta_link")
             cleaned["detailsWhatsNew"] = wn_clean
         for detail_key, alt_key in (("detailsOffer", "details_offer"), ("detailsEvent", "details_event")):
-            detail_val = section.get(detail_key) if detail_key in section else section.get(alt_key)
+            if section.get(detail_key) is not None and section.get(alt_key) is not None:
+                raise InvalidPayloadError(f"Google Business Profile metadata cannot specify both {detail_key} and {alt_key}")
+            detail_val = section.get(detail_key) if section.get(detail_key) is not None else section.get(alt_key)
             if detail_val is not None:
                 if not isinstance(detail_val, dict):
                     raise InvalidPayloadError(f"Google Business Profile {detail_key} must be an object")
@@ -584,12 +598,16 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
                 cleaned[detail_key] = detail_clean
 
     elif service == "linkedin":
-        first_comment = section.get("firstComment") if "firstComment" in section else section.get("first_comment")
+        if section.get("firstComment") is not None and section.get("first_comment") is not None:
+            raise InvalidPayloadError("LinkedIn metadata cannot specify both firstComment and first_comment")
+        first_comment = section.get("firstComment") if section.get("firstComment") is not None else section.get("first_comment")
         if first_comment is not None:
             if not isinstance(first_comment, str) or not first_comment.strip():
                 raise InvalidPayloadError("LinkedIn firstComment must be a non-empty string")
             cleaned["firstComment"] = first_comment.strip()
-        link_attachment = section.get("linkAttachment") if "linkAttachment" in section else section.get("link_attachment")
+        if section.get("linkAttachment") is not None and section.get("link_attachment") is not None:
+            raise InvalidPayloadError("LinkedIn metadata cannot specify both linkAttachment and link_attachment")
+        link_attachment = section.get("linkAttachment") if section.get("linkAttachment") is not None else section.get("link_attachment")
         if link_attachment is not None:
             if has_assets:
                 raise InvalidPayloadError("LinkedIn linkAttachment cannot be combined with non-empty assets")
@@ -605,18 +623,24 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
             cleaned["annotations"] = section["annotations"]
 
     elif service == "facebook":
-        post_type = section.get("type") or section.get("post_type")
+        if section.get("type") is not None and section.get("post_type") is not None:
+            raise InvalidPayloadError("Facebook metadata cannot specify both type and post_type")
+        post_type = section.get("type") if section.get("type") is not None else section.get("post_type")
         if post_type is not None:
             normalized_fb_type = str(post_type).strip().lower()
             if normalized_fb_type not in FACEBOOK_POST_TYPES:
                 raise InvalidPayloadError(f"Facebook post type must be one of: {', '.join(FACEBOOK_POST_TYPES)}")
             cleaned["type"] = normalized_fb_type
-        first_comment = section.get("firstComment") if "firstComment" in section else section.get("first_comment")
+        if section.get("firstComment") is not None and section.get("first_comment") is not None:
+            raise InvalidPayloadError("Facebook metadata cannot specify both firstComment and first_comment")
+        first_comment = section.get("firstComment") if section.get("firstComment") is not None else section.get("first_comment")
         if first_comment is not None:
             if not isinstance(first_comment, str) or not first_comment.strip():
                 raise InvalidPayloadError("Facebook firstComment must be a non-empty string")
             cleaned["firstComment"] = first_comment.strip()
-        link_attachment = section.get("linkAttachment") if "linkAttachment" in section else section.get("link_attachment")
+        if section.get("linkAttachment") is not None and section.get("link_attachment") is not None:
+            raise InvalidPayloadError("Facebook metadata cannot specify both linkAttachment and link_attachment")
+        link_attachment = section.get("linkAttachment") if section.get("linkAttachment") is not None else section.get("link_attachment")
         if link_attachment is not None:
             if has_assets:
                 raise InvalidPayloadError("Facebook linkAttachment cannot be combined with non-empty assets")
@@ -632,12 +656,16 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
             cleaned["annotations"] = section["annotations"]
 
     elif service == "instagram":
-        share_to_feed = section.get("shouldShareToFeed") if "shouldShareToFeed" in section else section.get("should_share_to_feed")
+        if section.get("shouldShareToFeed") is not None and section.get("should_share_to_feed") is not None:
+            raise InvalidPayloadError("Instagram metadata cannot specify both shouldShareToFeed and should_share_to_feed")
+        share_to_feed = section.get("shouldShareToFeed") if section.get("shouldShareToFeed") is not None else section.get("should_share_to_feed")
         if share_to_feed is not None:
             if not isinstance(share_to_feed, bool):
                 raise InvalidPayloadError("Instagram shouldShareToFeed must be a boolean")
             cleaned["shouldShareToFeed"] = share_to_feed
-        first_comment = section.get("firstComment") if "firstComment" in section else section.get("first_comment")
+        if section.get("firstComment") is not None and section.get("first_comment") is not None:
+            raise InvalidPayloadError("Instagram metadata cannot specify both firstComment and first_comment")
+        first_comment = section.get("firstComment") if section.get("firstComment") is not None else section.get("first_comment")
         if first_comment is not None:
             if not isinstance(first_comment, str) or not first_comment.strip():
                 raise InvalidPayloadError("Instagram firstComment must be a non-empty string")
@@ -648,7 +676,9 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
             if not isinstance(section["geolocation"], dict):
                 raise InvalidPayloadError("Instagram geolocation must be an object")
             cleaned["geolocation"] = dict(section["geolocation"])
-        ai_flag = section.get("isAiGenerated") if "isAiGenerated" in section else section.get("is_ai_generated")
+        if section.get("isAiGenerated") is not None and section.get("is_ai_generated") is not None:
+            raise InvalidPayloadError("Instagram metadata cannot specify both isAiGenerated and is_ai_generated")
+        ai_flag = section.get("isAiGenerated") if section.get("isAiGenerated") is not None else section.get("is_ai_generated")
         if ai_flag is not None:
             if not isinstance(ai_flag, bool):
                 raise InvalidPayloadError("Instagram isAiGenerated must be a boolean")

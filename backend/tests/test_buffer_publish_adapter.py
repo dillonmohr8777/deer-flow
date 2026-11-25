@@ -565,6 +565,15 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
             {"service": "linkedin", "text": "Unknown field", "metadata": {"unknown_key": "value"}},
             "Unsupported linkedin metadata fields",
         ),
+        (
+            "ch_1",
+            {
+                "service": "gbp",
+                "text": "Conflicting CTA",
+                "metadata": {"detailsWhatsNew": {"button": "BOOK"}, "cta_link": "https://example.com/book"},
+            },
+            "cannot combine detailsWhatsNew",
+        ),
     ],
 )
 def test_validation_rejects_invalid_payloads(target: str, payload: dict[str, Any], expected_msg: str):
