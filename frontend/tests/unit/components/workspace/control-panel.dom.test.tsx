@@ -21,6 +21,7 @@ import type { User } from "@/core/auth/types";
 
 const workspaceState = rs.hoisted(() => ({
   active_workspace_id: "ws-amp",
+  isLoading: false,
   workspaces: [
     { id: "ws-amp", name: "AI Marketing Philly", role: "owner" },
     { id: "ws-1", name: "Sandbox Workspace", role: "member" },
@@ -57,11 +58,13 @@ rs.mock("@/core/agents/hooks", () => ({
 
 rs.mock("@/core/workspaces/hooks", () => ({
   useWorkspaceSelection: () => ({
-    data: {
-      active_workspace_id: workspaceState.active_workspace_id,
-      workspaces: workspaceState.workspaces,
-    },
-    isLoading: false,
+    data: workspaceState.isLoading
+      ? undefined
+      : {
+          active_workspace_id: workspaceState.active_workspace_id,
+          workspaces: workspaceState.workspaces,
+        },
+    isLoading: workspaceState.isLoading,
     busy: false,
     error: null,
     selectWorkspace: rs.fn(),
@@ -121,6 +124,7 @@ function renderControlPanel(role: User["system_role"] = "client") {
 
 beforeEach(() => {
   workspaceState.active_workspace_id = "ws-amp";
+  workspaceState.isLoading = false;
   window.localStorage.clear();
   mockApiFetch.mockClear();
   mockApiFetch.mockImplementation(async (url: string) => {
@@ -376,5 +380,17 @@ describe("Client Control Panel", () => {
     await waitFor(() => {
       expect(within(summary).getByText("None queued")).toBeTruthy();
     });
+  });
+
+  it("keeps checklist and action-item controls disabled until workspace scope resolves", () => {
+    workspaceState.isLoading = true;
+    renderControlPanel("client");
+
+    const firstCheck = screen.getByRole("checkbox", {
+      name: "Complete your Business Profile",
+    });
+    expect(firstCheck.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(firstCheck);
+    expect(window.localStorage.length).toBe(0);
   });
 });

@@ -24,6 +24,7 @@ import { useAgents } from "@/core/agents/hooks";
 import { useAuth, useIsClient } from "@/core/auth/AuthProvider";
 import { writeTextToClipboard } from "@/core/clipboard";
 import { useMomentumInternalEnabled } from "@/core/features";
+import { isStaticWebsiteOnly } from "@/core/static-mode";
 import { useWorkspaceSelection } from "@/core/workspaces/hooks";
 import { cn } from "@/lib/utils";
 
@@ -61,7 +62,11 @@ export function StartHereAcademyBody() {
   const isClient = useIsClient();
   const { agents, isLoading: agentsLoading } = useAgents();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
-  const { data: workspaceData } = useWorkspaceSelection();
+  const {
+    data: workspaceData,
+    isLoading: workspaceLoading,
+    error: workspaceError,
+  } = useWorkspaceSelection();
 
   const activeWorkspaceName = useMemo(() => {
     if (!workspaceData) {
@@ -74,18 +79,39 @@ export function StartHereAcademyBody() {
   }, [workspaceData]);
 
   const scopeKey = useMemo(() => {
+    if (workspaceLoading) {
+      return null;
+    }
+    const workspacePart = workspaceData?.active_workspace_id;
+    if (
+      user &&
+      !isStaticWebsiteOnly() &&
+      !workspacePart &&
+      workspaceError === null
+    ) {
+      return null;
+    }
     const userPart = user?.id ?? "guest";
-    const workspacePart = workspaceData?.active_workspace_id ?? "default";
-    return `${userPart}.${workspacePart}`;
-  }, [user?.id, workspaceData?.active_workspace_id]);
+    return `${userPart}.${workspacePart ?? "default"}`;
+  }, [
+    user,
+    workspaceData?.active_workspace_id,
+    workspaceError,
+    workspaceLoading,
+  ]);
+  const scopeReady = scopeKey !== null;
 
   const [completed, setCompleted] = useState<Record<string, boolean>>(() =>
-    readStartHereProgress(scopeKey),
+    scopeKey ? readStartHereProgress(scopeKey) : {},
   );
   const [category, setCategory] = useState<PromptLibraryCategory>("All");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!scopeKey) {
+      setCompleted({});
+      return;
+    }
     setCompleted(readStartHereProgress(scopeKey));
   }, [scopeKey]);
 
@@ -103,6 +129,9 @@ export function StartHereAcademyBody() {
   }, [category]);
 
   const toggleLesson = (id: string) => {
+    if (!scopeKey) {
+      return;
+    }
     setCompleted((prev) => {
       const next = { ...prev, [id]: !prev[id] };
       writeStartHereProgress(scopeKey, next);
@@ -302,6 +331,7 @@ export function StartHereAcademyBody() {
                         <input
                           type="checkbox"
                           checked={isDone}
+                          disabled={!scopeReady}
                           onChange={() => toggleLesson(lesson.id)}
                         />
                         Mark lesson done

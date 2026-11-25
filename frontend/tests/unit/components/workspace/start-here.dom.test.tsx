@@ -10,6 +10,7 @@ import type { User } from "@/core/auth/types";
 const featureState = rs.hoisted(() => ({ internal: false }));
 const workspaceState = rs.hoisted(() => ({
   active_workspace_id: "ws-amp",
+  isLoading: false,
   workspaces: [
     { id: "ws-amp", name: "AI Marketing Philly", role: "owner" },
     { id: "ws-other", name: "Other Workspace", role: "member" },
@@ -53,11 +54,13 @@ rs.mock("@/core/features", () => ({
 
 rs.mock("@/core/workspaces/hooks", () => ({
   useWorkspaceSelection: () => ({
-    data: {
-      active_workspace_id: workspaceState.active_workspace_id,
-      workspaces: workspaceState.workspaces,
-    },
-    isLoading: false,
+    data: workspaceState.isLoading
+      ? undefined
+      : {
+          active_workspace_id: workspaceState.active_workspace_id,
+          workspaces: workspaceState.workspaces,
+        },
+    isLoading: workspaceState.isLoading,
     busy: false,
     error: null,
     selectWorkspace: rs.fn(),
@@ -79,6 +82,7 @@ function renderStartHere(role: User["system_role"] = "client") {
 beforeEach(() => {
   featureState.internal = false;
   workspaceState.active_workspace_id = "ws-amp";
+  workspaceState.isLoading = false;
   window.localStorage.clear();
 });
 
@@ -148,5 +152,13 @@ describe("Start Here / Academy", () => {
     renderStartHere("admin");
     const link = screen.getByRole("link", { name: /Staff AI Academy/i });
     expect(link.getAttribute("href")).toBe("/workspace/academy");
+  });
+
+  it("disables lesson completion checkboxes while workspace selection is loading", () => {
+    workspaceState.isLoading = true;
+    renderStartHere("client");
+    const checkboxes = screen.getAllByRole("checkbox");
+    expect(checkboxes[0]?.hasAttribute("disabled")).toBe(true);
+    expect(window.localStorage.length).toBe(0);
   });
 });

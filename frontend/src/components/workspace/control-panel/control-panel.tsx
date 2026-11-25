@@ -219,8 +219,11 @@ export function ControlPanelBody() {
   const { user } = useAuth();
   const isClient = useIsClient();
   const { agents, isLoading: agentsLoading } = useAgents();
-  const { data: workspaceData, isLoading: workspaceLoading } =
-    useWorkspaceSelection();
+  const {
+    data: workspaceData,
+    isLoading: workspaceLoading,
+    error: workspaceError,
+  } = useWorkspaceSelection();
   const [activeTab, setActiveTab] = useState("kickoff");
   const selectedWorkspaceId = workspaceData?.active_workspace_id ?? null;
 
@@ -235,23 +238,46 @@ export function ControlPanelBody() {
   }, [workspaceData]);
 
   const scopeKey = useMemo(() => {
+    if (workspaceLoading) {
+      return null;
+    }
+    const workspacePart = workspaceData?.active_workspace_id;
+    if (
+      user &&
+      !isStaticWebsiteOnly() &&
+      !workspacePart &&
+      workspaceError === null
+    ) {
+      return null;
+    }
     const userPart = user?.id ?? "guest";
-    const workspacePart = workspaceData?.active_workspace_id ?? "default";
-    return `${userPart}.${workspacePart}`;
-  }, [user?.id, workspaceData?.active_workspace_id]);
+    return `${userPart}.${workspacePart ?? "default"}`;
+  }, [
+    user,
+    workspaceData?.active_workspace_id,
+    workspaceError,
+    workspaceLoading,
+  ]);
+  const scopeReady = scopeKey !== null;
 
   const [checklist, setChecklist] = useState<Record<string, boolean>>(() =>
-    readChecklistState(scopeKey),
+    scopeKey ? readChecklistState(scopeKey) : {},
   );
   const [academyProgress, setAcademyProgress] = useState<
     Record<string, boolean>
-  >(() => readStartHereProgress(scopeKey));
+  >(() => (scopeKey ? readStartHereProgress(scopeKey) : {}));
   const [actionItems, setActionItems] = useState<LocalActionItem[]>(() =>
-    readActionItems(scopeKey),
+    scopeKey ? readActionItems(scopeKey) : [],
   );
   const [newActionText, setNewActionText] = useState("");
 
   useEffect(() => {
+    if (!scopeKey) {
+      setChecklist({});
+      setAcademyProgress({});
+      setActionItems([]);
+      return;
+    }
     setChecklist(readChecklistState(scopeKey));
     setAcademyProgress(readStartHereProgress(scopeKey));
     setActionItems(readActionItems(scopeKey));
@@ -290,6 +316,9 @@ export function ControlPanelBody() {
   const activeDeliverableItems = deliverablesQuery.data?.items ?? [];
 
   const toggleChecklist = (id: string) => {
+    if (!scopeKey) {
+      return;
+    }
     setChecklist((prev) => {
       const next = { ...prev, [id]: !prev[id] };
       writeChecklistState(scopeKey, next);
@@ -299,6 +328,9 @@ export function ControlPanelBody() {
 
   const addActionItem = (event: React.FormEvent) => {
     event.preventDefault();
+    if (!scopeKey) {
+      return;
+    }
     const cleaned = newActionText.trim();
     if (!cleaned) {
       return;
@@ -321,6 +353,9 @@ export function ControlPanelBody() {
   };
 
   const toggleActionItem = (id: string) => {
+    if (!scopeKey) {
+      return;
+    }
     setActionItems((prev) => {
       const next = prev.map((item) =>
         item.id === id ? { ...item, done: !item.done } : item,
@@ -331,6 +366,9 @@ export function ControlPanelBody() {
   };
 
   const removeActionItem = (id: string) => {
+    if (!scopeKey) {
+      return;
+    }
     setActionItems((prev) => {
       const next = prev.filter((item) => item.id !== id);
       writeActionItems(scopeKey, next);
@@ -611,6 +649,7 @@ export function ControlPanelBody() {
                             role="checkbox"
                             aria-checked={checked}
                             aria-label={item.title}
+                            disabled={!scopeReady}
                             onClick={() => toggleChecklist(item.id)}
                             className={styles.checkButton}
                           >
@@ -993,11 +1032,21 @@ export function ControlPanelBody() {
                 >
                   <Input
                     aria-label="Add an action item"
-                    placeholder="Add an action item..."
+                    placeholder={
+                      scopeReady
+                        ? "Add an action item..."
+                        : "Loading workspace..."
+                    }
+                    disabled={!scopeReady}
                     value={newActionText}
                     onChange={(event) => setNewActionText(event.target.value)}
                   />
-                  <Button type="submit" size="sm" variant="outline">
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="outline"
+                    disabled={!scopeReady}
+                  >
                     <PlusIcon className="size-4" />
                     Add
                   </Button>
