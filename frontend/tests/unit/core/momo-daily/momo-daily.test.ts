@@ -17,6 +17,7 @@ import {
   textParts,
   visibleArticles,
 } from "@/core/momo-daily";
+import { optionalSiteUrlSchema } from "@/env";
 
 const CONTENT_DIR = join(process.cwd(), "src", "content", "momo-daily");
 
@@ -308,6 +309,12 @@ describe("getSiteUrl and runtime SEO URLs", () => {
       delete process.env.MOMOBOT_SITE_URL;
       delete process.env.NEXT_PUBLIC_SITE_URL;
       expect(getSiteUrl()).toBe("http://localhost:2026");
+
+      expect(optionalSiteUrlSchema.parse("   ")).toBeUndefined();
+      expect(
+        optionalSiteUrlSchema.parse("  https://momobot.example.com  "),
+      ).toBe("https://momobot.example.com");
+      expect(optionalSiteUrlSchema.safeParse("not-a-url").success).toBe(false);
     } finally {
       if (prevMomo === undefined) delete process.env.MOMOBOT_SITE_URL;
       else process.env.MOMOBOT_SITE_URL = prevMomo;
