@@ -230,6 +230,9 @@ export function ArtifactQuickPreviewModal({
   }, [content, kind]);
 
   const handleCopy = async () => {
+    if (truncated) {
+      return;
+    }
     const ok = await writeTextToClipboard(content);
     if (ok) {
       setCopied(true);
@@ -301,7 +304,10 @@ export function ArtifactQuickPreviewModal({
               type="button"
               size="sm"
               variant="outline"
-              disabled={query.isLoading || !content}
+              disabled={query.isLoading || !content || truncated}
+              title={
+                truncated ? "Load the full file before copying" : undefined
+              }
               onClick={() => void handleCopy()}
             >
               {copied ? (
@@ -323,7 +329,8 @@ export function ArtifactQuickPreviewModal({
         {truncated && !fullContent && (
           <div className="border-border bg-muted/60 flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2 text-xs">
             <span className="text-muted-foreground">
-              Showing a preview slice of this file.
+              Showing a preview slice of this file. Load the full file before
+              copying.
             </span>
             <Button
               type="button"

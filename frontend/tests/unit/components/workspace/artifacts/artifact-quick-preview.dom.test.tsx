@@ -190,4 +190,39 @@ describe("Artifact quick preview modal for HTML and marketing deliverables", () 
       }),
     );
   });
+
+  it("disables Copy while a preview slice is truncated and enables copying once the full file loads", async () => {
+    mockState.loadArtifactContent
+      .mockResolvedValueOnce({
+        content: "<h1>Partial Slice</h1>",
+        url: "/api/threads/thread-preview-1/artifacts/outputs/big.html",
+        truncated: true,
+      })
+      .mockResolvedValueOnce({
+        content: "<h1>Complete Deliverable</h1>",
+        url: "/api/threads/thread-preview-1/artifacts/outputs/big.html",
+        truncated: false,
+      });
+
+    renderArtifactList(["/mnt/user-data/outputs/big.html"]);
+    fireEvent.click(screen.getByRole("button", { name: "Preview Page" }));
+    await screen.findByTestId("html-artifact-preview-iframe");
+
+    const copyBtn = screen.getByRole("button", { name: "Copy HTML" });
+    expect(copyBtn.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Load full file" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Copy HTML" }).hasAttribute("disabled"),
+      ).toBe(false);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy HTML" }));
+    await waitFor(() => {
+      expect(mockState.writeClipboard).toHaveBeenCalledWith(
+        "<h1>Complete Deliverable</h1>",
+      );
+    });
+  });
 });
