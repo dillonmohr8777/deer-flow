@@ -212,3 +212,9 @@ MIT License. See [LICENSE](../LICENSE) for details.
 Channel setup in a shared workspace opens the user's private workspace, where personal Slack connections are managed. Workspace switches clear the previous workspace view.
 
 Account managers can open Easy / Medium / Hard directly from Settings and more. The entry opens the existing Experience preferences on mobile and desktop.
+
+### Customer workspace references
+
+Signed-in customer accounts can open Projects to download explicitly approved reference documents and Scheduled tasks to view existing task status. Project reads use the default-off `/api/client-references` projection, bound by the operator to an existing actor, active workspace, project/document IDs and immutable content hashes. They never fall back to staff project APIs, which retain their existing restrictions. Task reads preserve workspace membership and existing route permissions. Neither view exposes project conversations, task run history, edit controls or execution actions. Task status is a stored record, not proof that the scheduler is running. Staff retain their existing management pages.
+
+Customer scheduled-task list/detail responses are projected on the server to id, title, status, next_run_at, last_run_at and timezone only. Prompts, assistant/thread/run IDs, schedule specifications, ownership fields and internal errors stay out of the customer API response; staff responses retain their existing management fields. Project operator configuration remains staff-only.

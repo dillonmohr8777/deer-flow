@@ -337,3 +337,27 @@ describe("ProjectPage rename reconciliation", () => {
     expect(screen.getByRole("button", { name: "Restore" })).toBeDefined();
   });
 });
+
+const customerRole = rs.hoisted(() => ({ client: false, unresolved: false }));
+rs.mock("@/core/auth/AuthProvider", () => ({
+  useIsClient: () => customerRole.client,
+  useIsRoleUnresolved: () => customerRole.unresolved,
+}));
+rs.mock("@/components/workspace/client-workspace-references", () => ({
+  ClientProjectReference: () => <div>Customer reference view</div>,
+}));
+afterEach(() => {
+  customerRole.client = false;
+  customerRole.unresolved = false;
+});
+it("uses the customer reference page instead of staff management", () => {
+  customerRole.client = true;
+  render(<ProjectPage />);
+  expect(screen.getByText("Customer reference view")).toBeTruthy();
+  expect(screen.queryByRole("button")).toBeNull();
+});
+it("waits for the account role before mounting either page", () => {
+  customerRole.unresolved = true;
+  const { container } = render(<ProjectPage />);
+  expect(container.textContent).toBe("");
+});

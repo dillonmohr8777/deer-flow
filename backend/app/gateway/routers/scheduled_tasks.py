@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import AwareDatetime, BaseModel, Field
 
 from app.gateway.authz import require_entitlement, require_permission
+from app.gateway.client_boundary import CLIENT_ROLE
 from app.gateway.deps import (
     get_config,
     get_optional_user_from_request,
@@ -130,6 +131,25 @@ async def _ensure_task_mutable(task: dict[str, Any], repo) -> None:
         )
 
 
+class ClientScheduledTaskStatus(BaseModel):
+    """Customer-visible status only, never execution instructions or internal IDs."""
+
+    id: str
+    title: str
+    status: str
+    next_run_at: str | None = None
+    last_run_at: str | None = None
+    timezone: str
+
+
+def _task_response(task: dict[str, Any], user) -> dict[str, Any]:
+    if getattr(user, "system_role", None) == CLIENT_ROLE:
+        # Validation and serialization form an allowlist: newly added repository
+        # fields cannot silently become part of the customer response.
+        return ClientScheduledTaskStatus.model_validate(task).model_dump()
+    return task
+
+
 class ScheduledTaskCreateRequest(BaseModel):
     thread_id: ThreadId | None = None
     context_mode: str = "fresh_thread_per_run"
@@ -207,7 +227,7 @@ async def list_scheduled_tasks(request: Request):
     user = await get_optional_user_from_request(request)
     if user is None:
         return []
-    return await repo.list_by_user(_storage_user_id(user))
+    return [_task_response(task, user) for task in await repo.list_by_user(_storage_user_id(user))]
 
 
 @router.post("/scheduled-tasks")
@@ -296,7 +316,7 @@ async def get_scheduled_task(task_id: str, request: Request):
     task = await repo.get(task_id, user_id=_storage_user_id(user))
     if task is None:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
-    return task
+    return _task_response(task, user)
 
 
 @router.patch("/scheduled-tasks/{task_id}")
