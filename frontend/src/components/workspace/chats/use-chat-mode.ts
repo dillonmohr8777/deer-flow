@@ -27,6 +27,8 @@ export function useSpecificChatMode() {
     return undefined;
   }, [threadIdFromPath, searchParams, t.inputBox.createSkillPrompt]);
   const lastInitialValueRef = useRef<string | undefined>(undefined);
+  const currentValueRef = useRef(promptInputController.textInput.value);
+  currentValueRef.current = promptInputController.textInput.value;
   const setInputRef = useRef(promptInputController.textInput.setInput);
   setInputRef.current = promptInputController.textInput.setInput;
   useEffect(() => {
@@ -35,15 +37,22 @@ export function useSpecificChatMode() {
       inputInitialValue !== lastInitialValueRef.current
     ) {
       lastInitialValueRef.current = inputInitialValue;
-      setTimeout(() => {
-        setInputRef.current(inputInitialValue);
+      const timer = setTimeout(() => {
         const textarea = document.querySelector("textarea");
+        if (
+          currentValueRef.current.trim().length > 0 ||
+          (textarea?.value.trim().length ?? 0) > 0
+        ) {
+          return;
+        }
+        setInputRef.current(inputInitialValue);
         if (textarea) {
           textarea.focus();
           textarea.selectionStart = textarea.value.length;
           textarea.selectionEnd = textarea.value.length;
         }
       }, 100);
+      return () => clearTimeout(timer);
     }
   }, [inputInitialValue]);
 }

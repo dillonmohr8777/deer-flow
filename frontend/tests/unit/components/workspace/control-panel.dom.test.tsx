@@ -163,16 +163,22 @@ describe("Client Control Panel", () => {
       screen.getByText("Connect Fireflies or upload call notes"),
     ).toBeTruthy();
 
-    // Switch to Results & Reporting
+    // Switch to Results & Reporting (clients get Client Inbox, never staff-only /workspace/reports)
     const reportingTab = screen.getByRole("tab", {
       name: /Results & Reporting/i,
     });
     fireEvent.mouseDown(reportingTab);
     fireEvent.click(reportingTab);
-    const reportsLink = screen.getByRole("link", {
-      name: /Open Reports & Leads/i,
+    const reportingPanel = screen.getByRole("tabpanel");
+    const clientInboxLink = within(reportingPanel).getByRole("link", {
+      name: /Open Client Inbox/i,
     });
-    expect(reportsLink.getAttribute("href")).toBe("/workspace/reports");
+    expect(clientInboxLink.getAttribute("href")).toBe("/workspace/inbox");
+    expect(
+      within(reportingPanel).queryByRole("link", {
+        name: /Open Reports & Leads/i,
+      }),
+    ).toBeNull();
 
     for (const channel of [
       "Google Ads",
@@ -184,6 +190,19 @@ describe("Client Control Panel", () => {
     ]) {
       expect(screen.getByText(channel)).toBeTruthy();
     }
+  });
+
+  it("exposes /workspace/reports shortcut to staff users on Results & Reporting tab", () => {
+    renderControlPanel("admin");
+    const reportingTab = screen.getByRole("tab", {
+      name: /Results & Reporting/i,
+    });
+    fireEvent.mouseDown(reportingTab);
+    fireEvent.click(reportingTab);
+    const reportsLink = screen.getByRole("link", {
+      name: /Open Reports & Leads/i,
+    });
+    expect(reportsLink.getAttribute("href")).toBe("/workspace/reports");
   });
 
   it("builds bounded chat prompt URLs cleanly for clients and staff", () => {

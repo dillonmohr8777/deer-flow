@@ -85,33 +85,90 @@ const DELIVERABLE_STATE_LABELS: Record<
   published: { label: "Published", tone: "ok" },
 };
 
+type PortalDeliverablesResult = {
+  items: PortalDeliverable[];
+  activeCount: number;
+  hasMore: boolean;
+};
+
+const ACTIVE_PORTAL_STATES = ["pending", "needs_approval"] as const;
+const DELIVERABLES_PAGE_SIZE = 100;
+const MAX_DELIVERABLES_PAGES = 5;
+
+async function fetchActiveStateThreads(
+  workspaceId: string,
+  state: (typeof ACTIVE_PORTAL_STATES)[number],
+  signal?: AbortSignal,
+): Promise<{ threads: PortalDeliverable[]; hasMore: boolean }> {
+  const collected: PortalDeliverable[] = [];
+  let offset = 0;
+  let hasMore = false;
+  for (let page = 0; page < MAX_DELIVERABLES_PAGES; page += 1) {
+    const listRes = await apiFetch(
+      `${getBackendBaseURL()}/api/client-portal/threads?state=${state}&limit=${DELIVERABLES_PAGE_SIZE}&offset=${offset}`,
+      {
+        signal,
+        cache: "no-store",
+        headers: { "X-Portal-Workspace": workspaceId },
+      },
+    );
+    if (!listRes.ok) {
+      return { threads: collected, hasMore: false };
+    }
+    const data = (await listRes.json()) as {
+      threads?: PortalDeliverable[];
+      has_more?: boolean;
+    };
+    const batch = Array.isArray(data.threads) ? data.threads : [];
+    collected.push(...batch);
+    hasMore = Boolean(data.has_more);
+    if (!hasMore || batch.length === 0) {
+      break;
+    }
+    offset += batch.length;
+  }
+  return { threads: collected, hasMore };
+}
+
 async function fetchPortalDeliverables(
   signal?: AbortSignal,
-): Promise<PortalDeliverable[]> {
+): Promise<PortalDeliverablesResult> {
   const rosterRes = await apiFetch(
     `${getBackendBaseURL()}/api/client-portal/clients`,
     { signal, cache: "no-store" },
   );
   if (!rosterRes.ok) {
-    return [];
+    return { items: [], activeCount: 0, hasMore: false };
   }
   const roster = (await rosterRes.json()) as PortalRoster;
   if (!roster.workspace_id) {
-    return [];
+    return { items: [], activeCount: 0, hasMore: false };
   }
-  const listRes = await apiFetch(
-    `${getBackendBaseURL()}/api/client-portal/threads?state=all&limit=8&offset=0`,
-    {
-      signal,
-      cache: "no-store",
-      headers: { "X-Portal-Workspace": roster.workspace_id },
-    },
+  const results = await Promise.all(
+    ACTIVE_PORTAL_STATES.map((state) =>
+      fetchActiveStateThreads(roster.workspace_id, state, signal),
+    ),
   );
-  if (!listRes.ok) {
-    return [];
+  const seen = new Set<string>();
+  const activeThreads: PortalDeliverable[] = [];
+  let hasMore = false;
+  for (const res of results) {
+    if (res.hasMore) {
+      hasMore = true;
+    }
+    for (const thread of res.threads) {
+      if (thread.state === "published" || seen.has(thread.id)) {
+        continue;
+      }
+      seen.add(thread.id);
+      activeThreads.push(thread);
+    }
   }
-  const data = (await listRes.json()) as { threads?: PortalDeliverable[] };
-  return Array.isArray(data.threads) ? data.threads : [];
+  return {
+    items: activeThreads.slice(0, 8),
+    activeCount: activeThreads.length,
+    hasMore,
+  };
 }
 
 export function ControlPanelPage() {
@@ -193,7 +250,9 @@ export function ControlPanelBody() {
   const completedLessonsCount = BUSINESS_OWNER_LESSONS.filter(
     (lesson) => academyProgress[lesson.id],
   ).length;
-  const activeDeliverableCount = deliverablesQuery.data?.length ?? 0;
+  const activeDeliverableCount = deliverablesQuery.data?.activeCount ?? 0;
+  const activeDeliverablesHasMore = Boolean(deliverablesQuery.data?.hasMore);
+  const activeDeliverableItems = deliverablesQuery.data?.items ?? [];
 
   const toggleChecklist = (id: string) => {
     setChecklist((prev) => {
@@ -348,7 +407,7 @@ export function ControlPanelBody() {
               ? "Checking..."
               : activeDeliverableCount === 0
                 ? "None queued"
-                : `${activeDeliverableCount} active`}
+                : `${activeDeliverableCount}${activeDeliverablesHasMore ? "+" : ""} active`}
           </span>
           <Link href="/workspace/inbox" className={styles.summaryLink}>
             Open Client Inbox
@@ -671,10 +730,9 @@ export function ControlPanelBody() {
                   <p className="text-muted-foreground mt-4 text-sm">
                     Checking active workspace deliverables...
                   </p>
-                ) : deliverablesQuery.data &&
-                  deliverablesQuery.data.length > 0 ? (
+                ) : activeDeliverableItems.length > 0 ? (
                   <ul className="mt-4 divide-y">
-                    {deliverablesQuery.data.map((item) => {
+                    {activeDeliverableItems.map((item) => {
                       const badge = DELIVERABLE_STATE_LABELS[item.state] ?? {
                         label: item.state,
                         tone: "idle" as const,
@@ -920,12 +978,21 @@ export function ControlPanelBody() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button asChild size="sm" className={styles.heroBtnPrimary}>
-                    <Link href="/workspace/reports">
-                      <BarChart3Icon className="size-4" />
-                      Open Reports &amp; Leads
-                    </Link>
-                  </Button>
+                  {!isClient ? (
+                    <Button asChild size="sm" className={styles.heroBtnPrimary}>
+                      <Link href="/workspace/reports">
+                        <BarChart3Icon className="size-4" />
+                        Open Reports &amp; Leads
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button asChild size="sm" className={styles.heroBtnPrimary}>
+                      <Link href="/workspace/inbox">
+                        <BarChart3Icon className="size-4" />
+                        Open Client Inbox
+                      </Link>
+                    </Button>
+                  )}
                   <Button
                     asChild
                     size="sm"
