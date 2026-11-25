@@ -284,7 +284,7 @@ class BufferPublishAdapter:
             logger.warning("Buffer approval %s network error: channel_id=%s", action_id, request.channel_id)
             return AdapterOutcome("failed", receipt, error=err)
 
-        receipt = result.to_receipt(action_id=action_id)
+        receipt = result.to_receipt(action_id=action_id, secret=buffer_key)
         logger.info(
             "Buffer publish receipt: action_id=%s post_id=%s channel_id=%s service=%s mode=%s save_to_draft=%s post_status=%s http_status=%s elapsed_ms=%s",
             action_id,

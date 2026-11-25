@@ -983,3 +983,45 @@ async def test_dry_run_receipt_redacts_signed_asset_and_metadata_url_query_param
     assert "sig=xyz" not in serialized
     assert KEY not in serialized
     assert outcome.detail["graphql_input"]["assets"] == [{"image": {"url": "https://cdn.example.com/media/patio.jpg?[redacted]"}}]
+
+
+@async_test
+async def test_live_receipt_redacts_external_link_credentials_query_and_fragment():
+    def _handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={"data": {"channels": [{"id": "ch_1", "name": "li", "displayName": "LI", "service": "linkedin", "isQueuePaused": False}]}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "createPost": {
+                        "__typename": "PostActionSuccess",
+                        "post": {
+                            "id": "post_live_99",
+                            "text": "Live post",
+                            "status": "scheduled",
+                            "dueAt": None,
+                            "externalLink": "https://user:pass" + "@social.example.com/posts/99?sig=secret123#frag",
+                        },
+                    }
+                }
+            },
+        )
+
+    transport, _ = _mock_transport(_handler)
+    adapter = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY},
+    )
+    outcome = await adapter.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "Live post"}))
+    assert outcome.status == "executed"
+    assert outcome.detail["external_link"] == "https://social.example.com/posts/99?[redacted]"
+    assert "user:pass" not in json.dumps(outcome.detail)
+    assert "secret123" not in json.dumps(outcome.detail)
+    assert "#frag" not in json.dumps(outcome.detail)

@@ -274,7 +274,7 @@ class BufferPostResult:
             "post_id": self.post_id,
             "post_status": self.post_status,
             "due_at": self.due_at,
-            "external_link": self.external_link,
+            "external_link": sanitize_receipt_value(self.external_link, secret=secret) if self.external_link is not None else None,
             "http_status": self.http_status,
             "elapsed_ms": self.elapsed_ms,
             "timestamp_utc": self.timestamp_utc,
