@@ -178,22 +178,6 @@ class BufferPublishAdapter:
             # Status stays "approved" (never "executed") so dry-run is never mistaken for a live publish.
             return AdapterOutcome("approved", receipt)
 
-        if workspace_id and workspace_channels is None and workspace_orgs is None:
-            err = (
-                f"Workspace {workspace_id!r} has no explicit Buffer channel/organization binding "
-                "(configure BUFFER_WORKSPACE_CHANNELS or BUFFER_WORKSPACE_ORGANIZATIONS before live publishing)"
-            )
-            receipt = {
-                "provider": "buffer",
-                "state": "workspace_not_bound",
-                "action_id": action_id,
-                "channel_id": request.channel_id,
-                "service": request.service,
-                "timestamp_utc": datetime.now(UTC).isoformat(),
-            }
-            logger.warning("Buffer approval %s blocked: live publish requires explicit workspace binding", action_id)
-            return AdapterOutcome("failed", receipt, error=err)
-
         if not client.is_configured:
             err = "BUFFER_API_KEY is not configured; refusing to publish to Buffer"
             receipt = {
@@ -214,6 +198,35 @@ class BufferPublishAdapter:
                 request.channel_id,
                 request.service,
             )
+            return AdapterOutcome("failed", receipt, error=err)
+
+        if not workspace_id:
+            err = "Live Buffer publishing requires an approval scoped to a workspace/organization_id"
+            receipt = {
+                "provider": "buffer",
+                "state": "workspace_not_bound",
+                "action_id": action_id,
+                "channel_id": request.channel_id,
+                "service": request.service,
+                "timestamp_utc": datetime.now(UTC).isoformat(),
+            }
+            logger.warning("Buffer approval %s blocked: live publish missing workspace_id", action_id)
+            return AdapterOutcome("failed", receipt, error=err)
+
+        if workspace_channels is None:
+            err = (
+                f"Workspace {workspace_id!r} has no explicit Buffer channel binding "
+                "(configure BUFFER_WORKSPACE_CHANNELS before live publishing)"
+            )
+            receipt = {
+                "provider": "buffer",
+                "state": "workspace_not_bound",
+                "action_id": action_id,
+                "channel_id": request.channel_id,
+                "service": request.service,
+                "timestamp_utc": datetime.now(UTC).isoformat(),
+            }
+            logger.warning("Buffer approval %s blocked: live publish requires explicit BUFFER_WORKSPACE_CHANNELS binding", action_id)
             return AdapterOutcome("failed", receipt, error=err)
 
         base_receipt = {

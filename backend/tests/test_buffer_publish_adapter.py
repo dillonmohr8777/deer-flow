@@ -39,8 +39,13 @@ async_test = pytest.mark.asyncio
 parametrize = pytest.mark.parametrize
 
 
-def _action(target: str = "ch_gbp_001", payload: dict[str, Any] | None = None, action_id: str = "act_001") -> dict[str, Any]:
-    return {
+def _action(
+    target: str = "ch_gbp_001",
+    payload: dict[str, Any] | None = None,
+    action_id: str = "act_001",
+    organization_id: str | None = "ws_default",
+) -> dict[str, Any]:
+    row: dict[str, Any] = {
         "id": action_id,
         "action_type": ACTION_TYPE,
         "target": target,
@@ -48,6 +53,20 @@ def _action(target: str = "ch_gbp_001", payload: dict[str, Any] | None = None, a
         "status": "approved",
         "payload": payload if payload is not None else {"service": "googlebusiness", "text": "Spring tune-ups open now.", "mode": "draft"},
     }
+    if organization_id is not None:
+        row["organization_id"] = organization_id
+    return row
+
+
+def _live_env(*channels: str, workspace_id: str = "ws_default", extra: dict[str, str] | None = None) -> dict[str, str]:
+    bound = list(channels) or ["ch_gbp_001", "ch_1", "ch_fb"]
+    env = {
+        "BUFFER_API_KEY": KEY,
+        "BUFFER_WORKSPACE_CHANNELS": json.dumps({workspace_id: bound}),
+    }
+    if extra:
+        env.update(extra)
+    return env
 
 
 def _mock_transport(handler):
@@ -464,7 +483,7 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
     transport, captured = _mock_transport(_handler)
     adapter = BufferPublishAdapter(
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
-        env_getter=lambda: {"BUFFER_API_KEY": KEY},
+        env_getter=lambda: _live_env(f"ch_{expected_service}"),
     )
 
     payload = {"service": service_in, **payload_extra}
@@ -597,7 +616,7 @@ async def test_mutation_error_and_secret_scrubbing(caplog):
     transport, _ = _mock_transport(_handler)
     adapter = BufferPublishAdapter(
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
-        env_getter=lambda: {"BUFFER_API_KEY": KEY},
+        env_getter=_live_env,
     )
     with caplog.at_level(logging.WARNING):
         outcome = await adapter.execute(_action(payload={"service": "linkedin", "text": "Hit cap", "mode": "addToQueue"}))
@@ -630,25 +649,25 @@ def test_client_rejects_insecure_remote_api_url_and_embedded_credentials():
 async def test_http_401_429_502_and_graphql_errors():
     # 401
     t401, _ = _mock_transport(lambda _r, _b: httpx.Response(401, json={"error": "unauthorized"}))
-    a401 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t401), env_getter=lambda: {"BUFFER_API_KEY": KEY})
+    a401 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t401), env_getter=_live_env)
     r401 = await a401.execute(_action())
     assert r401.status == "failed" and r401.detail["state"] == "auth_failed"
 
     # 429 with Retry-After
     t429, _ = _mock_transport(lambda _r, _b: httpx.Response(429, headers={"Retry-After": "60"}, json={"error": "slow down"}))
-    a429 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t429), env_getter=lambda: {"BUFFER_API_KEY": KEY})
+    a429 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t429), env_getter=_live_env)
     r429 = await a429.execute(_action())
     assert r429.status == "failed" and r429.detail["state"] == "rate_limited" and r429.detail["retry_after"] == "60"
 
     # 502
     t502, _ = _mock_transport(lambda _r, _b: httpx.Response(502, text="Bad Gateway"))
-    a502 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t502), env_getter=lambda: {"BUFFER_API_KEY": KEY})
+    a502 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t502), env_getter=_live_env)
     r502 = await a502.execute(_action())
     assert r502.status == "failed" and r502.detail["state"] == "api_error" and r502.detail["http_status"] == 502
 
     # Top-level GraphQL errors
     tgql, _ = _mock_transport(lambda _r, _b: httpx.Response(200, json={"errors": [{"message": "Invalid field"}]}))
-    agql = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=tgql), env_getter=lambda: {"BUFFER_API_KEY": KEY})
+    agql = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=tgql), env_getter=_live_env)
     rgql = await agql.execute(_action())
     assert rgql.status == "failed" and rgql.detail["state"] == "graphql_error" and "Invalid field" in (rgql.error or "")
 
@@ -689,14 +708,14 @@ async def test_read_timeout_on_mutation_returns_outcome_unknown_while_connect_er
         raise httpx.ConnectError("dns failure")
 
     timeout_client = BufferGraphQLClient(api_key=KEY, transport=httpx.MockTransport(_timeout_handler))
-    timeout_adapter = BufferPublishAdapter(client_factory=lambda: timeout_client, env_getter=lambda: {"BUFFER_API_KEY": KEY})
+    timeout_adapter = BufferPublishAdapter(client_factory=lambda: timeout_client, env_getter=_live_env)
     out_unknown = await timeout_adapter.execute(_action())
     assert out_unknown.status == "approved"
     assert out_unknown.detail["state"] == "outcome_unknown"
     assert (out_unknown.error or "").startswith("outcome_unknown:")
 
     connect_client = BufferGraphQLClient(api_key=KEY, transport=httpx.MockTransport(_connect_handler))
-    connect_adapter = BufferPublishAdapter(client_factory=lambda: connect_client, env_getter=lambda: {"BUFFER_API_KEY": KEY})
+    connect_adapter = BufferPublishAdapter(client_factory=lambda: connect_client, env_getter=_live_env)
     out_net = await connect_adapter.execute(_action())
     assert out_net.status == "failed"
     assert out_net.detail["state"] == "network_error"
@@ -722,7 +741,7 @@ async def test_daybreak_security_regressions_service_mismatch_allowlist_empty_me
         raise AssertionError("createPost must never be invoked when channel service mismatches")
 
     t_mis, cap_mis = _mock_transport(_mismatch_handler)
-    a_mis = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_mis), env_getter=lambda: {"BUFFER_API_KEY": KEY})
+    a_mis = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_mis), env_getter=_live_env)
     res_mis = await a_mis.execute(_action(target="ch_fb", payload={"service": "linkedin", "text": "Wrong channel"}))
     assert res_mis.status == "failed"
     assert res_mis.detail["state"] == "mutation_rejected"
@@ -764,7 +783,7 @@ async def test_daybreak_security_regressions_service_mismatch_allowlist_empty_me
         return httpx.Response(502, text="Bad Gateway")
 
     t_502, _ = _mock_transport(_502_mut_handler)
-    a_502 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_502), env_getter=lambda: {"BUFFER_API_KEY": KEY})
+    a_502 = BufferPublishAdapter(client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_502), env_getter=_live_env)
     res_502 = await a_502.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "May have landed"}))
     assert res_502.status == "approved"
     assert res_502.detail["state"] == "outcome_unknown"
@@ -878,13 +897,46 @@ async def test_workspace_binding_blocks_cross_workspace_and_multi_org_discovery(
     assert exc_org.value.error_type == "OrganizationBindingRequired"
     assert len(cap_multi) == 1
 
-    # 2) Approval carrying workspace_id fails closed if no workspace binding map is configured.
+    # 2) Approval without workspace_id fails closed on live publish.
+    t_missing_ws, cap_missing_ws = _mock_transport(_multi_org_handler)
+    adapter_missing_ws = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_missing_ws),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY, "BUFFER_WORKSPACE_CHANNELS": json.dumps({"ws_alpha": ["ch_alpha"]})},
+    )
+    res_missing_ws = await adapter_missing_ws.execute(_action(target="ch_alpha", payload={"service": "linkedin", "text": "No WS"}, organization_id=None))
+    assert res_missing_ws.status == "failed"
+    assert res_missing_ws.detail["state"] in {"workspace_not_bound", "workspace_channel_not_allowed"}
+    assert cap_missing_ws == []
+
+    # 2b) Approval without workspace_id fails closed even when BUFFER_WORKSPACE_CHANNELS is unset.
+    t_no_ws_no_cfg, cap_no_ws_no_cfg = _mock_transport(_multi_org_handler)
+    adapter_no_ws_no_cfg = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_no_ws_no_cfg),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY},
+    )
+    res_no_ws_no_cfg = await adapter_no_ws_no_cfg.execute(_action(target="ch_alpha", payload={"service": "linkedin", "text": "No WS"}, organization_id=None))
+    assert res_no_ws_no_cfg.status == "failed"
+    assert res_no_ws_no_cfg.detail["state"] == "workspace_not_bound"
+    assert cap_no_ws_no_cfg == []
+
+    # 2c) BUFFER_WORKSPACE_ORGANIZATIONS alone (without BUFFER_WORKSPACE_CHANNELS) still fails closed on live publish.
+    t_org_only, cap_org_only = _mock_transport(_multi_org_handler)
+    adapter_org_only = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_org_only),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY, "BUFFER_WORKSPACE_ORGANIZATIONS": json.dumps({"ws_alpha": "org_alpha"})},
+    )
+    ws_action = {**_action(target="ch_alpha", payload={"service": "linkedin", "text": "Scoped"}), "organization_id": "ws_alpha"}
+    res_org_only = await adapter_org_only.execute(ws_action)
+    assert res_org_only.status == "failed"
+    assert res_org_only.detail["state"] == "workspace_not_bound"
+    assert cap_org_only == []
+
+    # 2d) Approval carrying workspace_id fails closed if no workspace binding map is configured.
     t_unbound, cap_unbound = _mock_transport(_multi_org_handler)
     adapter_unbound = BufferPublishAdapter(
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_unbound),
         env_getter=lambda: {"BUFFER_API_KEY": KEY},
     )
-    ws_action = {**_action(target="ch_alpha", payload={"service": "linkedin", "text": "Scoped"}), "organization_id": "ws_alpha"}
     res_unbound = await adapter_unbound.execute(ws_action)
     assert res_unbound.status == "failed"
     assert res_unbound.detail["state"] == "workspace_not_bound"
@@ -947,7 +999,7 @@ async def test_ambiguous_post_mutation_responses_return_outcome_unknown(mutation
     transport, _ = _mock_transport(_handler)
     adapter = BufferPublishAdapter(
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
-        env_getter=lambda: {"BUFFER_API_KEY": KEY},
+        env_getter=_live_env,
     )
     outcome = await adapter.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "Ambiguous"}))
     assert outcome.status == "approved"
@@ -1017,7 +1069,7 @@ async def test_live_receipt_redacts_external_link_credentials_query_and_fragment
     transport, _ = _mock_transport(_handler)
     adapter = BufferPublishAdapter(
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
-        env_getter=lambda: {"BUFFER_API_KEY": KEY},
+        env_getter=_live_env,
     )
     outcome = await adapter.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "Live post"}))
     assert outcome.status == "executed"
