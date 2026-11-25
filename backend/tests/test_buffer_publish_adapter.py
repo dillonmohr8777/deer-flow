@@ -502,7 +502,8 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
 
     receipt = outcome.detail
     assert receipt["provider"] == "buffer"
-    assert receipt["state"] == "published"
+    expected_state = "draft_saved" if sent_input.get("saveToDraft") else "scheduled"
+    assert receipt["state"] == expected_state
     assert receipt["action_id"] == f"act_{expected_service}"
     assert receipt["channel_id"] == f"ch_{expected_service}"
     assert receipt["service"] == expected_service
@@ -550,6 +551,20 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
         ),
         ("ch_1", {"service": "twitter", "text": "Leak", "api_key": "should-fail"}, "Credential-bearing"),
         ("ch_1", {"service": "gbp", "text": "Bad GBP", "metadata": {"post_type": "invalid"}}, "Google Business Profile post type"),
+        (
+            "ch_1",
+            {
+                "service": "gbp",
+                "text": "Mixed metadata",
+                "metadata": {"google": {"type": "offer"}, "campaign": "Q4"},
+            },
+            "cannot mix service blocks",
+        ),
+        (
+            "ch_1",
+            {"service": "linkedin", "text": "Unknown field", "metadata": {"unknown_key": "value"}},
+            "Unsupported linkedin metadata fields",
+        ),
     ],
 )
 def test_validation_rejects_invalid_payloads(target: str, payload: dict[str, Any], expected_msg: str):

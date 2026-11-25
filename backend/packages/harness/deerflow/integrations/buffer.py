@@ -484,6 +484,31 @@ def _normalize_assets(raw_assets: Any) -> tuple[dict[str, Any], ...]:
     return tuple(normalized)
 
 
+_SERVICE_METADATA_FIELDS: dict[str, frozenset[str]] = {
+    "googlebusiness": frozenset(
+        {
+            "type",
+            "post_type",
+            "title",
+            "detailsWhatsNew",
+            "details_whats_new",
+            "cta_button",
+            "button",
+            "cta_link",
+            "link",
+            "detailsOffer",
+            "details_offer",
+            "detailsEvent",
+            "details_event",
+        }
+    ),
+    "linkedin": frozenset({"firstComment", "first_comment", "linkAttachment", "link_attachment", "annotations"}),
+    "facebook": frozenset({"type", "post_type", "firstComment", "first_comment", "linkAttachment", "link_attachment", "annotations"}),
+    "instagram": frozenset({"shouldShareToFeed", "should_share_to_feed", "firstComment", "first_comment", "link", "geolocation", "isAiGenerated", "is_ai_generated"}),
+    "twitter": frozenset({"url", "link", "thread", "replyToId", "reply_to_id"}),
+}
+
+
 def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool) -> dict[str, Any]:
     if raw_meta is None:
         return {}
@@ -492,19 +517,30 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
     if not raw_meta:
         return {}
     meta_key = SUPPORTED_SERVICES[service]
-    # Accept either {"google": {...}} / {"linkedin": {...}} or flat platform fields.
-    unknown_top = set(raw_meta) - set(SUPPORTED_SERVICES.values())
-    if meta_key in raw_meta and not unknown_top:
+    # Accept either {"google": {...}} / {"linkedin": {...}} or flat platform fields — never mixed.
+    service_keys = set(SUPPORTED_SERVICES.values())
+    present_service_keys = set(raw_meta) & service_keys
+    unknown_top = set(raw_meta) - service_keys
+    if present_service_keys:
+        if unknown_top:
+            raise InvalidPayloadError(
+                f"payload.metadata cannot mix service blocks with flat top-level fields: {', '.join(sorted(unknown_top))}"
+            )
+        if meta_key not in raw_meta:
+            raise InvalidPayloadError(f"payload.metadata does not match service {service!r} (expected {meta_key!r})")
         section = raw_meta[meta_key]
         if not isinstance(section, dict):
             raise InvalidPayloadError(f"payload.metadata.{meta_key} must be an object")
         other_keys = [k for k in raw_meta if k != meta_key and raw_meta[k] is not None]
         if other_keys:
             raise InvalidPayloadError(f"payload.metadata contains unrelated service blocks: {', '.join(sorted(other_keys))}")
-    elif set(raw_meta).issubset(set(SUPPORTED_SERVICES.values())) and meta_key not in raw_meta:
-        raise InvalidPayloadError(f"payload.metadata does not match service {service!r} (expected {meta_key!r})")
     else:
         section = raw_meta
+
+    allowed_fields = _SERVICE_METADATA_FIELDS[service]
+    unsupported_fields = [k for k in section if k not in allowed_fields]
+    if unsupported_fields:
+        raise InvalidPayloadError(f"Unsupported {service} metadata fields: {', '.join(sorted(unsupported_fields))}")
 
     cleaned: dict[str, Any] = {}
     if service == "googlebusiness":
@@ -964,6 +1000,16 @@ class BufferGraphQLClient:
                 raise BufferOutcomeUnknownError(
                     "Buffer PostActionSuccess response missing post.id after mutation; check Buffer before retrying"
                 )
+            raw_post_status = str(post.get("status") or "").strip().lower()
+            resolved_post_status = raw_post_status or ("draft" if request.save_to_draft else "scheduled")
+            if request.save_to_draft or resolved_post_status == "draft":
+                receipt_state = "draft_saved"
+            elif raw_post_status in {"sent", "published"}:
+                receipt_state = "published"
+            elif resolved_post_status in {"scheduled", "buffer", "queued"}:
+                receipt_state = "scheduled"
+            else:
+                receipt_state = "created_in_buffer"
             return BufferPostResult(
                 provider="buffer",
                 channel_id=request.channel_id,
@@ -972,9 +1018,9 @@ class BufferGraphQLClient:
                 scheduling_type=request.scheduling_type,
                 save_to_draft=request.save_to_draft,
                 dry_run=False,
-                status="published",
+                status=receipt_state,
                 post_id=str(post["id"]),
-                post_status=str(post.get("status") or ("draft" if request.save_to_draft else "scheduled")),
+                post_status=resolved_post_status,
                 due_at=str(post["dueAt"]) if post.get("dueAt") else request.due_at,
                 external_link=str(post["externalLink"]) if post.get("externalLink") else None,
                 http_status=http_status,
