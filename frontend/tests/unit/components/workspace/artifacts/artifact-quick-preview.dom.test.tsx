@@ -49,19 +49,29 @@ import {
   getArtifactQuickPreviewKind,
   parseDelimitedPreview,
 } from "@/components/workspace/artifacts/artifact-quick-preview-modal";
+import { ThreadContext } from "@/components/workspace/messages/context";
 import { I18nContext } from "@/core/i18n/context";
 import { enUS } from "@/core/i18n/locales/en-US";
 
-function renderArtifactList(files: string[]) {
+function renderArtifactList(files: string[], options?: { isMock?: boolean }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  const list = <ArtifactFileList files={files} threadId="thread-preview-1" />;
   return render(
     <QueryClientProvider client={queryClient}>
       <I18nContext.Provider
         value={{ locale: "en-US", setLocale: () => undefined, t: enUS }}
       >
-        <ArtifactFileList files={files} threadId="thread-preview-1" />
+        {options?.isMock !== undefined ? (
+          <ThreadContext.Provider
+            value={{ thread: {} as never, isMock: options.isMock }}
+          >
+            {list}
+          </ThreadContext.Provider>
+        ) : (
+          list
+        )}
       </I18nContext.Provider>
     </QueryClientProvider>,
   );
@@ -156,5 +166,25 @@ describe("Artifact quick preview modal for HTML and marketing deliverables", () 
       ["1", "2"],
       ["3", "4"],
     ]);
+  });
+
+  it("forwards thread isMock status from ThreadContext into the quick preview modal loader", async () => {
+    mockState.loadArtifactContent.mockResolvedValueOnce({
+      content: "<h1>Mock Demo Page</h1>",
+      url: "/mock/index.html",
+      truncated: false,
+    });
+
+    renderArtifactList(["/mnt/user-data/outputs/index.html"], { isMock: true });
+    fireEvent.click(screen.getByRole("button", { name: "Preview Page" }));
+
+    await screen.findByTestId("html-artifact-preview-iframe");
+    expect(mockState.loadArtifactContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filepath: "/mnt/user-data/outputs/index.html",
+        threadId: "thread-preview-1",
+        isMock: true,
+      }),
+    );
   });
 });

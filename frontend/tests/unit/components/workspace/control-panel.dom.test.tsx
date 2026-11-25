@@ -267,6 +267,14 @@ describe("Client Control Panel", () => {
         prompt: "Hello",
       }),
     ).toBe("/workspace/agents/my-agent/chats/new?prompt=Hello");
+    expect(
+      buildChatPromptHref({
+        isClient: true,
+        agents: [],
+        agentsLoading: true,
+        prompt: "Hello",
+      }),
+    ).toBe("/workspace/chats/new?prompt=Hello");
     expect(parsePrefillPrompt("   ")).toBeUndefined();
     expect(parsePrefillPrompt("Draft an article")).toBe("Draft an article");
   });

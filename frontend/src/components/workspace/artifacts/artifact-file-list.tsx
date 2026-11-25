@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { DownloadIcon, EyeIcon, LoaderIcon, PackageIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useContext, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,8 @@ import {
 } from "@/core/utils/files";
 import { cn } from "@/lib/utils";
 
+import { ThreadContext } from "../messages/context";
+
 import {
   ArtifactQuickPreviewModal,
   getArtifactPreviewButtonLabel,
@@ -42,17 +44,21 @@ export function ArtifactFileList({
   archiveDownloadsEnabled = true,
   className,
   files,
+  isMock,
   runId,
   threadId,
 }: {
   archiveDownloadsEnabled?: boolean;
   className?: string;
   files: string[];
+  isMock?: boolean;
   runId?: string;
   threadId: string;
 }) {
   const { t } = useI18n();
   const { user } = useAuth();
+  const threadContext = useContext(ThreadContext);
+  const effectiveIsMock = isMock ?? Boolean(threadContext?.isMock);
   const isAdmin = user?.system_role === "admin";
   const { cleanClientMode } = useCleanClientMode();
   const { select: selectArtifact, setOpen } = useArtifacts();
@@ -242,6 +248,7 @@ export function ArtifactFileList({
       <ArtifactQuickPreviewModal
         filepath={previewFile}
         threadId={threadId}
+        isMock={effectiveIsMock}
         open={previewFile !== null}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {

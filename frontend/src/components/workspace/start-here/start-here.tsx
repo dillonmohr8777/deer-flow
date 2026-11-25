@@ -59,7 +59,7 @@ export function StartHereAcademyPage() {
 export function StartHereAcademyBody() {
   const { user } = useAuth();
   const isClient = useIsClient();
-  const { agents } = useAgents();
+  const { agents, isLoading: agentsLoading } = useAgents();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
   const { data: workspaceData } = useWorkspaceSelection();
 
@@ -242,6 +242,7 @@ export function StartHereAcademyBody() {
             const tryHref = buildChatPromptHref({
               isClient,
               agents,
+              agentsLoading,
               prompt: lesson.tryPrompt,
             });
             return (
@@ -344,6 +345,7 @@ export function StartHereAcademyBody() {
             const href = buildChatPromptHref({
               isClient,
               agents,
+              agentsLoading,
               prompt: item.prompt,
             });
             return (

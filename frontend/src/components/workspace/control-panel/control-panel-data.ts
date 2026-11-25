@@ -299,15 +299,18 @@ export function parsePrefillPrompt(raw: string | null): string | undefined {
 export function buildChatPromptHref({
   isClient,
   agents,
+  agentsLoading = false,
   prompt,
 }: {
   isClient: boolean;
   agents: readonly { name: string; builtin?: boolean }[];
+  agentsLoading?: boolean;
   prompt: string;
 }): string {
-  const basePath = isClient
-    ? clientNewChatPath(agents)
-    : "/workspace/chats/new";
+  const basePath =
+    isClient && !agentsLoading
+      ? clientNewChatPath(agents)
+      : "/workspace/chats/new";
   const bounded = prompt.trim().slice(0, MAX_PREFILL_PROMPT_CHARS);
   if (!bounded) {
     return basePath;

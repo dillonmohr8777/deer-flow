@@ -218,7 +218,7 @@ export function ControlPanelPage() {
 export function ControlPanelBody() {
   const { user } = useAuth();
   const isClient = useIsClient();
-  const { agents } = useAgents();
+  const { agents, isLoading: agentsLoading } = useAgents();
   const { data: workspaceData, isLoading: workspaceLoading } =
     useWorkspaceSelection();
   const [activeTab, setActiveTab] = useState("kickoff");
@@ -341,6 +341,7 @@ export function ControlPanelBody() {
   const openChatHref = buildChatPromptHref({
     isClient,
     agents,
+    agentsLoading,
     prompt: "",
   });
 
@@ -516,6 +517,7 @@ export function ControlPanelBody() {
             const href = buildChatPromptHref({
               isClient,
               agents,
+              agentsLoading,
               prompt: card.prompt,
             });
             return (
@@ -639,6 +641,7 @@ export function ControlPanelBody() {
                                 href={buildChatPromptHref({
                                   isClient,
                                   agents,
+                                  agentsLoading,
                                   prompt: item.actionTarget,
                                 })}
                               >
@@ -695,6 +698,7 @@ export function ControlPanelBody() {
                         href={buildChatPromptHref({
                           isClient,
                           agents,
+                          agentsLoading,
                           prompt: CREATE_SOMETHING_CARDS[5]!.prompt,
                         })}
                       >
@@ -852,6 +856,7 @@ export function ControlPanelBody() {
                           href={buildChatPromptHref({
                             isClient,
                             agents,
+                            agentsLoading,
                             prompt: CREATE_SOMETHING_CARDS[2]!.prompt,
                           })}
                         >
@@ -962,6 +967,7 @@ export function ControlPanelBody() {
                             href={buildChatPromptHref({
                               isClient,
                               agents,
+                              agentsLoading,
                               prompt: MEETING_NOTES_PROMPT,
                             })}
                           >
@@ -1085,6 +1091,7 @@ export function ControlPanelBody() {
                       href={buildChatPromptHref({
                         isClient,
                         agents,
+                        agentsLoading,
                         prompt: CONNECT_REPORTING_PROMPT,
                       })}
                     >
