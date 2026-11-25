@@ -80,7 +80,6 @@ services:
     environment:
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
       - DEER_FLOW_INTERNAL_GATEWAY_BASE_URL=http://gateway:8001
-      - MOMOBOT_SITE_URL=${MOMOBOT_SITE_URL:-}
     env_file:
       - ../frontend/.env
     networks:
