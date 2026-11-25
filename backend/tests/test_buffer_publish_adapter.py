@@ -186,6 +186,16 @@ async def test_dry_run_via_payload_flag_without_api_key():
     assert outcome.detail["graphql_input"]["mode"] == "addToQueue"
     assert captured == []
 
+    camel = await adapter.execute(
+        _action(
+            target="ch_gbp_002",
+            payload={"service": "gbp", "text": "Camel dryRun", "mode": "shareNow", "dryRun": True},
+        )
+    )
+    assert camel.status == "approved"
+    assert camel.detail["state"] == "dry_run"
+    assert captured == []
+
 
 @async_test
 async def test_channel_allowlist_blocks_unlisted_channel_in_both_live_and_dry_run():
@@ -587,6 +597,16 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
                 "metadata": {"detailsWhatsNew": {"button": "BOOK"}, "cta_link": "https://example.com/book"},
             },
             "cannot combine detailsWhatsNew",
+        ),
+        (
+            "ch_1",
+            {"service": "linkedin", "text": "Conflicting dryRun", "dry_run": False, "dryRun": True},
+            "cannot specify both dry_run and dryRun",
+        ),
+        (
+            "ch_1",
+            {"service": "linkedin", "text": "Unknown top field", "unexpected_flag": True},
+            "Unsupported Buffer post payload fields",
         ),
     ],
 )

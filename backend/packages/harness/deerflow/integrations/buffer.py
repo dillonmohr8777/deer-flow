@@ -696,14 +696,51 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
     return {meta_key: cleaned} if cleaned else {}
 
 
+_ALLOWED_PAYLOAD_KEYS = frozenset(
+    {
+        "channel_id",
+        "channelId",
+        "service",
+        "text",
+        "assets",
+        "save_to_draft",
+        "saveToDraft",
+        "mode",
+        "due_at",
+        "dueAt",
+        "scheduling_type",
+        "schedulingType",
+        "dry_run",
+        "dryRun",
+        "metadata",
+    }
+)
+
+_PAYLOAD_ALIAS_PAIRS = (
+    ("channel_id", "channelId"),
+    ("save_to_draft", "saveToDraft"),
+    ("due_at", "dueAt"),
+    ("scheduling_type", "schedulingType"),
+    ("dry_run", "dryRun"),
+)
+
+
 def build_post_request(target: str, payload: Any) -> BufferPostRequest:
     """Validate and normalize an approved ``buffer_post`` action into a ``BufferPostRequest``."""
     if not isinstance(payload, dict):
         raise InvalidPayloadError("Buffer post payload must be an object")
     _reject_credential_keys(payload)
 
+    unknown_fields = [k for k in payload if k not in _ALLOWED_PAYLOAD_KEYS]
+    if unknown_fields:
+        raise InvalidPayloadError(f"Unsupported Buffer post payload fields: {', '.join(sorted(str(k) for k in unknown_fields))}")
+
+    for snake_key, camel_key in _PAYLOAD_ALIAS_PAIRS:
+        if payload.get(snake_key) is not None and payload.get(camel_key) is not None:
+            raise InvalidPayloadError(f"Buffer post payload cannot specify both {snake_key} and {camel_key}")
+
     target_id = target.strip() if isinstance(target, str) else ""
-    payload_channel_raw = payload.get("channel_id") if "channel_id" in payload else payload.get("channelId")
+    payload_channel_raw = payload.get("channel_id") if payload.get("channel_id") is not None else payload.get("channelId")
     payload_channel = payload_channel_raw.strip() if isinstance(payload_channel_raw, str) else ""
     if payload_channel_raw is not None and not isinstance(payload_channel_raw, str):
         raise InvalidPayloadError("payload.channel_id must be a string")
@@ -732,7 +769,7 @@ def build_post_request(target: str, payload: Any) -> BufferPostRequest:
         if not has_visual:
             raise InvalidPayloadError("Instagram posts require at least one image or video asset")
 
-    raw_save_to_draft = payload.get("save_to_draft") if "save_to_draft" in payload else payload.get("saveToDraft")
+    raw_save_to_draft = payload.get("save_to_draft") if payload.get("save_to_draft") is not None else payload.get("saveToDraft")
     if raw_save_to_draft is not None and not isinstance(raw_save_to_draft, bool):
         raise InvalidPayloadError("payload.save_to_draft must be a boolean")
 
@@ -744,7 +781,7 @@ def build_post_request(target: str, payload: Any) -> BufferPostRequest:
     else:
         raise InvalidPayloadError(f"payload.mode must be one of: {', '.join(INPUT_MODES)}")
 
-    raw_due_at = payload.get("due_at") if "due_at" in payload else payload.get("dueAt")
+    raw_due_at = payload.get("due_at") if payload.get("due_at") is not None else payload.get("dueAt")
     due_at = _normalize_due_at(raw_due_at) if raw_due_at is not None else None
 
     if input_mode == "draft":
@@ -763,12 +800,12 @@ def build_post_request(target: str, payload: Any) -> BufferPostRequest:
     if graphql_mode != "customScheduled" and due_at is not None:
         raise InvalidPayloadError("payload.due_at is only valid with mode='customScheduled' (or mode='draft')")
 
-    raw_sched = payload.get("scheduling_type") if "scheduling_type" in payload else payload.get("schedulingType", "automatic")
+    raw_sched = payload.get("scheduling_type") if payload.get("scheduling_type") is not None else payload.get("schedulingType", "automatic")
     if not isinstance(raw_sched, str) or raw_sched.strip() not in SCHEDULING_TYPES:
         raise InvalidPayloadError(f"payload.scheduling_type must be one of: {', '.join(SCHEDULING_TYPES)}")
     scheduling_type = raw_sched.strip()
 
-    raw_dry_run = payload.get("dry_run", False)
+    raw_dry_run = payload.get("dry_run") if payload.get("dry_run") is not None else payload.get("dryRun", False)
     if not isinstance(raw_dry_run, bool):
         raise InvalidPayloadError("payload.dry_run must be a boolean")
 
