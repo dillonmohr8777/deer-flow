@@ -115,6 +115,9 @@ describe("Artifact quick preview modal for HTML and marketing deliverables", () 
     const iframe = await screen.findByTestId("html-artifact-preview-iframe");
     expect(iframe.getAttribute("sandbox")).toBe("allow-scripts");
     expect(iframe.getAttribute("srcdoc")).toContain("Hello Local Owner");
+    expect(iframe.getAttribute("srcdoc")).toContain(
+      '/api/threads/thread-preview-1/artifacts/outputs/">',
+    );
     expect(iframe.getAttribute("data-viewport")).toBe("desktop");
 
     fireEvent.click(screen.getByRole("button", { name: "Mobile" }));

@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { loadArtifactContent } from "@/core/artifacts/loader";
+import { appendHtmlPreviewBaseHref } from "@/core/artifacts/preview";
 import { urlOfArtifact } from "@/core/artifacts/utils";
 import { writeTextToClipboard } from "@/core/clipboard";
 import { SafeStreamdown } from "@/core/streamdown/components";
@@ -203,6 +204,16 @@ export function ArtifactQuickPreviewModal({
 
   const content = query.data?.content ?? "";
   const truncated = query.data?.truncated ?? false;
+  const artifactUrl =
+    query.data?.url ??
+    (filepath ? urlOfArtifact({ filepath, threadId, isMock }) : undefined);
+
+  const htmlSrcDoc = useMemo(() => {
+    if (kind !== "html") {
+      return "";
+    }
+    return appendHtmlPreviewBaseHref(content, artifactUrl);
+  }, [artifactUrl, content, kind]);
 
   const parsedTable = useMemo(() => {
     if (kind !== "csv" && kind !== "tsv") {
@@ -359,7 +370,7 @@ export function ArtifactQuickPreviewModal({
               <iframe
                 title={`Live preview of ${filename}`}
                 sandbox="allow-scripts"
-                srcDoc={content}
+                srcDoc={htmlSrcDoc}
                 data-testid="html-artifact-preview-iframe"
                 data-viewport={viewport}
                 className={cn(
