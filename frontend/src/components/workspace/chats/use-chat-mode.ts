@@ -1,12 +1,26 @@
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef } from "react";
+import { toast } from "sonner";
 
 import { usePromptInputController } from "@/components/ai-elements/prompt-input";
 import { parsePrefillPrompt } from "@/components/workspace/control-panel/control-panel-data";
 import { useI18n } from "@/core/i18n/hooks";
 
+function focusTextareaAtEnd(expectedLength: number) {
+  const textarea = document.querySelector("textarea");
+  if (!textarea) {
+    return;
+  }
+  textarea.focus();
+  const end = Math.max(textarea.value.length, expectedLength);
+  textarea.selectionStart = end;
+  textarea.selectionEnd = end;
+}
+
 /**
- * Hook to determine if the chat is in a specific mode based on URL parameters, and to set an initial prompt input value accordingly.
+ * Hook to determine if the chat is in a specific mode based on URL parameters,
+ * and to apply or offer the requested prefill prompt without clobbering an
+ * existing unsent composer draft.
  */
 export function useSpecificChatMode() {
   const { t } = useI18n();
@@ -26,33 +40,67 @@ export function useSpecificChatMode() {
     }
     return undefined;
   }, [threadIdFromPath, searchParams, t.inputBox.createSkillPrompt]);
-  const lastInitialValueRef = useRef<string | undefined>(undefined);
-  const currentValueRef = useRef(promptInputController.textInput.value);
-  currentValueRef.current = promptInputController.textInput.value;
+
+  const currentValue = promptInputController.textInput.value;
+  const handledValueRef = useRef<string | undefined>(undefined);
+  const offeredValueRef = useRef<string | undefined>(undefined);
+  const currentValueRef = useRef(currentValue);
+  currentValueRef.current = currentValue;
   const setInputRef = useRef(promptInputController.textInput.setInput);
   setInputRef.current = promptInputController.textInput.setInput;
+
   useEffect(() => {
-    if (
-      inputInitialValue &&
-      inputInitialValue !== lastInitialValueRef.current
-    ) {
-      lastInitialValueRef.current = inputInitialValue;
-      const timer = setTimeout(() => {
-        const textarea = document.querySelector("textarea");
-        if (
-          currentValueRef.current.trim().length > 0 ||
-          (textarea?.value.trim().length ?? 0) > 0
-        ) {
-          return;
-        }
-        setInputRef.current(inputInitialValue);
-        if (textarea) {
-          textarea.focus();
-          textarea.selectionStart = textarea.value.length;
-          textarea.selectionEnd = textarea.value.length;
-        }
-      }, 100);
-      return () => clearTimeout(timer);
+    if (!inputInitialValue) {
+      offeredValueRef.current = undefined;
+      return;
     }
-  }, [inputInitialValue]);
+    if (handledValueRef.current === inputInitialValue) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      const textarea = document.querySelector("textarea");
+      const existing = (
+        currentValueRef.current.length > 0
+          ? currentValueRef.current
+          : (textarea?.value ?? "")
+      ).trim();
+      if (existing === inputInitialValue.trim()) {
+        handledValueRef.current = inputInitialValue;
+        offeredValueRef.current = undefined;
+        return;
+      }
+      if (existing.length === 0) {
+        handledValueRef.current = inputInitialValue;
+        offeredValueRef.current = undefined;
+        setInputRef.current(inputInitialValue);
+        focusTextareaAtEnd(inputInitialValue.length);
+        return;
+      }
+      if (offeredValueRef.current === inputInitialValue) {
+        return;
+      }
+      offeredValueRef.current = inputInitialValue;
+      toast("Selected workflow prompt is ready", {
+        description:
+          "You already have an unsent draft in the composer. Replace it with this workflow prompt or keep your draft.",
+        action: {
+          label: "Use workflow prompt",
+          onClick: () => {
+            handledValueRef.current = inputInitialValue;
+            offeredValueRef.current = undefined;
+            setInputRef.current(inputInitialValue);
+            focusTextareaAtEnd(inputInitialValue.length);
+          },
+        },
+        cancel: {
+          label: "Keep draft",
+          onClick: () => {
+            handledValueRef.current = inputInitialValue;
+            offeredValueRef.current = undefined;
+          },
+        },
+      });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [inputInitialValue, currentValue]);
 }

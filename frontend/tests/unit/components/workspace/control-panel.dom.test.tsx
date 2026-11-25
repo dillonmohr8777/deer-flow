@@ -5,6 +5,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -67,11 +68,36 @@ rs.mock("@/core/workspaces/hooks", () => ({
   }),
 }));
 
+type MockFetchResponse = {
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
+};
+
+const mockApiFetch = rs.hoisted(() =>
+  rs.fn(
+    async (url: string, _init?: RequestInit): Promise<MockFetchResponse> => {
+      if (url.includes("/api/client-portal/clients")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            workspace_id: workspaceState.active_workspace_id,
+            clients: [],
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ threads: [], has_more: false }),
+      };
+    },
+  ),
+);
+
 rs.mock("@/core/api/fetcher", () => ({
-  fetch: rs.fn().mockResolvedValue({
-    ok: false,
-    json: async () => ({}),
-  }),
+  fetch: mockApiFetch,
   redirectOnUnauthorized: rs.fn(),
   setLoggingOut: rs.fn(),
 }));
@@ -96,6 +122,24 @@ function renderControlPanel(role: User["system_role"] = "client") {
 beforeEach(() => {
   workspaceState.active_workspace_id = "ws-amp";
   window.localStorage.clear();
+  mockApiFetch.mockClear();
+  mockApiFetch.mockImplementation(async (url: string) => {
+    if (url.includes("/api/client-portal/clients")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          workspace_id: workspaceState.active_workspace_id,
+          clients: [],
+        }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ threads: [], has_more: false }),
+    };
+  });
 });
 
 afterEach(cleanup);
@@ -110,6 +154,8 @@ describe("Client Control Panel", () => {
     const summary = screen.getByTestId("control-panel-summary");
     expect(within(summary).getByText("0 / 5")).toBeTruthy();
     expect(within(summary).getByText("0 / 5 lessons")).toBeTruthy();
+    expect(within(summary).getByText("0 / 6 connected")).toBeTruthy();
+    expect(within(summary).queryByText(/channels ready/i)).toBeNull();
     const academyLink = within(summary).getByRole("link", {
       name: /Open Start Here \/ Academy/i,
     });
@@ -222,5 +268,104 @@ describe("Client Control Panel", () => {
     ).toBe("/workspace/agents/my-agent/chats/new?prompt=Hello");
     expect(parsePrefillPrompt("   ")).toBeUndefined();
     expect(parsePrefillPrompt("Draft an article")).toBe("Draft an article");
+  });
+
+  it("counts and displays running deliverables scoped to the selected workspace header", async () => {
+    mockApiFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers["X-Portal-Workspace"]).toBe("ws-amp");
+      if (url.includes("/api/client-portal/clients")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ workspace_id: "ws-amp", clients: [] }),
+        };
+      }
+      if (url.includes("state=pending")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            threads: [
+              { id: "t-run", subject: "Homepage refresh", state: "running" },
+            ],
+            has_more: false,
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          threads: [
+            { id: "t-app", subject: "Weekly GBP pack", state: "needs_approval" },
+          ],
+          has_more: false,
+        }),
+      };
+    });
+
+    renderControlPanel("client");
+
+    const summary = screen.getByTestId("control-panel-summary");
+    await waitFor(() => {
+      expect(within(summary).getByText("2 active")).toBeTruthy();
+    });
+
+    const weeklyTab = screen.getByRole("tab", {
+      name: /Weekly Plan & Approvals/i,
+    });
+    fireEvent.mouseDown(weeklyTab);
+    fireEvent.click(weeklyTab);
+
+    expect(screen.getByText("Homepage refresh")).toBeTruthy();
+    expect(screen.getByText("Momo is working")).toBeTruthy();
+    expect(screen.getByText("Weekly GBP pack")).toBeTruthy();
+    expect(screen.getByText("Needs approval")).toBeTruthy();
+  });
+
+  it("shows an unavailable error state with Retry instead of None queued when portal requests fail", async () => {
+    let fail = true;
+    mockApiFetch.mockImplementation(async (url: string) => {
+      if (fail) {
+        return { ok: false, status: 503, json: async () => ({}) };
+      }
+      if (url.includes("/api/client-portal/clients")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ workspace_id: "ws-amp", clients: [] }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ threads: [], has_more: false }),
+      };
+    });
+
+    renderControlPanel("client");
+
+    const summary = screen.getByTestId("control-panel-summary");
+    await waitFor(() => {
+      expect(within(summary).getByText("Unavailable")).toBeTruthy();
+    });
+    expect(within(summary).queryByText("None queued")).toBeNull();
+
+    const weeklyTab = screen.getByRole("tab", {
+      name: /Weekly Plan & Approvals/i,
+    });
+    fireEvent.mouseDown(weeklyTab);
+    fireEvent.click(weeklyTab);
+    expect(screen.getByTestId("deliverables-error-state")).toBeTruthy();
+    expect(
+      screen.getByText("Unable to load active deliverables"),
+    ).toBeTruthy();
+
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: /^Retry$/i }));
+    await waitFor(() => {
+      expect(within(summary).getByText("None queued")).toBeTruthy();
+    });
   });
 });

@@ -91,13 +91,21 @@ type PortalDeliverablesResult = {
   hasMore: boolean;
 };
 
-const ACTIVE_PORTAL_STATES = ["pending", "needs_approval"] as const;
+// Backend /api/client-portal/threads accepts "all" | "pending" | "needs_approval" | "published".
+// Threads actively being worked by Momo (state="running") have no approval_id or published_id yet,
+// so they are returned under state=pending and labeled state="running" by the server summary.
+const PORTAL_ACTIVE_QUERY_STATES = ["pending", "needs_approval"] as const;
+const ACTIVE_DELIVERABLE_STATES = new Set([
+  "pending",
+  "running",
+  "needs_approval",
+]);
 const DELIVERABLES_PAGE_SIZE = 100;
 const MAX_DELIVERABLES_PAGES = 5;
 
 async function fetchActiveStateThreads(
   workspaceId: string,
-  state: (typeof ACTIVE_PORTAL_STATES)[number],
+  state: (typeof PORTAL_ACTIVE_QUERY_STATES)[number],
   signal?: AbortSignal,
 ): Promise<{ threads: PortalDeliverable[]; hasMore: boolean }> {
   const collected: PortalDeliverable[] = [];
@@ -113,7 +121,9 @@ async function fetchActiveStateThreads(
       },
     );
     if (!listRes.ok) {
-      return { threads: collected, hasMore: false };
+      throw new Error(
+        `Failed to load active deliverables (HTTP ${listRes.status})`,
+      );
     }
     const data = (await listRes.json()) as {
       threads?: PortalDeliverable[];
@@ -131,22 +141,41 @@ async function fetchActiveStateThreads(
 }
 
 async function fetchPortalDeliverables(
+  selectedWorkspaceId: string | null,
   signal?: AbortSignal,
 ): Promise<PortalDeliverablesResult> {
   const rosterRes = await apiFetch(
     `${getBackendBaseURL()}/api/client-portal/clients`,
-    { signal, cache: "no-store" },
+    {
+      signal,
+      cache: "no-store",
+      headers: selectedWorkspaceId
+        ? { "X-Portal-Workspace": selectedWorkspaceId }
+        : undefined,
+    },
   );
   if (!rosterRes.ok) {
-    return { items: [], activeCount: 0, hasMore: false };
+    throw new Error(
+      `Failed to load workspace deliverables (HTTP ${rosterRes.status})`,
+    );
   }
   const roster = (await rosterRes.json()) as PortalRoster;
-  if (!roster.workspace_id) {
-    return { items: [], activeCount: 0, hasMore: false };
+  const portalWorkspaceId = selectedWorkspaceId ?? roster.workspace_id;
+  if (!portalWorkspaceId) {
+    throw new Error("Workspace deliverables are unavailable for this session");
+  }
+  if (
+    selectedWorkspaceId &&
+    roster.workspace_id &&
+    roster.workspace_id !== selectedWorkspaceId
+  ) {
+    throw new Error(
+      "Active workspace changed while loading deliverables; please retry",
+    );
   }
   const results = await Promise.all(
-    ACTIVE_PORTAL_STATES.map((state) =>
-      fetchActiveStateThreads(roster.workspace_id, state, signal),
+    PORTAL_ACTIVE_QUERY_STATES.map((state) =>
+      fetchActiveStateThreads(portalWorkspaceId, state, signal),
     ),
   );
   const seen = new Set<string>();
@@ -157,7 +186,7 @@ async function fetchPortalDeliverables(
       hasMore = true;
     }
     for (const thread of res.threads) {
-      if (thread.state === "published" || seen.has(thread.id)) {
+      if (!ACTIVE_DELIVERABLE_STATES.has(thread.state) || seen.has(thread.id)) {
         continue;
       }
       seen.add(thread.id);
@@ -190,8 +219,10 @@ export function ControlPanelBody() {
   const { user } = useAuth();
   const isClient = useIsClient();
   const { agents } = useAgents();
-  const { data: workspaceData } = useWorkspaceSelection();
+  const { data: workspaceData, isLoading: workspaceLoading } =
+    useWorkspaceSelection();
   const [activeTab, setActiveTab] = useState("kickoff");
+  const selectedWorkspaceId = workspaceData?.active_workspace_id ?? null;
 
   const activeWorkspaceName = useMemo(() => {
     if (!workspaceData) {
@@ -227,16 +258,17 @@ export function ControlPanelBody() {
   }, [scopeKey]);
 
   const deliverablesQuery = useQuery({
-    queryKey: [
-      "control-panel-deliverables",
-      user?.id,
-      workspaceData?.active_workspace_id,
-    ],
-    enabled: Boolean(user) && !isStaticWebsiteOnly(),
-    queryFn: ({ signal }) => fetchPortalDeliverables(signal),
+    queryKey: ["control-panel-deliverables", user?.id, selectedWorkspaceId],
+    enabled: Boolean(user) && !isStaticWebsiteOnly() && !workspaceLoading,
+    queryFn: ({ signal }) =>
+      fetchPortalDeliverables(selectedWorkspaceId, signal),
     retry: false,
     staleTime: 30_000,
   });
+
+  const connectedReportingCount = REPORTING_CONNECTIONS.filter(
+    (conn) => conn.status === "connected",
+  ).length;
 
   const completedChecklistCount = DAY_ONE_CHECKLIST.filter(
     (item) => checklist[item.id],
@@ -403,16 +435,29 @@ export function ControlPanelBody() {
         <div className={styles.summaryTile}>
           <span className={styles.summaryLabel}>Active Deliverables</span>
           <span className={styles.summaryValue}>
-            {deliverablesQuery.isLoading
+            {deliverablesQuery.isLoading || workspaceLoading
               ? "Checking..."
-              : activeDeliverableCount === 0
-                ? "None queued"
-                : `${activeDeliverableCount}${activeDeliverablesHasMore ? "+" : ""} active`}
+              : deliverablesQuery.isError
+                ? "Unavailable"
+                : activeDeliverableCount === 0
+                  ? "None queued"
+                  : `${activeDeliverableCount}${activeDeliverablesHasMore ? "+" : ""} active`}
           </span>
-          <Link href="/workspace/inbox" className={styles.summaryLink}>
-            Open Client Inbox
-            <ArrowRightIcon className="size-3.5" />
-          </Link>
+          {deliverablesQuery.isError ? (
+            <button
+              type="button"
+              className={styles.summaryLink}
+              onClick={() => void deliverablesQuery.refetch()}
+            >
+              Retry loading deliverables
+              <ArrowRightIcon className="size-3.5" />
+            </button>
+          ) : (
+            <Link href="/workspace/inbox" className={styles.summaryLink}>
+              Open Client Inbox
+              <ArrowRightIcon className="size-3.5" />
+            </Link>
+          )}
         </div>
 
         <div className={styles.summaryTile}>
@@ -429,14 +474,16 @@ export function ControlPanelBody() {
         <div className={styles.summaryTile}>
           <span className={styles.summaryLabel}>Reporting Access</span>
           <span className={styles.summaryValue}>
-            {REPORTING_CONNECTIONS.length} channels ready
+            {connectedReportingCount} / {REPORTING_CONNECTIONS.length} connected
           </span>
           <button
             type="button"
             className={styles.summaryLink}
             onClick={() => setActiveTab("reporting")}
           >
-            Review connection status
+            {connectedReportingCount === 0
+              ? "Channels awaiting connection"
+              : "Review connection status"}
             <ArrowRightIcon className="size-3.5" />
           </button>
         </div>
@@ -726,10 +773,39 @@ export function ControlPanelBody() {
                   </Button>
                 </div>
 
-                {deliverablesQuery.isLoading ? (
+                {deliverablesQuery.isLoading || workspaceLoading ? (
                   <p className="text-muted-foreground mt-4 text-sm">
                     Checking active workspace deliverables...
                   </p>
+                ) : deliverablesQuery.isError ? (
+                  <div
+                    className={styles.emptySurface}
+                    role="alert"
+                    data-testid="deliverables-error-state"
+                  >
+                    <p className="text-sm font-semibold">
+                      Unable to load active deliverables
+                    </p>
+                    <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                      We could not verify your active deliverables or pending
+                      approvals for this workspace. Retry or open Client Inbox
+                      directly.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className={styles.brandActionBtn}
+                        onClick={() => void deliverablesQuery.refetch()}
+                      >
+                        Retry
+                      </Button>
+                      <Button asChild size="sm" variant="ghost">
+                        <Link href="/workspace/inbox">Go to Client Inbox</Link>
+                      </Button>
+                    </div>
+                  </div>
                 ) : activeDeliverableItems.length > 0 ? (
                   <ul className="mt-4 divide-y">
                     {activeDeliverableItems.map((item) => {

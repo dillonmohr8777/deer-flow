@@ -215,7 +215,7 @@ export type ReportingConnection = {
   id: string;
   name: string;
   category: string;
-  status: "not_connected";
+  status: "connected" | "not_connected";
   statusLabel: string;
   unlocks: string;
 };
