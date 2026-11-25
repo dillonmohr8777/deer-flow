@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "@rstest/core";
 
+import robots, { dynamic as robotsDynamic } from "@/app/robots";
+import sitemap, { dynamic as sitemapDynamic } from "@/app/sitemap";
 import {
   absoluteUrl,
   articleJsonLd,
@@ -270,7 +272,7 @@ describe("relatedArticles", () => {
 });
 
 describe("getSiteUrl and runtime SEO URLs", () => {
-  it("reads MOMOBOT_SITE_URL dynamically, ignores blank strings, and updates JSON-LD", () => {
+  it("reads MOMOBOT_SITE_URL dynamically, ignores blank strings, and updates JSON-LD", async () => {
     const prevMomo = process.env.MOMOBOT_SITE_URL;
     const prevNext = process.env.NEXT_PUBLIC_SITE_URL;
     try {
@@ -280,6 +282,11 @@ describe("getSiteUrl and runtime SEO URLs", () => {
       expect(absoluteUrl("/sitemap.xml")).toBe(
         "https://momobot.example.com/sitemap.xml",
       );
+      expect(robotsDynamic).toBe("force-dynamic");
+      expect(sitemapDynamic).toBe("force-dynamic");
+      expect(robots().sitemap).toBe("https://momobot.example.com/sitemap.xml");
+      const entries = await sitemap();
+      expect(entries[0]?.url).toBe("https://momobot.example.com/");
 
       const [news, crumbs] = articleJsonLd(article());
       expect(news?.url).toBe(
