@@ -719,8 +719,11 @@ _ALLOWED_PAYLOAD_KEYS = frozenset(
         "dry_run",
         "dryRun",
         "metadata",
+        "loop",
     }
 )
+
+_ALLOWED_LOOP_KEYS = frozenset({"client", "source_link", "draft_ref"})
 
 _PAYLOAD_ALIAS_PAIRS = (
     ("channel_id", "channelId"),
@@ -729,6 +732,26 @@ _PAYLOAD_ALIAS_PAIRS = (
     ("scheduling_type", "schedulingType"),
     ("dry_run", "dryRun"),
 )
+
+
+def _validate_loop_provenance(raw_loop: Any) -> None:
+    """Validate optional Client Loop provenance metadata (retained on approval rows, excluded from Buffer GraphQL)."""
+    if raw_loop is None:
+        return
+    if not isinstance(raw_loop, dict):
+        raise InvalidPayloadError("payload.loop must be an object")
+    unknown_keys = [k for k in raw_loop if k not in _ALLOWED_LOOP_KEYS]
+    if unknown_keys:
+        raise InvalidPayloadError(f"Unsupported payload.loop fields: {', '.join(sorted(str(k) for k in unknown_keys))}")
+    client = raw_loop.get("client")
+    if client is not None and (not isinstance(client, str) or not client.strip() or len(client) > 128):
+        raise InvalidPayloadError("payload.loop.client must be a non-empty string (max 128 chars)")
+    source_link = raw_loop.get("source_link")
+    if source_link is not None and (not isinstance(source_link, str) or len(source_link) > 1024):
+        raise InvalidPayloadError("payload.loop.source_link must be a string (max 1024 chars)")
+    draft_ref = raw_loop.get("draft_ref")
+    if draft_ref is not None and not (isinstance(draft_ref, dict) or (isinstance(draft_ref, str) and len(draft_ref) <= 1024)):
+        raise InvalidPayloadError("payload.loop.draft_ref must be a string (max 1024 chars) or object")
 
 
 def build_post_request(target: str, payload: Any) -> BufferPostRequest:
@@ -740,6 +763,8 @@ def build_post_request(target: str, payload: Any) -> BufferPostRequest:
     unknown_fields = [k for k in payload if k not in _ALLOWED_PAYLOAD_KEYS]
     if unknown_fields:
         raise InvalidPayloadError(f"Unsupported Buffer post payload fields: {', '.join(sorted(str(k) for k in unknown_fields))}")
+
+    _validate_loop_provenance(payload.get("loop"))
 
     for snake_key, camel_key in _PAYLOAD_ALIAS_PAIRS:
         if payload.get(snake_key) is not None and payload.get(camel_key) is not None:

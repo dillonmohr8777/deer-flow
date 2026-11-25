@@ -1355,3 +1355,50 @@ async def test_draft_request_unexpectedly_returned_sent_by_buffer_reports_publis
     assert outcome.status == "executed"
     assert outcome.detail["state"] == "published"
     assert outcome.detail["post_status"] == "sent"
+
+
+@async_test
+async def test_loop_provenance_accepted_validated_and_excluded_from_graphql_input():
+    valid_payload = {
+        "service": "linkedin",
+        "text": "Weekly update from Client Loop",
+        "loop": {
+            "client": "acme-local",
+            "source_link": "https://example.com/brief/42",
+            "draft_ref": {"source": "loop", "id": "dr_42"},
+        },
+    }
+    req = build_post_request("ch_1", valid_payload)
+    gql_input = req.to_graphql_input()
+    assert "loop" not in gql_input
+    assert gql_input["channelId"] == "ch_1"
+    assert gql_input["text"] == "Weekly update from Client Loop"
+
+    # Dry-run adapter execution succeeds and never leaks loop provenance into graphql_input.
+    transport, captured = _mock_transport(lambda _r, _b: httpx.Response(200, json={"data": {}}))
+    adapter = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY, "BUFFER_DRY_RUN": "true"},
+    )
+    dry_outcome = await adapter.execute(_action(target="ch_1", payload=valid_payload))
+    assert dry_outcome.status == "approved"
+    assert dry_outcome.detail["state"] == "dry_run"
+    assert "loop" not in dry_outcome.detail["graphql_input"]
+    assert captured == []
+
+    # Invalid loop shapes, unknown keys, or credential keys inside loop are rejected.
+    with pytest.raises(InvalidPayloadError, match="payload.loop must be an object"):
+        build_post_request("ch_1", {"service": "linkedin", "text": "Hi", "loop": "not-a-dict"})
+    with pytest.raises(InvalidPayloadError, match="Unsupported payload.loop fields"):
+        build_post_request("ch_1", {"service": "linkedin", "text": "Hi", "loop": {"client": "acme", "unexpected": True}})
+    with pytest.raises(InvalidPayloadError, match="payload.loop.client"):
+        build_post_request("ch_1", {"service": "linkedin", "text": "Hi", "loop": {"client": "   "}})
+    with pytest.raises(InvalidPayloadError, match="payload.loop.source_link"):
+        build_post_request("ch_1", {"service": "linkedin", "text": "Hi", "loop": {"source_link": 123}})
+    with pytest.raises(InvalidPayloadError, match="payload.loop.draft_ref"):
+        build_post_request("ch_1", {"service": "linkedin", "text": "Hi", "loop": {"draft_ref": ["bad"]}})
+    with pytest.raises(InvalidPayloadError, match="Credential-bearing field"):
+        build_post_request(
+            "ch_1",
+            {"service": "linkedin", "text": "Hi", "loop": {"draft_ref": {"api_key": "nope"}}},
+        )
