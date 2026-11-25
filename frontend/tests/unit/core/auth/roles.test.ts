@@ -43,8 +43,11 @@ describe("system roles", () => {
 });
 
 describe("client pages", () => {
-  it("opens chats, a chat with MomoBot Max, the lineup and About", () => {
+  it("opens Control Panel, Start Here, inbox, chats, a chat with MomoBot Max, the lineup and About", () => {
     for (const path of [
+      "/workspace/control-panel",
+      "/workspace/start-here",
+      "/workspace/inbox",
       "/workspace/chats",
       "/workspace/chats/",
       "/workspace/chats/abc-123",

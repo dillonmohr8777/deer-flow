@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { DownloadIcon, LoaderIcon, PackageIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { DownloadIcon, EyeIcon, LoaderIcon, PackageIcon } from "lucide-react";
+import { useCallback, useContext, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
 import { urlOfArtifact } from "@/core/artifacts/utils";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
+import { useCleanClientMode } from "@/core/settings/client-mode";
 import { installSkill, SkillRequestError } from "@/core/skills/api";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
 import {
@@ -29,27 +30,41 @@ import {
 } from "@/core/utils/files";
 import { cn } from "@/lib/utils";
 
+import { ThreadContext } from "../messages/context";
+
+import {
+  ArtifactQuickPreviewModal,
+  getArtifactPreviewButtonLabel,
+  getArtifactQuickPreviewKind,
+  getCleanClientArtifactLabel,
+} from "./artifact-quick-preview-modal";
 import { useArtifacts } from "./context";
 
 export function ArtifactFileList({
   archiveDownloadsEnabled = true,
   className,
   files,
+  isMock,
   runId,
   threadId,
 }: {
   archiveDownloadsEnabled?: boolean;
   className?: string;
   files: string[];
+  isMock?: boolean;
   runId?: string;
   threadId: string;
 }) {
   const { t } = useI18n();
   const { user } = useAuth();
+  const threadContext = useContext(ThreadContext);
+  const effectiveIsMock = isMock ?? Boolean(threadContext?.isMock);
   const isAdmin = user?.system_role === "admin";
+  const { cleanClientMode } = useCleanClientMode();
   const { select: selectArtifact, setOpen } = useArtifacts();
   const [downloadingArchive, setDownloadingArchive] = useState(false);
   const [installingFile, setInstallingFile] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<string | null>(null);
   const staticWebsiteOnly = isStaticWebsiteOnly();
   const { data: archiveManifest } = useQuery({
     queryKey: ["artifact-archive-manifest", threadId, runId],
@@ -160,57 +175,87 @@ export function ArtifactFileList({
         </div>
       )}
       <ul className="flex w-full flex-col gap-4">
-        {files.map((file) => (
-          <Card
-            key={file}
-            className="relative cursor-pointer p-3"
-            onClick={() => handleClick(file)}
-          >
-            <CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 pr-2 pl-1">
-              <CardTitle className="relative min-w-0 pl-8 leading-tight [overflow-wrap:anywhere] break-words">
-                <div className="min-w-0">{getFileName(file)}</div>
-                <div className="absolute top-2 -left-0.5">
-                  {getFileIcon(file, "size-6")}
-                </div>
-              </CardTitle>
-              <CardDescription className="min-w-0 pl-8 text-xs">
-                {getFileExtensionDisplayName(file)} file
-              </CardDescription>
-              <CardAction className="row-span-1 self-center">
-                {file.endsWith(".skill") && isAdmin && (
-                  <Button
-                    variant="ghost"
-                    disabled={installingFile === file}
-                    onClick={(e) => handleInstallSkill(e, file)}
-                  >
-                    {installingFile === file ? (
-                      <LoaderIcon className="size-4 animate-spin" />
-                    ) : (
-                      <PackageIcon className="size-4" />
-                    )}
-                    {t.common.install}
+        {files.map((file) => {
+          const previewKind = getArtifactQuickPreviewKind(file);
+          return (
+            <Card
+              key={file}
+              className="relative cursor-pointer p-3"
+              onClick={() => handleClick(file)}
+            >
+              <CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 pr-2 pl-1">
+                <CardTitle className="relative min-w-0 pl-8 leading-tight [overflow-wrap:anywhere] break-words">
+                  <div className="min-w-0">{getFileName(file)}</div>
+                  <div className="absolute top-2 -left-0.5">
+                    {getFileIcon(file, "size-6")}
+                  </div>
+                </CardTitle>
+                <CardDescription className="min-w-0 pl-8 text-xs">
+                  {cleanClientMode
+                    ? getCleanClientArtifactLabel(file)
+                    : `${getFileExtensionDisplayName(file)} file`}
+                </CardDescription>
+                <CardAction className="row-span-1 flex flex-wrap items-center gap-1.5 self-center">
+                  {previewKind !== null && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={previewKind === "html" ? "default" : "outline"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewFile(file);
+                      }}
+                    >
+                      <EyeIcon className="size-4" />
+                      {getArtifactPreviewButtonLabel(previewKind)}
+                    </Button>
+                  )}
+                  {file.endsWith(".skill") && isAdmin && (
+                    <Button
+                      variant="ghost"
+                      disabled={installingFile === file}
+                      onClick={(e) => handleInstallSkill(e, file)}
+                    >
+                      {installingFile === file ? (
+                        <LoaderIcon className="size-4 animate-spin" />
+                      ) : (
+                        <PackageIcon className="size-4" />
+                      )}
+                      {t.common.install}
+                    </Button>
+                  )}
+                  <Button variant="ghost" asChild>
+                    <a
+                      href={urlOfArtifact({
+                        filepath: file,
+                        threadId: threadId,
+                        download: true,
+                      })}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <DownloadIcon className="size-4" />
+                      {t.common.download}
+                    </a>
                   </Button>
-                )}
-                <Button variant="ghost" asChild>
-                  <a
-                    href={urlOfArtifact({
-                      filepath: file,
-                      threadId: threadId,
-                      download: true,
-                    })}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <DownloadIcon className="size-4" />
-                    {t.common.download}
-                  </a>
-                </Button>
-              </CardAction>
-            </CardHeader>
-          </Card>
-        ))}
+                </CardAction>
+              </CardHeader>
+            </Card>
+          );
+        })}
       </ul>
+      <ArtifactQuickPreviewModal
+        filepath={previewFile}
+        threadId={threadId}
+        isMock={effectiveIsMock}
+        open={previewFile !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setPreviewFile(null);
+          }
+        }}
+      />
     </div>
   );
 }

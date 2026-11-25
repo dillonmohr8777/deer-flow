@@ -33,7 +33,9 @@ export function RoleRouteGuard({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (startsDefaultChat && !agentsLoading) {
-      router.replace(clientNewChatPath(agents));
+      const search =
+        typeof window !== "undefined" ? window.location.search : "";
+      router.replace(`${clientNewChatPath(agents)}${search}`);
     }
   }, [agents, agentsLoading, router, startsDefaultChat]);
 

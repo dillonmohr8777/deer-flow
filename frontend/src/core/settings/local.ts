@@ -6,6 +6,9 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
     enabled: true,
   },
   projectsDisplayMode: "flat",
+  developerDetails: {
+    mode: "auto",
+  },
   tokenUsage: {
     headerTotal: true,
     inlineMode: "per_turn",
@@ -87,6 +90,9 @@ export interface LocalSettings {
     enabled: boolean;
   };
   projectsDisplayMode: "flat" | "grouped";
+  developerDetails: {
+    mode: "auto" | "show" | "hide";
+  };
   tokenUsage: {
     headerTotal: boolean;
     inlineMode: TokenUsageInlineMode;
@@ -122,6 +128,10 @@ function mergeLocalSettings(settings?: Partial<LocalSettings>): LocalSettings {
     notification: {
       ...DEFAULT_LOCAL_SETTINGS.notification,
       ...settings?.notification,
+    },
+    developerDetails: {
+      ...DEFAULT_LOCAL_SETTINGS.developerDetails,
+      ...settings?.developerDetails,
     },
     projectsDisplayMode:
       settings?.projectsDisplayMode ??

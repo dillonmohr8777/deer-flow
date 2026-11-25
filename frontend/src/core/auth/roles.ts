@@ -39,6 +39,8 @@ export function isRoleUnresolved(
 
 /** Workspace pages a client may open. Everything else shows "not available". */
 const CLIENT_PATHS: readonly RegExp[] = [
+  /^\/workspace\/control-panel$/,
+  /^\/workspace\/start-here$/,
   /^\/workspace\/inbox$/,
   // The chat list and existing chats. `/workspace/chats/new` is not here: it
   // would start a chat with the default agent, so it redirects instead.

@@ -1,0 +1,414 @@
+"use client";
+
+import {
+  ArrowRightIcon,
+  CheckCircle2Icon,
+  CircleIcon,
+  CopyIcon,
+  GraduationCapIcon,
+  LayoutDashboardIcon,
+} from "lucide-react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { buildChatPromptHref } from "@/components/workspace/control-panel/control-panel-data";
+import { FilterGroup, pageStyles } from "@/components/workspace/page-body";
+import {
+  WorkspaceBody,
+  WorkspaceContainer,
+  WorkspaceHeader,
+} from "@/components/workspace/workspace-container";
+import { useAgents } from "@/core/agents/hooks";
+import { useAuth, useIsClient } from "@/core/auth/AuthProvider";
+import { writeTextToClipboard } from "@/core/clipboard";
+import { useMomentumInternalEnabled } from "@/core/features";
+import { isStaticWebsiteOnly } from "@/core/static-mode";
+import { useWorkspaceSelection } from "@/core/workspaces/hooks";
+import { cn } from "@/lib/utils";
+
+import {
+  BUSINESS_OWNER_LESSONS,
+  PROMPT_LIBRARY,
+  PROMPT_LIBRARY_CATEGORIES,
+  readStartHereProgress,
+  writeStartHereProgress,
+  type PromptLibraryCategory,
+} from "./start-here-data";
+
+import styles from "./start-here.module.css";
+
+const RING_RADIUS = 26;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+export function StartHereAcademyPage() {
+  useEffect(() => {
+    document.title = "Start Here / Academy | MomoBot";
+  }, []);
+
+  return (
+    <WorkspaceContainer>
+      <WorkspaceHeader />
+      <WorkspaceBody className={pageStyles.page}>
+        <StartHereAcademyBody />
+      </WorkspaceBody>
+    </WorkspaceContainer>
+  );
+}
+
+export function StartHereAcademyBody() {
+  const { user } = useAuth();
+  const isClient = useIsClient();
+  const { agents, isLoading: agentsLoading } = useAgents();
+  const { enabled: internalEnabled } = useMomentumInternalEnabled();
+  const {
+    data: workspaceData,
+    isLoading: workspaceLoading,
+    error: workspaceError,
+  } = useWorkspaceSelection();
+
+  const activeWorkspaceName = useMemo(() => {
+    if (!workspaceData) {
+      return null;
+    }
+    const active = workspaceData.workspaces.find(
+      (item) => item.id === workspaceData.active_workspace_id,
+    );
+    return active?.name ?? workspaceData.private_workspace_name ?? null;
+  }, [workspaceData]);
+
+  const scopeKey = useMemo(() => {
+    if (workspaceLoading) {
+      return null;
+    }
+    const workspacePart = workspaceData?.active_workspace_id;
+    if (
+      user &&
+      !isStaticWebsiteOnly() &&
+      !workspacePart &&
+      workspaceError === null
+    ) {
+      return null;
+    }
+    const userPart = user?.id ?? "guest";
+    return `${userPart}.${workspacePart ?? "default"}`;
+  }, [
+    user,
+    workspaceData?.active_workspace_id,
+    workspaceError,
+    workspaceLoading,
+  ]);
+  const scopeReady = scopeKey !== null;
+
+  const [completed, setCompleted] = useState<Record<string, boolean>>(() =>
+    scopeKey ? readStartHereProgress(scopeKey) : {},
+  );
+  const [category, setCategory] = useState<PromptLibraryCategory>("All");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!scopeKey) {
+      setCompleted({});
+      return;
+    }
+    setCompleted(readStartHereProgress(scopeKey));
+  }, [scopeKey]);
+
+  const doneCount = BUSINESS_OWNER_LESSONS.filter(
+    (lesson) => completed[lesson.id],
+  ).length;
+  const percent = Math.round((doneCount / BUSINESS_OWNER_LESSONS.length) * 100);
+  const ringOffset = RING_CIRCUMFERENCE * (1 - percent / 100);
+
+  const filteredPrompts = useMemo(() => {
+    if (category === "All") {
+      return PROMPT_LIBRARY;
+    }
+    return PROMPT_LIBRARY.filter((item) => item.category === category);
+  }, [category]);
+
+  const toggleLesson = (id: string) => {
+    if (!scopeKey) {
+      return;
+    }
+    setCompleted((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      writeStartHereProgress(scopeKey, next);
+      return next;
+    });
+  };
+
+  const handleCopy = async (id: string, text: string) => {
+    const ok = await writeTextToClipboard(text);
+    if (ok) {
+      setCopiedId(id);
+      setTimeout(() => {
+        setCopiedId((current) => (current === id ? null : current));
+      }, 2000);
+    }
+  };
+
+  return (
+    <main className={styles.frame} data-testid="start-here-academy">
+      <header className={styles.headerRow}>
+        <div className={styles.headerLead}>
+          <div
+            className={styles.progressRingWrap}
+            aria-label={`Start Here lessons ${percent} percent complete`}
+          >
+            <svg
+              className={styles.progressRingSvg}
+              viewBox="0 0 64 64"
+              aria-hidden="true"
+            >
+              <circle
+                cx="32"
+                cy="32"
+                r={RING_RADIUS}
+                fill="none"
+                stroke="#4A5C50"
+                strokeWidth="6"
+              />
+              <circle
+                cx="32"
+                cy="32"
+                r={RING_RADIUS}
+                fill="none"
+                stroke="#D4F33B"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeDasharray={RING_CIRCUMFERENCE}
+                strokeDashoffset={ringOffset}
+                transform="rotate(-90 32 32)"
+              />
+            </svg>
+            <span className={styles.progressRingLabel}>{percent}%</span>
+          </div>
+
+          <div className="min-w-0">
+            <p className={styles.headerEyebrow}>
+              <span className={styles.headerDot} aria-hidden="true" />
+              <span>
+                {activeWorkspaceName
+                  ? `${activeWorkspaceName} · Business Owner Track`
+                  : "Business Owner Track"}
+              </span>
+            </p>
+            <h1 className={styles.headerTitle}>Start Here / Academy</h1>
+            <p className={styles.headerLede}>
+              Five short guides and a library of ready-to-run prompts to help
+              you build pages, local SEO content, weekly posts, and growth plans
+              in minutes.
+            </p>
+          </div>
+        </div>
+
+        <div className={styles.headerActions}>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className={styles.headerBtnSecondary}
+          >
+            <Link href="/workspace/control-panel">
+              <LayoutDashboardIcon className="size-4" />
+              Control Panel
+            </Link>
+          </Button>
+          {internalEnabled && !isClient && (
+            <Button
+              asChild
+              variant="secondary"
+              size="sm"
+              className={styles.headerBtnPrimary}
+            >
+              <Link href="/workspace/academy">
+                <GraduationCapIcon className="size-4" />
+                Staff AI Academy
+              </Link>
+            </Button>
+          )}
+        </div>
+      </header>
+
+      <section
+        className={styles.progressCard}
+        aria-label="Quick-start progress"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <strong className="text-sm">
+            {doneCount} of {BUSINESS_OWNER_LESSONS.length} quick-start lessons
+            done
+          </strong>
+          <span
+            className={cn(pageStyles.figure, "text-muted-foreground text-xs")}
+          >
+            {percent}% complete
+          </span>
+        </div>
+        <Progress
+          value={percent}
+          aria-label="Start Here lessons completed"
+          aria-valuetext={`${doneCount} of ${BUSINESS_OWNER_LESSONS.length} lessons`}
+        />
+      </section>
+
+      <section
+        aria-labelledby="owner-track-heading"
+        className={styles.sectionShell}
+      >
+        <div>
+          <p className={pageStyles.eyebrow}>Step-by-Step</p>
+          <h2 id="owner-track-heading" className="mt-0.5 text-xl font-bold">
+            5-Lesson Quick Start
+          </h2>
+        </div>
+
+        <div className="space-y-3">
+          {BUSINESS_OWNER_LESSONS.map((lesson, index) => {
+            const isDone = Boolean(completed[lesson.id]);
+            const tryHref = buildChatPromptHref({
+              isClient,
+              agents,
+              agentsLoading,
+              prompt: lesson.tryPrompt,
+            });
+            return (
+              <details
+                key={lesson.id}
+                className={styles.lessonCard}
+                open={index === 0}
+              >
+                <summary className={styles.lessonSummary}>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    {isDone ? (
+                      <CheckCircle2Icon className="size-4 shrink-0 text-[#1F7A66] dark:text-[#33A98F]" />
+                    ) : (
+                      <CircleIcon className="text-muted-foreground size-4 shrink-0" />
+                    )}
+                    <span className="text-sm font-semibold">
+                      {index + 1}. {lesson.title}
+                    </span>
+                  </div>
+                  <span className={styles.categoryChip}>
+                    {lesson.minutes} min
+                  </span>
+                </summary>
+                <div className={styles.lessonBody}>
+                  <p className="text-muted-foreground text-sm leading-relaxed">
+                    {lesson.summary}
+                  </p>
+                  <ol className="list-decimal space-y-1.5 pl-5 text-sm">
+                    {lesson.steps.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ol>
+                  <div className={styles.tryBox}>
+                    <p className="text-xs font-semibold">Try this in Chat</p>
+                    <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                      {lesson.tryPrompt}
+                    </p>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                      <Button asChild size="sm" className={styles.brandBtn}>
+                        <Link href={tryHref}>
+                          <span>Try in Chat</span>
+                          <ArrowRightIcon className="size-3.5" />
+                        </Link>
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          void handleCopy(lesson.id, lesson.tryPrompt)
+                        }
+                      >
+                        <CopyIcon className="size-3.5" />
+                        {copiedId === lesson.id ? "Copied" : "Copy prompt"}
+                      </Button>
+                      <label className="ml-auto inline-flex min-h-[44px] cursor-pointer items-center gap-2 text-xs font-medium">
+                        <input
+                          type="checkbox"
+                          checked={isDone}
+                          disabled={!scopeReady}
+                          onChange={() => toggleLesson(lesson.id)}
+                        />
+                        Mark lesson done
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      </section>
+
+      <section
+        aria-labelledby="prompt-library-heading"
+        className={styles.sectionShell}
+      >
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className={pageStyles.eyebrow}>Ready-to-Run Examples</p>
+            <h2
+              id="prompt-library-heading"
+              className="mt-0.5 text-xl font-bold"
+            >
+              Example Prompt Library
+            </h2>
+          </div>
+          <FilterGroup
+            label="Prompt category"
+            value={category}
+            onChange={setCategory}
+            options={PROMPT_LIBRARY_CATEGORIES.map((item) => ({
+              value: item,
+              label: item,
+            }))}
+          />
+        </div>
+
+        <div className={styles.promptGrid} data-testid="prompt-library-grid">
+          {filteredPrompts.map((item) => {
+            const href = buildChatPromptHref({
+              isClient,
+              agents,
+              agentsLoading,
+              prompt: item.prompt,
+            });
+            return (
+              <article key={item.id} className={styles.promptCard}>
+                <div className="space-y-1.5">
+                  <span className={styles.categoryChip}>{item.category}</span>
+                  <h3 className="text-sm font-bold">{item.title}</h3>
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    {item.description}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Button asChild size="sm" className={styles.brandBtn}>
+                    <Link href={href}>
+                      <span>Open in Chat</span>
+                      <ArrowRightIcon className="size-3.5" />
+                    </Link>
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleCopy(item.id, item.prompt)}
+                  >
+                    <CopyIcon className="size-3.5" />
+                    {copiedId === item.id ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    </main>
+  );
+}
