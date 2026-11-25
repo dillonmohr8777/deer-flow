@@ -1607,3 +1607,54 @@ async def test_web_approvals_router_enforces_org_admin_and_executes_buffer_post_
         assert loop_ok.json()["status"] == "executed"
         last_input = captured[-1]["body"]["variables"]["input"]
         assert "loop" not in last_input
+
+
+def test_instagram_populates_required_metadata_defaults_when_metadata_absent_or_empty():
+    for extra in ({}, {"metadata": None}, {"metadata": {}}, {"metadata": {"instagram": {}}}):
+        req = build_post_request(
+            "ch_ig_99",
+            {
+                "service": "instagram",
+                "text": "Fresh install",
+                "assets": [{"type": "image", "url": "https://cdn.example.com/install.jpg"}],
+                **extra,
+            },
+        )
+        assert req.to_graphql_input()["metadata"] == {"instagram": {"type": "post", "shouldShareToFeed": True}}
+
+
+@async_test
+async def test_buffer_post_status_error_returns_failed_outcome_with_post_id_for_reconciliation():
+    def _handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={"data": {"channels": [{"id": "ch_1", "name": "li", "displayName": "LI", "service": "linkedin", "isQueuePaused": False}]}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "createPost": {
+                        "__typename": "PostActionSuccess",
+                        "post": {"id": "post_err_77", "text": "Oops", "status": "error", "dueAt": None, "externalLink": None},
+                    }
+                }
+            },
+        )
+
+    transport, _ = _mock_transport(_handler)
+    adapter = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=_live_env,
+        claim_execution=_one_shot_claimer(),
+    )
+    outcome = await adapter.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "Oops"}))
+    assert outcome.status == "failed"
+    assert outcome.detail["state"] == "publish_error"
+    assert outcome.detail["post_id"] == "post_err_77"
+    assert outcome.detail["post_status"] == "error"
+    assert "post_err_77" in (outcome.error or "")

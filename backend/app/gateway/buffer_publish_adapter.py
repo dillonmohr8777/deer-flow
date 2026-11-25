@@ -352,6 +352,21 @@ class BufferPublishAdapter:
             return AdapterOutcome("failed", receipt, error=err)
 
         receipt = result.to_receipt(action_id=action_id, secret=buffer_key)
+        if result.status == "publish_error":
+            err = scrub_secret(
+                f"Buffer created post {result.post_id!r} in error status; reconcile in Buffer before retrying",
+                buffer_key,
+            )
+            logger.warning(
+                "Buffer publish returned error status: action_id=%s post_id=%s channel_id=%s service=%s http_status=%s elapsed_ms=%s",
+                action_id,
+                result.post_id,
+                result.channel_id,
+                result.service,
+                result.http_status,
+                result.elapsed_ms,
+            )
+            return AdapterOutcome("failed", receipt, error=err)
         logger.info(
             "Buffer publish receipt: action_id=%s post_id=%s channel_id=%s service=%s mode=%s save_to_draft=%s post_status=%s http_status=%s elapsed_ms=%s",
             action_id,

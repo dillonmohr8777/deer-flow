@@ -562,10 +562,14 @@ def _normalize_gbp_action_button(raw: Any, field_name: str) -> str:
 
 def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool) -> dict[str, Any]:
     if raw_meta is None:
+        if service == "instagram":
+            return {"instagram": {"type": "post", "shouldShareToFeed": True}}
         return {}
     if not isinstance(raw_meta, dict):
         raise InvalidPayloadError("payload.metadata must be an object")
     if not raw_meta:
+        if service == "instagram":
+            return {"instagram": {"type": "post", "shouldShareToFeed": True}}
         return {}
     meta_key = SUPPORTED_SERVICES[service]
     # Accept either {"google": {...}} / {"linkedin": {...}} or flat platform fields — never mixed.
@@ -787,9 +791,8 @@ def _normalize_service_metadata(service: str, raw_meta: Any, *, has_assets: bool
             if not isinstance(ai_flag, bool):
                 raise InvalidPayloadError("Instagram isAiGenerated must be a boolean")
             cleaned["isAiGenerated"] = ai_flag
-        if cleaned:
-            cleaned.setdefault("type", "post")
-            cleaned.setdefault("shouldShareToFeed", True)
+        cleaned.setdefault("type", "post")
+        cleaned.setdefault("shouldShareToFeed", True)
 
     elif service == "twitter":
         if section.get("isAiGenerated") is not None and section.get("is_ai_generated") is not None:
@@ -1241,12 +1244,18 @@ class BufferGraphQLClient:
                 )
             raw_post_status = str(post.get("status") or "").strip().lower()
             resolved_post_status = raw_post_status or ("draft" if request.save_to_draft else "scheduled")
-            if raw_post_status in {"sent", "published"}:
+            if raw_post_status == "error":
+                receipt_state = "publish_error"
+            elif raw_post_status in {"sent", "published"}:
                 receipt_state = "published"
             elif raw_post_status == "draft":
                 receipt_state = "draft_saved"
             elif raw_post_status in {"scheduled", "buffer", "queued"}:
                 receipt_state = "scheduled"
+            elif raw_post_status == "needs_approval":
+                receipt_state = "needs_approval"
+            elif raw_post_status == "sending":
+                receipt_state = "sending"
             elif raw_post_status:
                 receipt_state = "created_in_buffer"
             elif request.save_to_draft:
