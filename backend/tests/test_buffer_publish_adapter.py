@@ -558,6 +558,8 @@ async def test_adapter_publishes_all_five_platforms_with_exact_receipt(
         ("ch_1", {"service": "linkedin", "text": "Conflict", "mode": "shareNow", "save_to_draft": True}, "conflicts"),
         ("ch_1", {"service": "linkedin", "text": "Conflict2", "mode": "draft", "save_to_draft": False}, "conflicts"),
         ("ch_1", {"service": "facebook", "text": "Bad URL", "assets": [{"type": "image", "url": "file:///etc/passwd"}]}, "http:// or https://"),
+        ("ch_1", {"service": "facebook", "text": "Bad IPv6", "assets": [{"type": "image", "url": "https://[bad"}]}, "not a valid HTTP\\(S\\) URL"),
+        ("ch_1", {"service": "facebook", "text": "Bad Port", "assets": [{"type": "image", "url": "https://cdn.example.com:abc/img.jpg"}]}, "not a valid HTTP\\(S\\) URL"),
         (
             "ch_1",
             {"service": "facebook", "text": "Cred URL", "assets": [{"type": "image", "url": "https://user:pass" + "@cdn.example.com/a.jpg"}]},

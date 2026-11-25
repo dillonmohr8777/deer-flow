@@ -407,14 +407,20 @@ def _validate_http_url(url: Any, field_name: str, *, allow_loopback_http: bool =
     if not isinstance(url, str) or not url.strip():
         raise InvalidPayloadError(f"{field_name} must be a non-empty HTTP(S) URL")
     trimmed = url.strip()
-    parsed = urlparse(trimmed)
-    if parsed.scheme not in {"http", "https"}:
+    if any(ch.isspace() or ord(ch) < 32 for ch in trimmed):
+        raise InvalidPayloadError(f"{field_name} is not a valid HTTP(S) URL")
+    try:
+        parsed = urlparse(trimmed)
+        _ = parsed.port
+    except ValueError as exc:
+        raise InvalidPayloadError(f"{field_name} is not a valid HTTP(S) URL") from exc
+    if parsed.scheme.lower() not in {"http", "https"}:
         raise InvalidPayloadError(f"{field_name} must use http:// or https://")
     if not parsed.netloc or not parsed.hostname:
         raise InvalidPayloadError(f"{field_name} must include a hostname")
     if parsed.username is not None or parsed.password is not None:
         raise InvalidPayloadError(f"{field_name} must not contain embedded credentials")
-    if parsed.scheme == "http" and allow_loopback_http and parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+    if parsed.scheme.lower() == "http" and allow_loopback_http and parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
         raise InvalidPayloadError(f"{field_name} must use https:// for non-local hosts")
     return trimmed
 
