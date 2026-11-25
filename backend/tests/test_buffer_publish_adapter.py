@@ -1295,3 +1295,38 @@ async def test_live_publish_fails_closed_when_execution_fence_unavailable(monkey
     assert outcome.status == "failed"
     assert outcome.detail["state"] == "execution_fence_unavailable"
     assert captured == []
+
+
+@async_test
+async def test_draft_request_unexpectedly_returned_sent_by_buffer_reports_published_not_draft_saved():
+    def _handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={"data": {"channels": [{"id": "ch_1", "name": "li", "displayName": "LI", "service": "linkedin", "isQueuePaused": False}]}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "createPost": {
+                        "__typename": "PostActionSuccess",
+                        "post": {"id": "post_sent_1", "text": "Draft requested", "status": "sent", "dueAt": None, "externalLink": None},
+                    }
+                }
+            },
+        )
+
+    transport, _ = _mock_transport(_handler)
+    adapter = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
+        env_getter=_live_env,
+        claim_execution=_one_shot_claimer(),
+    )
+    outcome = await adapter.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "Draft requested", "mode": "draft"}))
+    assert outcome.status == "executed"
+    assert outcome.detail["state"] == "published"
+    assert outcome.detail["post_status"] == "sent"

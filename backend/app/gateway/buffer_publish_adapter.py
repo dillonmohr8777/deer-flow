@@ -74,8 +74,6 @@ class BufferPublishAdapter:
         if factory is None:
             raise RuntimeError("PendingActionRepository session factory is unavailable")
         repo = PendingActionRepository(factory)
-        if user_id:
-            return await repo.claim_buffer_execution(action_id, user_id=user_id)
         return await repo.claim_buffer_execution(action_id)
 
     def _env(self) -> Mapping[str, str]:
@@ -288,6 +286,15 @@ class BufferPublishAdapter:
             err = "outcome_unknown: Buffer approval was already claimed or is no longer eligible; reconcile Buffer before retrying"
             logger.warning("Buffer approval %s blocked: atomic execution claim returned None", action_id)
             return AdapterOutcome("approved", {**base_receipt, "state": "outcome_unknown"}, error=err)
+
+        if (
+            ("target" in claimed and claimed["target"] != action.get("target"))
+            or ("payload" in claimed and claimed["payload"] != action.get("payload"))
+            or ("organization_id" in claimed and str(claimed.get("organization_id") or "").strip() != workspace_id)
+        ):
+            err = "Claimed Buffer approval record does not match the requested target, payload, or workspace"
+            logger.warning("Buffer approval %s blocked: claimed DB row mismatch", action_id)
+            return AdapterOutcome("failed", {**base_receipt, "state": "approval_mismatch"}, error=err)
 
         try:
             result = await client.create_post(request, dry_run=False, organization_id=bound_buffer_org_id)

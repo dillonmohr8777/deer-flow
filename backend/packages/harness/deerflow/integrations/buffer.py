@@ -1035,12 +1035,16 @@ class BufferGraphQLClient:
                 )
             raw_post_status = str(post.get("status") or "").strip().lower()
             resolved_post_status = raw_post_status or ("draft" if request.save_to_draft else "scheduled")
-            if request.save_to_draft or resolved_post_status == "draft":
-                receipt_state = "draft_saved"
-            elif raw_post_status in {"sent", "published"}:
+            if raw_post_status in {"sent", "published"}:
                 receipt_state = "published"
-            elif resolved_post_status in {"scheduled", "buffer", "queued"}:
+            elif raw_post_status == "draft":
+                receipt_state = "draft_saved"
+            elif raw_post_status in {"scheduled", "buffer", "queued"}:
                 receipt_state = "scheduled"
+            elif raw_post_status:
+                receipt_state = "created_in_buffer"
+            elif request.save_to_draft:
+                receipt_state = "draft_saved"
             else:
                 receipt_state = "created_in_buffer"
             return BufferPostResult(
