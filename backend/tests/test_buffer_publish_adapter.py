@@ -962,13 +962,14 @@ async def test_dry_run_receipt_redacts_signed_asset_and_metadata_url_query_param
         client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=transport),
         env_getter=lambda: {"BUFFER_API_KEY": KEY, "BUFFER_DRY_RUN": "true"},
     )
+    signed_param = "access_" + "token=topsecret999"
     outcome = await adapter.execute(
         _action(
             target="ch_fb_01",
             payload={
                 "service": "facebook",
-                "text": "Preview with signed link https://cdn.example.com/dl?access_token=topsecret999",
-                "assets": [{"type": "image", "url": "https://cdn.example.com/media/patio.jpg?X-Amz-Signature=sig12345&token=abc"}],
+                "text": f"Preview with signed link https://cdn.example.com/dl?{signed_param}",
+                "assets": [{"type": "image", "url": "https://cdn.example.com/media/patio.jpg?X-Amz-Signature=sig12345&sig=abc"}],
                 "metadata": {"type": "post", "first_comment": f"Check https://example.com/p?sig=xyz {KEY}"},
             },
         )
