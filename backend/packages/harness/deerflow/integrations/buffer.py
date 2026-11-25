@@ -291,15 +291,21 @@ _HTTP_URL_INLINE_RE = re.compile(r"https?://[^\s'\"<>]+", re.IGNORECASE)
 
 def redact_url_credentials(url: str) -> str:
     """Strip query strings, fragments, and embedded userinfo from an HTTP(S) URL for safe receipt storage."""
-    parsed = urlparse(url)
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
-        return url
-    host = parsed.hostname or ""
-    if ":" in host and not host.startswith("["):
-        host = f"[{host}]"
-    netloc = f"{host}:{parsed.port}" if parsed.port else host
-    query = "[redacted]" if parsed.query else ""
-    return urlunparse((parsed.scheme, netloc, parsed.path, "", query, ""))
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+            return url
+        host = parsed.hostname or ""
+        if not host:
+            return "[redacted-url]"
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        port = parsed.port
+        netloc = f"{host}:{port}" if port is not None else host
+        query = "[redacted]" if parsed.query else ""
+        return urlunparse((parsed.scheme, netloc, parsed.path, "", query, ""))
+    except ValueError:
+        return "[redacted-url]"
 
 
 def sanitize_receipt_value(value: Any, secret: str | None = None) -> Any:

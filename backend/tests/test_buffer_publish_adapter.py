@@ -1077,3 +1077,63 @@ async def test_live_receipt_redacts_external_link_credentials_query_and_fragment
     assert "user:pass" not in json.dumps(outcome.detail)
     assert "secret123" not in json.dumps(outcome.detail)
     assert "#frag" not in json.dumps(outcome.detail)
+
+
+@async_test
+async def test_malformed_url_in_text_or_external_link_never_crashes_receipt_generation():
+    # 1) Dry-run post text containing a malformed port URL succeeds and redacts safely.
+    t_dry, cap_dry = _mock_transport(lambda _r, _b: httpx.Response(200, json={"data": {}}))
+    a_dry = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_dry),
+        env_getter=lambda: {"BUFFER_API_KEY": KEY, "BUFFER_DRY_RUN": "true"},
+    )
+    dry_res = await a_dry.execute(
+        _action(
+            target="ch_1",
+            payload={"service": "linkedin", "text": "Malformed link https://example.com:abc/path?sig=leak999"},
+        )
+    )
+    assert dry_res.status == "approved"
+    assert dry_res.detail["state"] == "dry_run"
+    assert "leak999" not in json.dumps(dry_res.detail)
+    assert "[redacted-url]" in dry_res.detail["graphql_input"]["text"]
+    assert cap_dry == []
+
+    # 2) Live createPost returning a malformed externalLink still reports executed (never failed).
+    def _bad_link_handler(_request: httpx.Request, body: dict[str, Any]) -> httpx.Response:
+        query = body.get("query", "")
+        if "GetOrganizations" in query:
+            return httpx.Response(200, json={"data": {"account": {"id": "acc_1", "organizations": [{"id": "org_1", "name": "Org"}]}}})
+        if "GetChannels" in query:
+            return httpx.Response(
+                200,
+                json={"data": {"channels": [{"id": "ch_1", "name": "li", "displayName": "LI", "service": "linkedin", "isQueuePaused": False}]}},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "createPost": {
+                        "__typename": "PostActionSuccess",
+                        "post": {
+                            "id": "post_live_malformed",
+                            "text": "Live post",
+                            "status": "scheduled",
+                            "dueAt": None,
+                            "externalLink": "https://social.example.com:badport/p?sig=leak888",
+                        },
+                    }
+                }
+            },
+        )
+
+    t_live, _ = _mock_transport(_bad_link_handler)
+    a_live = BufferPublishAdapter(
+        client_factory=lambda: BufferGraphQLClient(api_key=KEY, transport=t_live),
+        env_getter=_live_env,
+    )
+    live_res = await a_live.execute(_action(target="ch_1", payload={"service": "linkedin", "text": "Live post"}))
+    assert live_res.status == "executed"
+    assert live_res.detail["post_id"] == "post_live_malformed"
+    assert live_res.detail["external_link"] == "[redacted-url]"
+    assert "leak888" not in json.dumps(live_res.detail)
