@@ -1,0 +1,62 @@
+{
+  "title": "AI at Momentum: from request to checked work",
+  "slug": "work-01-ai-at-work",
+  "description": "Foundations lesson for everyone. Synthetic Sample Dental Group weekly report using metric categories only. Covers models, context, tools, memory, approvals and independent checking. No invented metrics and no live tool access.",
+  "chapters": [
+    {
+      "title": "From request to checked work",
+      "narration": "AI at work starts with a useful request and ends with checked work. We'll follow a request, a model, the context it sees, the tools it reaches, what gets saved, an approval, and an independent check. Our example is a weekly marketing report for Sample Dental Group. The sheet contains invented figures for a practice client. You're the Momentum team preparing its report.",
+      "visual": "Seven-step line diagram from request through model, context, tools, memory, approval, and independent check."
+    },
+    {
+      "title": "What a model does and doesn't do",
+      "narration": "A model reads what you give it and writes a response. It's good at drafting, summarizing, and comparing text against a source. It doesn't know this week's numbers unless the numbers are in front of it. It also doesn't own the decision. When I hand it the sheet, I'm asking for a draft I can check, not a fact I can quote.",
+      "visual": "Two-column card: what the model does (drafts, summarizes, compares to a source) and what it does not own (the decision, the numbers it was not given)."
+    },
+    {
+      "title": "Context: what the model is allowed to see",
+      "narration": "Context is everything the model is allowed to see for this job. For the weekly report that means the example sheet, the brief, and the notes file I attached. Narrow context makes the work easier to check, because I know exactly what the draft was built from. If a number isn't in the context, the right answer is 'not in the sheet,' not a guess.",
+      "visual": "Context list for the job showing the sheet, brief, and notes file, with the excluded items grayed out."
+    },
+    {
+      "title": "Tools: connected and scoped",
+      "narration": "Tools are how a model reaches outside its own text. A tool might read a file or pull data from a connected source. A tool only works when it's connected, verified, and allowed by the client scope. If the scope doesn't cover Sample Dental Group, the tool stays off for that job. I check the connection and the scope before I rely on any tool output.",
+      "visual": "Tool access table with columns for source, connection status, and client scope, showing a blocked row for an out-of-scope source."
+    },
+    {
+      "title": "Memory: what's saved",
+      "narration": "Memory here means what's persisted: saved chats, run records, and files. Those are visible and you can reopen them. I don't treat the model as remembering things it wasn't given. If a fact matters next week, it goes into a file or the brief, where a person can see it and correct it. I'd rather trust a visible file than a model's recall.",
+      "visual": "Three saved items listed in a workspace panel: the chat, the run record, and the attached file, each with a reopen action."
+    },
+    {
+      "title": "Step one: the sheet",
+      "narration": "Start with the sheet. It lists advertising spend, clicks, inquiries, and booked appointments for one week. Ask Momo to extract each category exactly and note its source row. It should not round, smooth, or fill gaps. If a category is blank, the draft says missing. An inquiry and a booked appointment are different measures. Keeping their labels intact is part of the check.",
+      "visual": "Extraction table with the four category names, each with a source row reference and a blank category kept blank."
+    },
+    {
+      "title": "Step two: the draft",
+      "narration": "Next, request the draft. Ask Momo to turn the extracted figures into a short client summary and keep every figure beside its source. Ask for no adjectives it cannot support. The summary can say inquiries rose only when the sheet includes the previous week for comparison. If that comparison is missing, leave it out. These are requested steps, not a promise that separate specialist agents ran.",
+      "visual": "Draft paragraph with each figure followed by a bracketed source row reference, and one comparison line removed."
+    },
+    {
+      "title": "Step three: the independent check",
+      "narration": "Then arrange an independent check. A separate agent may compare the draft with the sheet, or a teammate can match the figures directly. Check the run record to see which happened. An automated check can flag errors, but it does not replace the person accountable for the report. Every figure needs a source row, and every flag needs a correction or an explanation before review.",
+      "visual": "Check output listing each figure with a matched or flagged status, and a column showing how each flag was resolved."
+    },
+    {
+      "title": "Approvals come last",
+      "narration": "The named approver reads the exact draft and its checking notes, then approves or returns it. Our exercise stays draft only. A lesson and a model's recommendation never authorize a real send. If the report changes after review, submit the changed version again. Sending, publishing, and spending follow the team's standing approvals and holds. Confirm an action at its destination before claiming it happened.",
+      "visual": "Approval step showing the draft, the approver field, and approve or return actions. The send step is shown as a human action outside this exercise, not as a built control."
+    },
+    {
+      "title": "Roles: who does what",
+      "narration": "Each Momentum role has a part. Account, project and customer success teams check the client report. Sales and outbound check prospect facts and duplicates. 360 operations check the shoot packet and access window. Editors and designers check assets and rights. Web and UI/UX check pages and forms. SEO and paid media check exports and measurement. Content, social and email check facts and destinations. Leadership checks accepted work and cost. CRM, automation, admin and VA teams check records and handoffs. Each uses the same habit: identify the source, request a useful output, then check it.",
+      "visual": "Role-by-role table with each role, the part of the draft they check, and the approval or connection step they own."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Try this in Momo. Input: one weekly sheet with the client details and any protected information removed, plus a one-paragraph brief that names the owner and the time range. Run it as a draft only. External acceptance check: someone outside this chat matches every figure in the draft to a source row on the sheet, and signs off or returns it with the line that's off.",
+      "visual": "Input card showing the sheet and brief, with a checklist for the outside reviewer to match each figure to a source row."
+    }
+  ]
+}

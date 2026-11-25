@@ -1,0 +1,62 @@
+{
+  "title": "Account management, projects and client success",
+  "slug": "work-04-account-client-success",
+  "description": "Weekly account report and client reply for the synthetic Sample Dental Group account. Reconciles KPIs, promises, dates, owners, risk, report link and the customer question, then sets the customer success next action and project handoff. Nothing here is sent. Approval comes first.",
+  "chapters": [
+    {
+      "title": "Who this is for",
+      "narration": "Hi, I'm Dillon. This lesson is for the people who keep client accounts moving. If you are an Account Manager, a Project Manager, a Customer Success Manager, or part of the onboarding account team, this one is for you. We are going to build one weekly report and one client reply draft for a synthetic account, Sample Dental Group. That name is an example only. Every figure, date and owner in this lesson is example material, and you should replace it with your own source files when you work on a real account.",
+      "visual": "Lesson card listing the three deliverables, weekly report, client reply and project handoff, with a tag reading example account, Sample Dental Group."
+    },
+    {
+      "title": "What MomoBot already holds",
+      "narration": "Here is what MomoBot already holds in your workspace. Chats, runs and files stay saved, so you can reopen the exact inputs behind a draft. You also have agents, scheduled tasks, approvals, and the staff Academy and Daily views. The Easy, Medium and Hard settings change only how a response is written, not what it can touch. Connected tools need a verified connection and the right client scope. If either is missing, we write missing and move on.",
+      "visual": "Workspace view showing saved chat, run and attached files for one account, with the response style setting shown apart from the access panel."
+    },
+    {
+      "title": "Gather the sources",
+      "narration": "Start with the sources, not the draft. You need last week's KPI export, the promise list from kickoff notes and any signed change requests, the project plan with owners and due dates, the risk log, the customer's latest question, and the report link. If something is not in the folder, write missing from source next to it. Never fill the gap from memory. A missing report link stays missing, even if someone swears the page exists.",
+      "visual": "Source checklist with six rows: KPI export, promise list, project plan, risk log, customer question and report link. Each row shows a file name and date, or the words missing from source."
+    },
+    {
+      "title": "Reconcile the KPIs",
+      "narration": "Now reconcile the KPIs. Take every number in the draft and trace it back to the export, with the export date next to it. Say the export shows one count and the draft shows a higher one. Before you touch the report, find the rows that make up the difference. Duplicate form submissions are a common cause, but confirm it in the rows rather than assuming it. Then change the number, and write down what changed and why.",
+      "visual": "Reconciliation table with columns for report figure, export figure, export date, difference and reason. The reason cell stays blank until the rows are checked."
+    },
+    {
+      "title": "Promises and dates",
+      "narration": "Next, the promises. List every promise the team made to the client, the owner, the due date, and where the promise was written down. Sample Dental Group's kickoff notes are the example source here. Check each promise against the project plan and any signed change request. If a date moved, the change needs a record and an approver. A date that moved without a record is a risk, so flag it, do not quietly update it.",
+      "visual": "Promise register with columns for promise, owner, due date, source document and change record. Any undated move is flagged in red text."
+    },
+    {
+      "title": "Owners and risk",
+      "narration": "Every risk gets one owner, and every owner has a name, not a team label. The Project Manager owns schedule risk. The Account Manager owns the relationship and scope risk. The Customer Success Manager owns adoption risk, like a clinic team that is not using the new recall list. The onboarding account team owns anything still open from setup. Write each risk as one plain sentence with an owner and a review date.",
+      "visual": "Risk register with one owner per row, role names in the owner column and a review date column."
+    },
+    {
+      "title": "Next action and handoff",
+      "narration": "Customer success needs one next action with an owner, a date and a channel. For this account, write something like: the Customer Success Manager calls the office manager Thursday to walk through the paused recall list. Then write the project handoff in one block: open items, owners, dates, and what closed. When onboarding hands the account to the ongoing team, nothing should live only in someone's head.",
+      "visual": "Next action card with owner, date and channel, beside a handoff block listing open items, owners, dates and closed items."
+    },
+    {
+      "title": "Draft the client reply",
+      "narration": "Now the client reply. Answer the customer's question in the first sentence. Use only figures you traced to the export, with the export date where it matters. If something is still open, say so and name who is checking it. Never promise a result, a fixed date or a fix nobody has approved. Keep it warm and short, and sign it as the account owner.",
+      "visual": "Draft reply screen with the customer question pinned above the draft, open items marked, and status set to pending approval."
+    },
+    {
+      "title": "Judge the work",
+      "narration": "Before anything moves, judge the work. The specialist checks that every number traces to a dated source, every date has an owner, the report link is present or marked missing, and no sentence promises a result. Then check the reply against the customer question. If it does not answer the question, it is not accepted, however polished it reads.",
+      "visual": "Acceptance checklist with each check marked pass or flag, and reviewer name and date fields left empty until review."
+    },
+    {
+      "title": "Approval, not sending",
+      "narration": "Nothing here sends anything. The reply and any date change go to the approval queue, where a person decides. Sending happens outside this lesson, by a person, and only after approval. No email or CRM connection is assumed here, so if none is verified, the team copies the text by hand.",
+      "visual": "Approval queue entry showing the reply as pending, with an empty decision field and a line stating that no message has been sent."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Try this in Momo. Input: a test export, the promise list, and one customer question from a test account. Acceptance: a second person on the account team checks every figure against the export before anything leaves the approval queue.",
+      "visual": "Try-this worksheet listing the test export, promise list and customer question on the left, and a second reviewer sign-off row on the right."
+    }
+  ]
+}

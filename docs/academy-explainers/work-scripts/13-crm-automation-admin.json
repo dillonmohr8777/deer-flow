@@ -1,0 +1,57 @@
+{
+  "title": "CRM, automation, account support and virtual assistants",
+  "slug": "work-13-crm-automation-admin",
+  "description": "Synthetic lead walkthrough from intake to a deduplicated CRM record, owner, required fields, paused automation, test event, readback and handoff, with no live messages.",
+  "chapters": [
+    {
+      "title": "Why lead intake breaks",
+      "narration": "Lead intake breaks in predictable places. A duplicate record gets a second welcome message, a lead lands with no owner, or an automation fires before anyone checked the fields. In this lesson I follow one synthetic lead for Sample Dental Group through intake, dedupe, owner assignment, a paused automation, a test event and a handoff. Momo does the organizing and the readback. The people on the team own the CRM, the automation settings and every message that goes out.",
+      "visual": "Diagram of the lead path from intake to dedupe, owner, paused automation, test event, readback and handoff, with each step labeled."
+    },
+    {
+      "title": "Intake to one clean record",
+      "narration": "The intake form for the example lead has a name, an email, a phone number, a source, and a consent flag. Required fields come first. A blank required field stops the lead at intake, and Momo marks it missing rather than filling it with a guess. Before any record is created, I search by email and phone for an existing contact. If one exists, the new lead updates that record. It does not create a second one.",
+      "visual": "Intake form with name, email, phone, source and consent flag fields, one required field marked missing, and a dedupe search result panel."
+    },
+    {
+      "title": "Assign the owner",
+      "narration": "Every lead needs one owner, a person's name from the team roster, not a shared inbox. For the example, the owner is the front desk coordinator on the roster for that week. I set the owner field before any automation can reference it. Momo proposes the owner from the rule in the brief. If the roster does not name anyone, the field says missing, and the lead waits for a person.",
+      "visual": "Record view with the owner field set from the roster rule, and a missing owner state shown as waiting for a person."
+    },
+    {
+      "title": "Confirm the automation is paused",
+      "narration": "The automation is the part that sends things, so it starts paused. I open the workflow and confirm the status reads paused and that the first step is a message to the lead. Nothing in this lesson turns it on, and a lesson never authorizes a real send. Momo reads the status only if the CRM connection is verified for this client. If it is not, the status says missing and the work stops there.",
+      "visual": "Workflow status panel showing paused, with the first step shown as a message to the lead."
+    },
+    {
+      "title": "Run a test event, not a live message",
+      "narration": "Next is the test event. I fire it only at a test contact the team owns, never at a real lead. The test should show the tag, the owner and the source landing on that test record. If the welcome message fires, it goes to the test contact only, and the log should show exactly one attempt. Momo drafts the test plan and the expected result. A person runs the test.",
+      "visual": "Test record showing the tag, owner and source applied, with one log line addressed to the test contact only."
+    },
+    {
+      "title": "Readback and compare",
+      "narration": "Readback is the check that matters most. I open the record as it now stands and compare each field with the intake: name, email, phone, source, consent flag, owner and tag. Every one should match. Momo can produce the side-by-side comparison from the readback I paste in, and it marks any field that differs. I read the marked rows myself before I trust the result.",
+      "visual": "Side-by-side table of intake and record values for name, email, phone, source, consent, owner and tag, with mismatches flagged."
+    },
+    {
+      "title": "Retries without double sends",
+      "narration": "Retries are where double sends happen. If the first attempt times out, the system may not know whether the lead already got the message, so a naive retry can send twice. The fix is an idempotency key, a unique ID for each lead and action, so a repeat request updates the same record instead of creating another. I do not assume the CRM supports this. The source for this lesson does not verify it, so the handoff marks it unverified.",
+      "visual": "Diagram of two repeated requests with the same lead key both pointing to one record, with a note marking CRM support as unverified."
+    },
+    {
+      "title": "The account support handoff",
+      "narration": "The handoff goes to account support, and it should read like a finished note. It lists the record link, the owner, the source, the test result, the paused automation and any missing fields. It names what the next person should do and what they must not do, such as turning on the automation. Momo drafts the handoff from the readback. The account support person reads it and marks it accepted.",
+      "visual": "Handoff note with record link, owner, source, test result, paused automation, missing fields and do-not-do items."
+    },
+    {
+      "title": "The virtual assistant pass",
+      "narration": "A virtual assistant can handle most of the checklist work if the steps are written down. I hand the VA the intake, the dedupe rule and the handoff template, and I ask for a clean record plus a list of open items. The VA does not change automation settings or add a credential. If a task needs a new login or scope, the VA stops and asks. Momo keeps the checklist status for each step.",
+      "visual": "Step checklist with a status for each task and a stop flag on the step that requires a new login or scope."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "My acceptance test: one record exists, the owner is set, the required fields match the intake, the automation is paused, and the test contact is the only recipient of any test message. If one line fails, the lead stays in intake. For your exercise, run the synthetic lead from this lesson through intake, dedupe and readback with Momo. The external acceptance check is a human in the CRM confirming that exactly one record exists and that no live message was sent. Until they confirm it, the status stays in test.",
+      "visual": "Synthetic lead input beside the generated record summary and readback table, with the external check waiting for a human CRM review."
+    }
+  ]
+}

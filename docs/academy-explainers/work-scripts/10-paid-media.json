@@ -1,0 +1,62 @@
+{
+  "title": "Paid media, paid search and measurement",
+  "slug": "work-10-paid-media",
+  "description": "Reconcile synthetic ad metrics with a synthetic CRM lead export by clicks, leads and qualified leads, then move from analysis to an experiment proposal that waits for approval.",
+  "chapters": [
+    {
+      "title": "Who this is for",
+      "narration": "This lesson is for PPC managers, PPC account managers, Google Ads experts, Facebook and Instagram ads experts, and SEO and paid search marketers who need one honest view of paid results. Our example client is Sample Dental Group. All ad numbers and lead rows in this lesson are synthetic examples with no names or contact details. Watching the walkthrough never changes a budget, bid, campaign or conversion setting.",
+      "visual": "Chat thread and run header showing the synthetic data label and the note that the lesson makes no live account change."
+    },
+    {
+      "title": "Synthetic ad export",
+      "narration": "Start with the synthetic ad export. Load platform rows by campaign and day, with clicks, spend and platform conversions. Google Ads experts and Facebook and Instagram ads experts, confirm the platform's conversion action or event name is the one the client agreed to report. Record the platform's own date setting, because it changes which day a conversion belongs to. If the export is missing a field, the cell says missing.",
+      "visual": "Platform export table with campaign, day, clicks, spend and platform conversions columns, and the conversion action name shown above the table."
+    },
+    {
+      "title": "CRM lead export",
+      "narration": "Next, load the CRM lead export. Each row is one lead with a created date, the source field, and a status such as new, contacted, qualified or lost. The export should carry no names, phone numbers or emails in this lesson. PPC account managers, check that the source values match the campaign naming the client uses, and list any blank or unfamiliar source value rather than guessing where it came from.",
+      "visual": "CRM lead export table with created date, source field and status columns, with no contact fields visible and blank source values listed separately."
+    },
+    {
+      "title": "Date windows",
+      "narration": "Now set the date windows. Both sides must use the same window and the same timezone. A lead created on the last day may come from a click days earlier, so leave a settle period before you read final numbers. SEO and paid search marketers, write the window and timezone in the table header, because late conversions can change totals when the data is pulled again.",
+      "visual": "Date-window header on both exports showing the same start date, end date and timezone, with the settle period noted."
+    },
+    {
+      "title": "Attribution",
+      "narration": "Next, compare attribution. The platform credits conversions by its own model, and the CRM credits a lead by the source field someone set. These will not match exactly, so write both down. Do not average them into one number. State which model each figure uses, and keep the platform figure and the CRM figure in separate columns of the table.",
+      "visual": "Two-column attribution table with platform figures and CRM figures in separate columns, each labeled with its model above the column."
+    },
+    {
+      "title": "Reconcile the funnel",
+      "narration": "Now reconcile the funnel. For each campaign, line up clicks, platform conversions, CRM leads and CRM qualified leads in one row. PPC managers, the ratios between those steps show where the drop happens. Any gap larger than your preset tolerance gets a reason code, such as duplicate entries, date shift, unmapped source or tracking gap. Unexplained gaps stay open, and the table does not force them to match.",
+      "visual": "Reconciled funnel table per campaign showing clicks, platform conversions, leads, qualified leads and a reason code for every gap above tolerance."
+    },
+    {
+      "title": "Judge the reconciliation",
+      "narration": "Judge the reconciliation before you read it. Ask whether the tolerance was set before anyone saw the answer, whether duplicates were removed once, and whether every open gap has a plain reason. Google Ads experts and Facebook and Instagram ads experts, confirm that platform numbers are labeled with their own model. If the check fails, go back to the windows and mapping, not to the conclusion.",
+      "visual": "Checklist panel showing the tolerance recorded before reading, with each check marked only when every open gap has a reason."
+    },
+    {
+      "title": "Analysis",
+      "narration": "Now write the analysis. Say what the reconciled table supports, such as which campaign shows the largest gap between CRM leads and qualified leads, and say what it does not support. PPC account managers, write the client note in plain words with the windows and the open gaps stated. Nothing in the analysis is a forecast, and no sentence promises more leads or a lower cost.",
+      "visual": "Analysis note in the run files beside the reconciled table, with the claims it supports and the claims it does not support in two short lists."
+    },
+    {
+      "title": "Experiment proposal",
+      "narration": "Turn the best question into an experiment proposal. Name the hypothesis, the one change, the control, the run length, the success measure, the spend cap and the stop rule. Google Ads experts and Facebook and Instagram ads experts, write the platform-specific settings, and SEO and paid search marketers, check that the landing page change is not confounded with the ad change. The proposal is a document. It does not touch the account.",
+      "visual": "Experiment proposal document with hypothesis, control, run length, spend cap and stop rule fields filled in and no account change recorded."
+    },
+    {
+      "title": "Approval, no live change",
+      "narration": "The proposal goes to the approvals queue with the spend cap shown. Any budget, bid, campaign or conversion change needs human approval before anyone makes it in the ad account. The approver can accept, return or reject the proposal. Watching this lesson, reading the example or saving the document never authorizes a live change, and the run record shows who approved what.",
+      "visual": "Approvals queue showing the proposal pending with the spend cap and approver field, while the ad account view shows no change."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Try this in Momo. Your input is one synthetic ad export and one synthetic CRM lead export for the same date window, with the reconciled funnel table and one draft experiment proposal. Your external acceptance check is the client's CRM owner, or a marketing operations reviewer with CRM access, opening the CRM for that window and confirming the qualified lead count matches your table. Only after that and an approver's sign-off does any experiment move forward in the ad account.",
+      "visual": "CRM screen for the same window placed beside the reconciled table, with the qualified lead count line highlighted for comparison."
+    }
+  ]
+}

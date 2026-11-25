@@ -1,0 +1,57 @@
+{
+  "title": "How our videos get made",
+  "slug": "work-16-video-stack",
+  "description": "Synthetic walkthrough of the video stack from brief to delivered file: inputs, source plan, cut plan, engine render, automatic checks, human review and release, with Momo organizing and the editor judging.",
+  "chapters": [
+    {
+      "title": "One stack, every video",
+      "narration": "Every video we ship runs through the same stack, whether it is a 20 second Momo ad, a 5 minute lesson like this one or a brand film cut from a shoot. This lesson walks that stack with a synthetic example: a 45 second brand film for Sample HVAC Co, built from 17 phone clips. Nothing here is a real client asset. Momo handles the sorting, the plans and the checks. The editor still judges the picture and the cut.",
+      "visual": "Seven step stack drawn as paper cards in a row: brief, inputs, source plan, cut plan, render, QA, release."
+    },
+    {
+      "title": "Start with the brief",
+      "narration": "The brief is 6 lines: who it is for, where it runs, how long, the one thing it has to say, the call to action and the deadline. For the example, it runs on Instagram and the site, 45 seconds, says the new maintenance plan saves a service call, asks for a booking and is due Friday. Momo turns the brief into a checklist. If a line is missing, the job stops there, not on Thursday night. Momo also asks for the exact spelling of the company name once, so it is right everywhere.",
+      "visual": "Six line brief card with each line filled for the synthetic HVAC film, the deadline circled."
+    },
+    {
+      "title": "Inventory the inputs with hashes",
+      "narration": "Inputs are footage, logo, fonts, music and any screenshots. Momo writes an inventory: file name, duration, resolution, a hash of the bytes and the rights status. The hash matters. When a clip gets re-exported or a file is swapped, the hash changes and every plan that pointed at the old file shows as stale. For the example, 17 clips, 1 transparent logo, 2 fonts and 1 licensed track go in.",
+      "visual": "Inventory table with file, duration, resolution, sha256 and rights columns; one row highlighted as stale after a re-export."
+    },
+    {
+      "title": "Write the source plan",
+      "narration": "The source plan says which clips are usable and for what. Momo scores each clip for exposure, shake, faces and audio, then I review the scores against the actual frames. Near black shots and ceiling only shots are marked unusable. The reviewed plan is saved with the inventory hashes so the render can prove it used the files I approved. For the example, 11 of 17 clips make the plan.",
+      "visual": "Source plan grid of 17 thumbnails, 11 marked usable, 6 marked with the rejection reason, plan hash tied to the inventory hash."
+    },
+    {
+      "title": "The cut plan is a table",
+      "narration": "The cut plan is one table: start time, length, clip, in point, text on screen and the beat it lands on. Momo drafts it from the plan and the track's beat grid. I edit the table, not the timeline. A 45 second film is about 14 rows. Every row has a reason, so when a shot feels wrong, we change one row and re-render instead of scrubbing for an hour. Momo keeps the old row in the history so we can put it back.",
+      "visual": "Cut plan table of 14 rows with start, length, clip, in point, text and beat columns; one row being edited."
+    },
+    {
+      "title": "Render from the engine",
+      "narration": "The engine turns the cut plan into the video. It reads the plan, pulls the exact clips by hash, applies the color grade and the type, lays the track and writes a master. A small preview renders first so a bad row costs seconds, not minutes. The full master renders in full HD. Renders are versioned, so v2 never overwrites v1.",
+      "visual": "Render panel showing the preview at 960 by 540, then the master at 1920 by 1080, with v1 and v2 side by side."
+    },
+    {
+      "title": "Automatic checks before anyone watches",
+      "narration": "Before a human watches, the checks run. Duration matches the track to the second. The whole file decodes with no errors. A black frame detector flags any dark stretch. Loudness and silence are measured. Captions, when present, are validated. Momo writes the results and the file hashes to a receipt. A failed check sends the job back to the row that caused it.",
+      "visual": "Checklist board with duration, decode, black frames, loudness, silence and captions each showing pass, and a receipt file beneath."
+    },
+    {
+      "title": "Then the human review",
+      "narration": "Checks catch broken. People catch boring. The review is a contact sheet, one frame per second, next to the brief. We ask three things: does the first 2 seconds hook, does every shot earn its place and would this stop a thumb on a phone. The editor marks rows to change. For the example, v1 had 2 dull shots at the 18 and 36 second marks, so v2 swapped them.",
+      "visual": "Contact sheet of 45 frames beside the brief, frames 18 and 36 circled with the row numbers they map to."
+    },
+    {
+      "title": "Deliver with the receipt",
+      "narration": "Delivery is the master, a poster frame, the caption file and the receipt with every hash and check result. The receipt is how we prove what was shipped if a file is questioned later. Delivery to a client still goes through the owner, in the client's own channel, never from an agent. For the example, Momo stages the folder and writes the delivery note draft; a person sends it. The note draft follows the client's own channel rules.",
+      "visual": "Delivery folder with master, poster, captions and receipt, and a drafted note waiting for a person to send."
+    },
+    {
+      "title": "Where this lesson came from",
+      "narration": "This lesson is itself a product of the same stack. The script is a reviewed file, the narration is synthesized in my own voice from an authorized reference, the captions come from the reviewed script timed by speech recognition and the render is verified by hash before anyone sees it. The next lessons go one layer deeper: ads that stop a thumb, raw footage to a finished cut, lessons in my voice, and the release gates.",
+      "visual": "Four paper cards for the next lessons: Momo ads, footage to cut, lessons in my voice, QA and release."
+    }
+  ]
+}
